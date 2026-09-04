@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-<title>Crowd walk – proof of concept</title>
+<title>Coming Through!</title>
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#20242c;font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#f2f0ea;touch-action:none;-webkit-user-select:none;user-select:none}
   canvas{display:block}
@@ -25,6 +25,8 @@
   #overlay p{margin:6px auto;font-size:15px;color:#c9c6bd;max-width:420px}
   #overlay .go{margin-top:18px;font-size:17px;padding:12px 24px;background:#e8c34a;color:#2b2200}
   #fps{bottom:max(12px,env(safe-area-inset-bottom));left:max(12px,env(safe-area-inset-left));font-size:12px;color:#9a978f}
+  #debugCanvas[hidden]{display:none}
+  #debugCanvas{position:fixed;left:max(12px,env(safe-area-inset-left));top:50%;transform:translateY(-50%);width:200px;height:min(70vh,560px);background:rgba(20,22,28,.78);border-radius:12px;pointer-events:none}
   @media (max-width:640px){#legend{display:none}}
 </style>
 </head>
@@ -34,15 +36,18 @@
   <button id="less" aria-label="Fewer people">−</button><button id="count" aria-label="Crowd size">80</button><button id="more" aria-label="More people">+</button>
   <button id="cam">Camera: shoulder</button>
   <button id="ink">Ink: on</button>
+  <button id="tier">Tier: High</button>
+  <button id="debug">Debug: off</button>
 </div>
 <div id="legend" class="chip"></div>
+<canvas id="debugCanvas" hidden></canvas>
 <div id="stick"><div id="knob"></div></div>
 <div id="flash"></div>
 <div id="fps" class="chip"></div>
 <div id="overlay"><div>
-  <h1>Crowd walk</h1>
+  <h1 id="overlayTitle">Coming Through!</h1>
   <p>Get from the blue pad to the green pad without bumping into anyone.</p>
-  <p>Touch and drag anywhere to move. Keyboard: WASD or arrows, shift to hurry. C cycles the camera, O toggles ink, [ and ] change the crowd size.</p>
+  <p>Touch and drag anywhere to move. Keyboard: WASD or arrows, shift to hurry. C cycles the camera, O toggles ink, [ and ] change the crowd size, T cycles the device tier, G toggles the debug view.</p>
   <p id="result"></p>
   <button class="go" id="start">Start</button>
 </div></div>
