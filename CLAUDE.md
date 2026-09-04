@@ -14,10 +14,16 @@ check and the determinism test. `npm run lint` is the first two on their own.
   fixed step; `crowd.ts`, `agent.ts`, `spawner.ts`, `steering.ts`, `player.ts`, `pose.ts`.
 - `src/input/` — adapters, per-step sampling, and `recorder.ts` (the input log).
 - `src/render/`, `src/world/`, `src/camera.ts`, `src/ui.ts`, `src/debug.ts` — presentation only.
-- `src/main.ts` — wires it together: fixed-step accumulator loop, interpolated rendering, stress mode.
+- `src/main.ts` — the entry point and nothing else: it dynamic-imports the game, or the character
+  inspector when `?inspect=` is present, so a normal run never loads the dev tool.
+- `src/game.ts` — wires the game together: fixed-step accumulator loop, interpolated rendering,
+  stress mode.
+- `src/inspect/` — the character turntable. A driver for the character code, never a copy of it;
+  see "Character inspection" below.
 - `test/determinism.test.ts` — headless run with a fixed seed and scripted input, hashed against
   `test/determinism.expected.json`, which stores two values: `hash` (whole state) and `identity`
   (the crowd a seed produces). See "Two hashes" below.
+- `test/inspect.test.ts` — proves a turntable person is byte-identical to the crowd's agent.
 
 ## Seeds and restarting
 
@@ -65,6 +71,35 @@ zero-scale matrix. `PER` in `render/pools.ts` is that budget and `drawPerson` do
 layout within a slot. Adding a part means either finding a free index or raising `PER`; never add
 a mesh per person.
 
+## Character inspection
+
+`?inspect=1` opens a turntable for tuning how people look: one person on a neutral stage, a fixed
+camera, a slow spin, and controls for the recipe. `?inspect=row` puts the whole cast side by side.
+
+Its entire value rests on one rule: **it renders people through the game's own character code.**
+`makeRecipe` rolls them, `drawPerson` poses them, the shared instanced `PartPools` draw them,
+`palette.ts` colours them, `addLights` lights them. There is no inspection-only copy of any of that
+and there must never be one — a turntable that draws a person differently from the crowd is worse
+than no turntable. `src/inspect/` is only a stage, a camera, a panel, and `Subject`, which mirrors
+the two lines of `Agent`'s constructor that follow `makeRecipe` and the one line of `Agent.update`
+that advances the gait. Anything that would need character code changed belongs in the character
+code, not here. `test/inspect.test.ts` compares `Subject` against a real `Agent` and fails if they
+ever drift apart.
+
+Two consequences worth knowing:
+
+- The age, build and mobility overrides are **archetype edits**, not recipe edits. They set
+  `look.age`, `look.w` and `look.aid` — the same fields `archetypes.ts` already uses to make Timmy
+  a child and Dave narrow — so `makeRecipe` still takes every draw in its fixed order and only the
+  selection from rolls already in hand changes. A person keeps their seeded colours and parts while
+  an axis moves under them, which is the point.
+- The part gizmos read matrices back from a `PartPools` subclass that records what `put` writes and
+  calls straight through to the real implementation, so nothing the inspector does can change what
+  is drawn.
+
+The inspector reads no `spawn` or `behavior` draws and never builds a `Simulation`, so it cannot
+move either determinism hash.
+
 ## Two hashes
 
 `Simulation.hash()` covers the whole state including every recipe field, so any deliberate change
@@ -87,6 +122,11 @@ per-frame cost of posing a crowd into the instance buffers, with no GL context a
 
 `?seed=<uint32 or any string>` (strings are hashed), `?stress=1` (pinned seed, full crowd, no input,
 per-frame sim/render milliseconds), `?debug=1` (top-down overlay), `?tier=low|mid|high`.
+
+`?inspect=1` opens the character turntable and `?inspect=row` its side-by-side row; both take
+`&seed=` and mirror the rest of their state back into the address bar (`arch`, `age`, `build`,
+`mob`, `walk`, `gizmos`, `ink`), so a reload after a code change brings back the same person at the
+same settings.
 
 ## Determinism rules
 
