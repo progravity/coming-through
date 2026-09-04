@@ -59,7 +59,7 @@ export class DebugOverlay {
             const col = '#' + ARCH[a.type].color.toString(16).padStart(6, '0');
             // separation radius (about the collision centre, matching the steering test)
             ctx.strokeStyle = col; ctx.globalAlpha = 0.35;
-            ctx.beginPath(); ctx.arc(X(a.cx), Y(a.cz), a.A.sepR * s, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(X(a.cx), Y(a.cz), a.sepR * s, 0, Math.PI * 2); ctx.stroke();
             // collision circle
             ctx.globalAlpha = 0.9;
             ctx.beginPath(); ctx.arc(X(a.cx), Y(a.cz), a.r * s, 0, Math.PI * 2); ctx.stroke();

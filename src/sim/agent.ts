@@ -41,9 +41,15 @@ export class Agent implements GridItem, Poseable {
     readonly spawnX: number;
     readonly spawnZ: number;
     readonly dir: 1 | -1;
+    /** Archetype speed after the recipe's age and mobility multipliers. */
     readonly speed: number;
     readonly r: number;
     readonly colOff: number;
+    /** Separation radius, widened for anyone whose collision circle grew. */
+    readonly sepR: number;
+    readonly accel: number;
+    /** Yaw rate in radians per second of blend; a scooter comes round far more slowly. */
+    readonly turn: number;
     yaw: number;
     /** Unit heading vector. */
     hx: number; hz: number;
@@ -74,8 +80,20 @@ export class Agent implements GridItem, Poseable {
         this.index = index;
         this.type = type; this.A = A;
         this.x = x; this.z = z; this.spawnX = x; this.spawnZ = z; this.vx = 0; this.vz = dir * 0.5; this.dir = dir;
-        this.recipe = makeRecipe(recipeRng, A, opts);
-        this.speed = opts.speed ?? recipeRng.sample(A.speed); this.r = A.radius; this.colOff = A.colOffset ?? 0;
+        const recipe = makeRecipe(recipeRng, A, opts);
+        this.recipe = recipe;
+        // Drawn unconditionally: a group follower takes the leader's speed instead, but the draw
+        // still has to happen or this fork would run at a different offset for the rest of the run.
+        const ownSpeed = recipeRng.sample(A.speed);
+        // A mobility aid is a way of moving, not a costume: it changes pace, turn rate, how hard
+        // the body can accelerate, and how much room it takes up in the crowd.
+        const m = recipe.motion;
+        this.speed = (opts.speed ?? ownSpeed) * m.speed;
+        this.r = A.radius * m.radius;
+        this.colOff = (A.colOffset ?? 0) + m.colOffset;
+        this.sepR = A.sepR + (this.r - A.radius);
+        this.accel = A.accel * m.accel;
+        this.turn = 8 * m.turn;
         this.yaw = dir > 0 ? 0 : Math.PI; this.hx = 0; this.hz = dir;
         this.t = 0; this.phase = cosmetic.range(0, TAU); this.fidget = cosmetic.range(0, TAU); this.mv = 0; this.lean = 0;
         this.wanderX = x; this.wanderZ = 0; this.nextWander = this.rng.sample(A.wanderEvery);
@@ -127,14 +145,14 @@ export class Agent implements GridItem, Poseable {
         separation(this, A, grid, desired);
         avoidPlayer(this, A, player, desired);
         wallRepulsion(this.x, this.r, desired);
-        steerToward(this, A, desired);
+        steerToward(this, desired);
         this.x += this.vx * dt; this.z += this.vz * dt;
         this.x = clamp(this.x, -W + this.r, W - this.r);
         // heading, lean, gait
         const s2 = Math.hypot(this.vx, this.vz);
         if (s2 > 0.15) {
             const d = wrapAngle(Math.atan2(this.vx, this.vz) - this.yaw);
-            this.yaw += d * Math.min(1, dt * 8); this.lean = clamp(-d * 0.8, -0.25, 0.25);
+            this.yaw += d * Math.min(1, dt * this.turn); this.lean = clamp(-d * 0.8, -0.25, 0.25);
             this.hx = Math.sin(this.yaw); this.hz = Math.cos(this.yaw);
         } else this.lean *= 0.9;
         this.mv += (clamp(s2 / this.speed, 0, 1) - this.mv) * Math.min(1, dt * 10);

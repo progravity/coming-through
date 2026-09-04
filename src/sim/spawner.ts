@@ -1,5 +1,6 @@
-import { ARCH, SHIRT, weightedType } from '../archetypes.ts';
+import { ARCH, weightedType } from '../archetypes.ts';
 import type { Streams } from '../core/rng.ts';
+import { PALETTE, SHIRT_FAMILY } from '../palette.ts';
 import { clamp } from '../util.ts';
 import { DOORS, L, W } from '../world/layout.ts';
 import { Agent } from './agent.ts';
@@ -38,7 +39,10 @@ export function spawn(crowd: Crowd, streams: Streams, opts: SpawnOptions = {}): 
     const make = (t: typeof type, ax: number, o: ConstructorParameters<typeof Agent>[7] = {}) =>
         new Agent(streams, crowd.nextAgentIndex(), t, ax, z, dir, crowd.takeSlot(), o);
     if (A.group) {
-        const size = Math.round(how.sample(A.group)), gid = crowd.nextGroupId(), shirt = where.pick(SHIRT.green), spacing = A.spacing ?? 1;
+        // One draw, exactly as before: this is the last value this fork produces, so retuning the
+        // green family cannot shift any other spawn decision.
+        const size = Math.round(how.sample(A.group)), gid = crowd.nextGroupId(), spacing = A.spacing ?? 1;
+        const shirt = PALETTE[where.pick(SHIRT_FAMILY.green)];
         const leader = make(type, x, { group: gid, shirt });
         crowd.add(leader);
         for (let i = 1; i < size; i++) {

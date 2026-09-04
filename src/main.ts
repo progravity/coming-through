@@ -46,8 +46,8 @@ const cmd: StepCommand = { x: 0, y: 0, mag: 0, hurry: false, cam: 'shoulder', ru
 const view = newPose();
 const playerView: PlayerView = { ...newPose(), camYaw: 0 };
 const RING = 120;
-const simRing = new Float64Array(RING), renderRing = new Float64Array(RING), stepRing = new Float64Array(RING);
-const ringSum = { sim: 0, render: 0, steps: 0 };
+const simRing = new Float64Array(RING), renderRing = new Float64Array(RING), stepRing = new Float64Array(RING), poseRing = new Float64Array(RING);
+const ringSum = { sim: 0, render: 0, steps: 0, pose: 0 };
 let ringIdx = 0, ringCount = 0;
 let last = performance.now(), acc = 0, fpsFrames = 0, fpsTime = 0, fps = 0;
 
@@ -55,9 +55,11 @@ let last = performance.now(), acc = 0, fpsFrames = 0, fpsTime = 0, fps = 0;
 interface StressStats {
     simMs: number; renderMs: number; steps: number;
     avgSimMs: number; avgRenderMs: number; avgSimPerStepMs: number;
+    /** Share of renderMs spent posing people into the instance buffers, before any GL work. */
+    avgPoseMs: number;
     frames: number; people: number;
 }
-const stressStats: StressStats = { simMs: 0, renderMs: 0, steps: 0, avgSimMs: 0, avgRenderMs: 0, avgSimPerStepMs: 0, frames: 0, people: 0 };
+const stressStats: StressStats = { simMs: 0, renderMs: 0, steps: 0, avgSimMs: 0, avgRenderMs: 0, avgSimPerStepMs: 0, avgPoseMs: 0, frames: 0, people: 0 };
 
 // ---------- settings and game state ----------
 let tier: Tier = initialTier();
@@ -94,7 +96,7 @@ function startRun(nextSeed: number): void {
     acc = 0;
     finished = false;
     rig.reset();
-    for (let slot = 0; slot <= PLAYER_SLOT; slot++) pools.freeSlot(slot);
+    pools.freeAll();
     ui.setSeed(seed);
     ui.hud(0, 0);
     if (stress) return;
@@ -234,6 +236,7 @@ function frame(now: number): void {
     if (rig.mode === 'first') pools.freeSlot(PLAYER_SLOT);
     else drawPerson(pools, PLAYER_SLOT, p, playerView, t);
     pools.commit();
+    const poseMs = performance.now() - renderStart;
     world.props.wheel.rotation.z = t * 0.15;
     renderer.render(world.scene, rig.update(frameDt, playerView));
     const renderMs = performance.now() - renderStart;
@@ -243,11 +246,12 @@ function frame(now: number): void {
     fpsFrames++; fpsTime += frameDt;
     if (stress) {
         ringSum.sim += simMs - simRing[ringIdx]; ringSum.render += renderMs - renderRing[ringIdx]; ringSum.steps += steps - stepRing[ringIdx];
-        simRing[ringIdx] = simMs; renderRing[ringIdx] = renderMs; stepRing[ringIdx] = steps;
+        ringSum.pose += poseMs - poseRing[ringIdx];
+        simRing[ringIdx] = simMs; renderRing[ringIdx] = renderMs; stepRing[ringIdx] = steps; poseRing[ringIdx] = poseMs;
         ringIdx = (ringIdx + 1) % RING; ringCount = Math.min(RING, ringCount + 1);
         const s = stressStats;
         s.simMs = simMs; s.renderMs = renderMs; s.steps = steps; s.frames++; s.people = sim.crowd.agents.length;
-        s.avgSimMs = ringSum.sim / ringCount; s.avgRenderMs = ringSum.render / ringCount;
+        s.avgSimMs = ringSum.sim / ringCount; s.avgRenderMs = ringSum.render / ringCount; s.avgPoseMs = ringSum.pose / ringCount;
         s.avgSimPerStepMs = ringSum.steps > 0 ? ringSum.sim / ringSum.steps : 0;
         ui.stressLine(simMs, renderMs, s.avgSimMs, s.avgRenderMs, steps, s.people);
     } else if (fpsTime >= 0.5) {

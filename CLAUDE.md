@@ -7,13 +7,17 @@ check and the determinism test. `npm run lint` is the first two on their own.
 ## Layout
 
 - `src/core/` — `rng.ts` (seeded RNG and named streams), `time.ts` (`SIM_DT`), `hash.ts` (state hashing).
+- `src/palette.ts` — every colour in the game, as one 24-entry palette plus named families.
+- `src/archetypes.ts` — who exists: behaviour numbers and look constraints per archetype.
+- `src/recipe.ts` — the appearance and gait roll for one person, and the age/mobility profiles.
 - `src/sim/` — pure simulation, no DOM or three.js: `simulation.ts` is the whole game state and its
   fixed step; `crowd.ts`, `agent.ts`, `spawner.ts`, `steering.ts`, `player.ts`, `pose.ts`.
 - `src/input/` — adapters, per-step sampling, and `recorder.ts` (the input log).
 - `src/render/`, `src/world/`, `src/camera.ts`, `src/ui.ts`, `src/debug.ts` — presentation only.
 - `src/main.ts` — wires it together: fixed-step accumulator loop, interpolated rendering, stress mode.
 - `test/determinism.test.ts` — headless run with a fixed seed and scripted input, hashed against
-  `test/determinism.expected.json`.
+  `test/determinism.expected.json`, which stores two values: `hash` (whole state) and `identity`
+  (the crowd a seed produces). See "Two hashes" below.
 
 ## Seeds and restarting
 
@@ -33,10 +37,53 @@ Two rules make repeat runs comparable, and both must be preserved:
   on how long they looked at the start screen. Because of this, changing the crowd size while idle
   re-primes the run.
 
+## Character recipes
+
+`makeRecipe` rolls one person from their own fork of the `recipe` stream. It has two hard rules:
+
+- **Every draw is taken up front, unconditionally, in a fixed order**, and selection happens
+  afterwards from rolls already in hand. Helpers in `palette.ts` take a roll rather than an `Rng`
+  so they cannot draw by accident. Adding a roll at the end is safe; reordering or conditioning
+  one turns agent N into a different person.
+- **Nothing in a recipe may reach the `spawn` or `behavior` streams.** Appearance, proportions,
+  gait, and the movement profile a mobility aid brings with it are all downstream of `recipe`.
+
+Proportions come from two axes, not from independent rolls: a height axis and a build axis feed
+height, width, head radius and shoulder width together, so a body reads as one person. An age axis
+(`child`/`teen`/`adult`/`older`) then scales height, head-to-body ratio, stride, cadence, speed and
+a forward stoop. `look.h` in an archetype is the *adult* range; age does the rest, which is why
+Timmy carries an adult-sized range and a forced child age.
+
+Mobility aids (`cane`, `wheelchair`, `scooter`) are people, not obstacles. Each carries a
+`MotionProfile` the simulation applies on top of the archetype — speed, turn rate, acceleration,
+collision radius and collision offset — so they behave plausibly in the crowd rather than just
+looking different. Their odds rise steeply with the age axis.
+
+Parts are drawn from the shared instanced pools and the budget per person is **fixed**: a person
+wearing everything costs exactly what a person wearing nothing costs, because hidden parts write a
+zero-scale matrix. `PER` in `render/pools.ts` is that budget and `drawPerson` documents the index
+layout within a slot. Adding a part means either finding a free index or raising `PER`; never add
+a mesh per person.
+
+## Two hashes
+
+`Simulation.hash()` covers the whole state including every recipe field, so any deliberate change
+to how people look or move moves it. Regenerate it with `npm run test:update-hash` in the same
+commit, and say so in the commit message.
+
+`Simulation.identityHash()` covers only what the `spawn` and `behavior` streams decide: archetype,
+direction, spawn placement, group structure and the timers each agent is born with. It is read off
+a freshly filled crowd, so nothing in it has been touched by a movement profile. **Work on
+appearance must leave the stored `identity` value untouched**; `test:update-hash` deliberately
+carries it through unchanged. If it moves, a draw was added, removed or reordered in the `spawn` or
+`behavior` streams — fix the cause, never the stored value.
+
 ## URL parameters
 
 Stress numbers without a visible browser: `node scripts/stress-headless.mjs http://localhost:5173 60`
-against a running dev server (see the note in that file about headless frame rates).
+against a running dev server (see the note in that file about headless frame rates). That figure
+mixes CPU work with software rasterisation; `node scripts/bench-pose.mjs 190` times just the
+per-frame cost of posing a crowd into the instance buffers, with no GL context at all.
 
 `?seed=<uint32 or any string>` (strings are hashed), `?stress=1` (pinned seed, full crowd, no input,
 per-frame sim/render milliseconds), `?debug=1` (top-down overlay), `?tier=low|mid|high`.
@@ -75,4 +122,4 @@ decisions, on any machine and at any frame rate. Everything below exists to keep
 - New features that add randomness or timers must state which stream they use and be covered by
   the determinism test. If a change is meant to alter behaviour, update the stored hash with
   `npm run test:update-hash` in the same commit and say so in the commit message. Never update it
-  to silence a failure you do not understand.
+  to silence a failure you do not understand, and never regenerate the `identity` value at all.

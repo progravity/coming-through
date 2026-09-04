@@ -8,14 +8,14 @@ import type { Player } from './player.ts';
 /** Accumulated desired-velocity contributions for one agent this step. */
 export interface Steer { dx: number; dz: number; }
 
-/** Push away from nearby agents within the archetype's separation radius. Group mates are excluded. */
+/** Push away from nearby agents within the agent's separation radius. Group mates are excluded. */
 export function separation(self: Agent, A: Archetype, grid: SpatialGrid<Agent>, out: Steer): void {
     let sx = 0, sz = 0;
     const cx = self.cx, cz = self.cz;
     grid.forNeighbors(cx, cz, o => {
         if (o === self || o.dead) return;
         if (self.group && o.group === self.group) return;
-        const ex = cx - o.cx, ez = cz - o.cz, R = A.sepR + o.r, d2 = ex * ex + ez * ez;
+        const ex = cx - o.cx, ez = cz - o.cz, R = self.sepR + o.r, d2 = ex * ex + ez * ez;
         if (d2 > R * R || d2 < 1e-6) return;
         const d = Math.sqrt(d2), f = (1 - d / R) / d;
         sx += ex * f; sz += ez * f;
@@ -26,7 +26,7 @@ export function separation(self: Agent, A: Archetype, grid: SpatialGrid<Agent>, 
 /** Push away from the player, scaled by how much this archetype cares. */
 export function avoidPlayer(self: Agent, A: Archetype, player: Player, out: Steer): void {
     const cx = self.cx, cz = self.cz;
-    const ex = cx - player.x, ez = cz - player.z, R = A.sepR + player.r, d2 = ex * ex + ez * ez;
+    const ex = cx - player.x, ez = cz - player.z, R = self.sepR + player.r, d2 = ex * ex + ez * ez;
     if (d2 < R * R && d2 > 1e-6) {
         const d = Math.sqrt(d2), f = (1 - d / R) / d * A.sepW * A.avoidPlayer;
         out.dx += ex * f; out.dz += ez * f;
@@ -41,10 +41,10 @@ export function wallRepulsion(x: number, r: number, out: Steer): void {
 }
 
 /** Accelerate the agent's velocity toward the desired velocity over one fixed step, honouring accel and speed caps. */
-export function steerToward(self: Agent, A: Archetype, desired: Steer): void {
+export function steerToward(self: Agent, desired: Steer): void {
     let ax = desired.dx - self.vx, az = desired.dz - self.vz;
-    const al = Math.hypot(ax, az);
-    if (al > A.accel) { ax *= A.accel / al; az *= A.accel / al; }
+    const al = Math.hypot(ax, az), accel = self.accel;
+    if (al > accel) { ax *= accel / al; az *= accel / al; }
     self.vx += ax * SIM_DT; self.vz += az * SIM_DT;
     const sp = Math.hypot(self.vx, self.vz), cap = self.speed * 1.4;
     if (sp > cap) { self.vx *= cap / sp; self.vz *= cap / sp; }

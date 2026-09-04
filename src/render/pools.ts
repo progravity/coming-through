@@ -11,8 +11,12 @@ interface Pool {
     per: number;
 }
 
-/** Instances per slot for each pool; slot layout is shared with drawPerson. */
-export const PER: Record<PoolName, number> = { body: 1, head: 1, ball: 2, cyl: 6, cone: 1, box: 5 };
+/**
+ * Instances per slot for each pool; the slot layout is shared with drawPerson, which documents
+ * what each index within a slot is. The budget is fixed per person, so a person with every part
+ * turned on costs exactly as much as one with none: unused indices get a zero-scale matrix.
+ */
+export const PER: Record<PoolName, number> = { body: 1, head: 1, ball: 4, cyl: 16, cone: 1, box: 12 };
 
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _e = new THREE.Euler();
@@ -23,6 +27,12 @@ export class PartPools {
     private readonly pools: Record<PoolName, Pool>;
     /** Transform applied to every part put() this call; set by setBase(). */
     private readonly base = new THREE.Matrix4();
+    /**
+     * One past the highest slot drawn since the last commit. Only slots below this are handed to
+     * the GPU, so a crowd of 60 does not pay for a pool sized for 200. The player owns slot 0 and
+     * the crowd fills upward from 1, which keeps this tight.
+     */
+    private hi = 1;
     /** Whether the ink outline shells are currently visible. */
     inkOn = true;
 
@@ -41,30 +51,47 @@ export class PartPools {
         this.pools = {
             body: make(new THREE.SphereGeometry(0.5, 14, 10), PER.body),
             head: make(new THREE.SphereGeometry(0.5, 14, 10), PER.head),
-            ball: make(new THREE.SphereGeometry(0.5, 10, 8), PER.ball),           // hair, balloon
-            cyl:  make(new THREE.CylinderGeometry(0.5, 0.5, 1, 10), PER.cyl),    // 4 limbs + 2 hat pieces
+            ball: make(new THREE.SphereGeometry(0.5, 10, 8), PER.ball),        // hair, ponytail, beard, balloon
+            cyl:  make(new THREE.CylinderGeometry(0.5, 0.5, 1, 10), PER.cyl),  // limbs, neck, yoke, jacket, hat, wheels
             cone: make(new THREE.CylinderGeometry(0.02, 0.5, 1, 10), PER.cone),
-            box:  make(new THREE.BoxGeometry(1, 1, 1), PER.box),                 // accessories
+            box:  make(new THREE.BoxGeometry(1, 1, 1), PER.box),               // feet, glasses, bag, accessories, frames
         };
     }
 
     /** Set the per-person root transform used by subsequent put() calls. */
-    setBase(x: number, y: number, z: number, yaw: number, scale: number): void {
+    setBase(slot: number, x: number, y: number, z: number, yaw: number, scale: number): void {
         _p.set(x, y, z); _e.set(0, yaw, 0); _q.setFromEuler(_e); _s.set(scale, scale, scale);
         this.base.compose(_p, _q, _s);
+        if (slot >= this.hi) this.hi = slot + 1;
     }
 
     put(pool: PoolName, idx: number, x: number, y: number, z: number, rx: number, ry: number, rz: number, sx: number, sy: number, sz: number, color: number): void {
         const P = this.pools[pool];
-        _p.set(x, y, z); _e.set(rx, ry, rz); _q.setFromEuler(_e); _s.set(sx, sy, sz);
+        _p.set(x, y, z); _s.set(sx, sy, sz);
+        // Plenty of parts are axis-aligned; skip six trig calls when there is no rotation at all.
+        if (rx === 0 && ry === 0 && rz === 0) _q.set(0, 0, 0, 1);
+        else { _e.set(rx, ry, rz); _q.setFromEuler(_e); }
         _m.compose(_p, _q, _s); _m2.multiplyMatrices(this.base, _m); P.mesh.setMatrixAt(idx, _m2);
-        _s.set(sx * 1.06 + 0.025, sy * 1.06 + 0.025, sz * 1.06 + 0.025);
-        _m.compose(_p, _q, _s); _m2.multiplyMatrices(this.base, _m); P.out.setMatrixAt(idx, _m2);
         P.mesh.setColorAt(idx, _c.setHex(color));
+        if (!this.inkOn) return;
+        // The ink shell is the same part grown a little. Column i of a composed matrix is a rotation
+        // axis times that axis's scale, so growing s to s * 1.06 + 0.025 is one multiply per element
+        // of the matrix we already have -- much cheaper than composing the whole thing again.
+        const e = _m.elements;
+        const gx = 1.06 + 0.025 / sx, gy = 1.06 + 0.025 / sy, gz = 1.06 + 0.025 / sz;
+        e[0] *= gx; e[1] *= gx; e[2] *= gx;
+        e[4] *= gy; e[5] *= gy; e[6] *= gy;
+        e[8] *= gz; e[9] *= gz; e[10] *= gz;
+        _m2.multiplyMatrices(this.base, _m); P.out.setMatrixAt(idx, _m2);
     }
 
     hide(pool: PoolName, idx: number): void {
         const P = this.pools[pool]; P.mesh.setMatrixAt(idx, ZERO); P.out.setMatrixAt(idx, ZERO);
+    }
+
+    /** Hide a run of consecutive indices in one pool, for parts a person is not wearing. */
+    hideRange(pool: PoolName, from: number, count: number): void {
+        for (let i = 0; i < count; i++) this.hide(pool, from + i);
     }
 
     /** Hide every part belonging to a person slot. */
@@ -75,17 +102,42 @@ export class PartPools {
         }
     }
 
-    /** Flag instance buffers for upload after a frame of put()/hide() calls. */
+    /** Hide every slot, player included. Used when a run is rebuilt. */
+    freeAll(): void { for (let slot = 0; slot <= MAX; slot++) this.freeSlot(slot); }
+
+    /**
+     * Flag instance buffers for upload after a frame of put()/hide() calls, and trim the drawn
+     * instance count to the slots actually in use. Uploads are limited to the same range, so an
+     * idle tail of the pool costs neither bandwidth nor vertex work.
+     */
     commit(): void {
+        const hi = this.hi;
         for (const name of Object.keys(this.pools) as PoolName[]) {
-            const P = this.pools[name];
-            P.mesh.instanceMatrix.needsUpdate = true; P.out.instanceMatrix.needsUpdate = true;
-            if (P.mesh.instanceColor) P.mesh.instanceColor.needsUpdate = true;
+            const P = this.pools[name], n = hi * P.per;
+            P.mesh.count = n; P.out.count = n;
+            upload(P.mesh.instanceMatrix, n * 16);
+            upload(P.out.instanceMatrix, n * 16);
+            if (P.mesh.instanceColor) upload(P.mesh.instanceColor, n * 3);
         }
+        this.hi = 1;
     }
 
     setInk(on: boolean): void {
         this.inkOn = on;
-        for (const name of Object.keys(this.pools) as PoolName[]) this.pools[name].out.visible = on;
+        for (const name of Object.keys(this.pools) as PoolName[]) {
+            const P = this.pools[name];
+            P.out.visible = on;
+            // put() stops maintaining the shells while ink is off, so clear them on the way back in
+            // rather than showing one frame of matrices left over from before.
+            // Clear the whole allocation, not just the slots currently drawn, so a slot that comes
+            // back into use later cannot surface a shell left over from before ink was switched off.
+            if (on) { for (let i = 0; i < P.out.instanceMatrix.count; i++) P.out.setMatrixAt(i, ZERO); P.out.instanceMatrix.needsUpdate = true; }
+        }
     }
+}
+
+function upload(attr: THREE.InstancedBufferAttribute, count: number): void {
+    attr.clearUpdateRanges();
+    attr.addUpdateRange(0, count);
+    attr.needsUpdate = true;
 }

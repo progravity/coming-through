@@ -28,7 +28,8 @@ export class Crowd {
 
     constructor(streams: Streams) {
         this.streams = streams;
-        for (let i = MAX - 1; i >= 0; i--) this.freeSlots.push(i);
+        // Slot 0 belongs to the player; the crowd fills upward from 1 (see PLAYER_SLOT).
+        for (let i = MAX; i >= 1; i--) this.freeSlots.push(i);
     }
 
     get freeSlotCount(): number { return this.freeSlots.length; }

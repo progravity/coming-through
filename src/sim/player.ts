@@ -33,7 +33,9 @@ const WALK = 1.7, HURRY = 2.4;
 export function createPlayer(): Player {
     // The player's look is fixed, so the recipe roll uses a constant seed rather than a run stream.
     const recipe = makeRecipe(new Rng(0), ARCH.tourist, { shirt: 0xf2f0ea });
-    recipe.h = 1.0; recipe.hat = 'cap'; recipe.hatColor = 0xd9534f; recipe.hair = 'none'; recipe.acc = 'none';
+    recipe.age = 'adult'; recipe.h = 1.0; recipe.hat = 'cap'; recipe.hatColor = 0xd9534f;
+    recipe.hair = 'none'; recipe.ponytail = false; recipe.beard = 'none'; recipe.acc = 'none';
+    recipe.mobility = 'none'; recipe.seated = false; recipe.stoop = 0; recipe.jacket = false;
     const p: Player = { x: PLAYER_START.x, z: PLAYER_START.z, yaw: PLAYER_START.yaw, camYaw: PLAYER_START.camYaw,
         r: 0.32, vx: 0, vz: 0, phase: 0, mv: 0, lean: 0, fidget: 0, recipe, prev: newPose(), prevCamYaw: PLAYER_START.camYaw };
     copyPose(p.prev, p);

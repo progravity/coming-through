@@ -89,6 +89,10 @@ export class Simulation {
      * Hash of the gameplay-relevant state: positions, velocities, timers, identities and recipes of
      * every agent in spawn order, plus the player and score. Deliberately leaves out gait phase,
      * fidget and anything else fed only by the cosmetic stream.
+     *
+     * Every recipe axis is covered, so changing how people are rolled moves this value on purpose;
+     * `identityHash` below is the one that must not move. Note that `slot` is not hashed: it is a
+     * render-pool index whose absolute value carries no gameplay meaning.
      */
     hash(): string {
         const h = new Hasher();
@@ -98,11 +102,15 @@ export class Simulation {
         h.u32(this.crowd.spawned).u32(this.crowd.agents.length);
         for (const a of this.crowd.agents) {
             const r = a.recipe;
-            h.u32(a.index).u32(ARCH_KEYS.indexOf(a.type)).u32(a.slot).u32(a.group).bool(a.dead);
-            h.f64(a.x).f64(a.z).f64(a.vx).f64(a.vz).f64(a.yaw).f64(a.speed);
+            h.u32(a.index).u32(ARCH_KEYS.indexOf(a.type)).u32(a.group).bool(a.dead);
+            h.f64(a.x).f64(a.z).f64(a.vx).f64(a.vz).f64(a.yaw).f64(a.speed).f64(a.r).f64(a.colOff).f64(a.accel).f64(a.turn);
             h.f64(a.t).f64(a.wanderX).f64(a.wanderZ).f64(a.nextWander).f64(a.stopUntil).f64(a.nextStop).f64(a.bumpCd);
-            h.f64(r.h).f64(r.w).f64(r.headR).u32(r.skin).u32(r.shirt).u32(r.pants).str(r.hat).u32(r.hatColor).str(r.hair).u32(r.hairColor).str(r.acc).u32(r.accColor);
-            h.f64(r.gait.bob).f64(r.gait.stride).f64(r.gait.cadence).f64(r.gait.arm);
+            h.str(r.age).f64(r.h).f64(r.w).f64(r.headR).f64(r.shoulder).f64(r.stoop);
+            h.u32(r.skin).u32(r.shirt).u32(r.pants).u32(r.shoe);
+            h.str(r.hat).u32(r.hatColor).str(r.hair).u32(r.hairColor).bool(r.ponytail).str(r.beard).bool(r.glasses);
+            h.bool(r.jacket).u32(r.jacketColor).bool(r.shorts).bool(r.bag).u32(r.bagColor);
+            h.str(r.acc).u32(r.accColor).str(r.mobility).u32(r.frameColor);
+            h.f64(r.gait.bob).f64(r.gait.stride).f64(r.gait.cadence).f64(r.gait.arm).f64(r.gait.limp);
         }
         return h.digest();
     }
