@@ -56,9 +56,17 @@ Two rules make repeat runs comparable, and both must be preserved:
 
 Proportions come from two axes, not from independent rolls: a height axis and a build axis feed
 height, width, head radius and shoulder width together, so a body reads as one person. An age axis
-(`child`/`teen`/`adult`/`older`) then scales height, head-to-body ratio, stride, cadence, speed and
-a forward stoop. `look.h` in an archetype is the *adult* range; age does the rest, which is why
-Timmy carries an adult-sized range and a forced child age.
+(`child`/`teen`/`adult`/`older`) then scales height, head-to-body ratio, **limb length**, stride,
+cadence, speed and a forward stoop. `look.h` in an archetype is the *adult* range; age does the
+rest, which is why Timmy carries an adult-sized range and a forced child age. `h` is very nearly a
+stature in metres divided by 1.86, the skeleton's unit height, so the archetype ranges read as real
+heights: adults land between about 1.55 m and 1.92 m.
+
+`limb` is what stops a child being a scaled-down adult. It shortens the leg and arm bones, and
+`drawPerson` *derives* the hip from it (`hipY = ANKLE_Y + (THIGH + SHIN) * limb`) rather than
+hardcoding it, so the feet stay on the ground and the torso lengthens to take up the difference.
+The chest and pelvis are then placed as fractions of the hip-to-shoulder span, not at absolute
+heights, so they stretch with it.
 
 Mobility aids (`cane`, `wheelchair`, `scooter`) are people, not obstacles. Each carries a
 `MotionProfile` the simulation applies on top of the archetype — speed, turn rate, acceleration,
@@ -67,9 +75,37 @@ looking different. Their odds rise steeply with the age axis.
 
 Parts are drawn from the shared instanced pools and the budget per person is **fixed**: a person
 wearing everything costs exactly what a person wearing nothing costs, because hidden parts write a
-zero-scale matrix. `PER` in `render/pools.ts` is that budget and `drawPerson` documents the index
-layout within a slot. Adding a part means either finding a free index or raising `PER`; never add
-a mesh per person.
+zero-scale matrix. That also means the budget *is* the cost -- raising `PER` charges every person
+whether they wear the part or not. `PER` in `render/pools.ts` is that budget (41 parts across seven
+pools) and `drawPerson` documents the index layout within a slot. Adding a part means either
+finding a free index or raising `PER`; never add a mesh per person.
+
+## The body
+
+`drawPerson` lays the figure out from human landmarks as fractions of height -- shoulders at 0.75,
+hips at 0.47, knees at 0.27 -- which puts an adult at about five and a half heads tall. Two rules
+keep it readable:
+
+- **Joints are sealed, not butted.** Every cylinder end is buried inside the rounded part at that
+  joint (shoulder cap over the upper arm, hand over the forearm, pelvis over the thigh tops, chest
+  over the neck), and each distal bone is narrower than the one above it, so a flat cylinder cap is
+  never the silhouette. `HIP_OVER`/`KNEE_OVER`/`ELBOW_OVER` extend a bone backwards into its parent
+  without moving the joint.
+- **Limbs are a chain, not a list of positions.** `segment()` walks hip to knee to ankle and
+  shoulder to elbow to wrist to hand, leaving each bone's midpoint for the part that draws it.
+  This is deliberately *hierarchy in the arithmetic, flat in the buffers*: joints can bend without
+  a scene graph, and `put()` stays one compose plus one multiply with no allocation. Do not
+  replace it with `Object3D` parenting -- `scripts/bench-pose.mjs` exists because this is a
+  measured hot path at 190 people.
+
+The waist is not a part: it is where the chest and pelvis ellipsoid silhouettes cross. Colour
+carries it -- chest in `shirt`, pelvis in `pants` -- and the shoulder cap plus upper arm share the
+shirt colour so they read as one sleeve. Recolouring either half breaks the read before the
+geometry does.
+
+Anything outside the renderer that needs to know how tall a person is imports `standingHeight` or
+`eyeHeight` from `render/person.ts`; `camera.ts` derives all three of its heights that way, so a
+proportion change cannot leave the camera aimed where the chest used to be.
 
 ## Character inspection
 

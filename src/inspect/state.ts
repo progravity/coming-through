@@ -46,6 +46,11 @@ function pick<T extends string>(options: readonly T[], v: string | null, fallbac
 }
 
 const flag = (v: string | null, fallback: boolean): boolean => (v === null ? fallback : v === '1');
+const wrap01 = (v: number): number => ((v % 1) + 1) % 1;
+const num = (v: string | null, fallback: number): number => {
+    const n = v === null ? NaN : Number(v);
+    return Number.isFinite(n) ? n : fallback;
+};
 
 export function readState(mode: string): InspectState {
     const q = new URLSearchParams(location.search);
@@ -59,6 +64,10 @@ export function readState(mode: string): InspectState {
         build: pick(BUILD_OPTIONS, q.get('build'), 'seed'),
         mobility: pick(MOBILITY_OPTIONS, q.get('mob'), 'seed'),
         walking: flag(q.get('walk'), false),
+        paused: flag(q.get('paused'), false),
+        yaw: num(q.get('yaw'), 0) * (Math.PI / 180),
+        gaitFrozen: q.get('phase') !== null,
+        phase01: wrap01(num(q.get('phase'), 0)),
         gizmos: flag(q.get('gizmos'), false),
         ink: flag(q.get('ink'), true),
     };
@@ -74,6 +83,10 @@ export function writeState(s: InspectState): void {
     if (s.build !== 'seed') q.set('build', s.build);
     if (s.mobility !== 'seed') q.set('mob', s.mobility);
     if (s.walking) q.set('walk', '1');
+    // Angle and pause are live values, but they belong in the URL too: holding a specific angle
+    // across a reload is what makes a before/after render of a proportion change comparable.
+    if (s.paused) { q.set('paused', '1'); q.set('yaw', ((s.yaw * 180) / Math.PI).toFixed(1)); }
+    if (s.gaitFrozen) q.set('phase', s.phase01.toFixed(3));
     if (s.gizmos) q.set('gizmos', '1');
     if (!s.ink) q.set('ink', '0');
     history.replaceState(null, '', `${location.pathname}?${q}`);

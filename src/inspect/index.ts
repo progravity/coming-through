@@ -80,7 +80,7 @@ export function startInspector(mode: string): void {
     /** Fields that rebuild the cast when they change. */
     const REBUILDS = ['mode', 'seed', 'arch', 'age', 'build', 'mobility'] as const;
     /** Fields the address bar carries. Angle and gait phase are live values and stay out of it. */
-    const IN_URL = [...REBUILDS, 'walking', 'gizmos', 'ink'] as const;
+    const IN_URL = [...REBUILDS, 'walking', 'gizmos', 'ink', 'paused', 'yaw', 'gaitFrozen', 'phase01'] as const;
 
     /** Apply a change from the panel or the keyboard, rebuilding the cast only when it must. */
     function patch(p: Partial<InspectState>): void {

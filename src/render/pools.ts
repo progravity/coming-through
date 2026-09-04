@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { MAX } from '../world/layout.ts';
 import { makeInkMaterial, makeToonGradient, makeToonMaterial } from './materials.ts';
 
-export type PoolName = 'body' | 'head' | 'ball' | 'cyl' | 'cone' | 'box';
+export type PoolName = 'body' | 'head' | 'ball' | 'nub' | 'cyl' | 'cone' | 'box';
 
 interface Pool {
     mesh: THREE.InstancedMesh;
@@ -16,7 +16,7 @@ interface Pool {
  * what each index within a slot is. The budget is fixed per person, so a person with every part
  * turned on costs exactly as much as one with none: unused indices get a zero-scale matrix.
  */
-export const PER: Record<PoolName, number> = { body: 1, head: 1, ball: 4, cyl: 16, cone: 1, box: 12 };
+export const PER: Record<PoolName, number> = { body: 2, head: 1, ball: 4, nub: 6, cyl: 17, cone: 1, box: 10 };
 
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _e = new THREE.Euler();
@@ -49,12 +49,15 @@ export class PartPools {
             return { mesh, out, per };
         };
         this.pools = {
-            body: make(new THREE.SphereGeometry(0.5, 14, 10), PER.body),
+            body: make(new THREE.SphereGeometry(0.5, 14, 10), PER.body),       // chest, pelvis
             head: make(new THREE.SphereGeometry(0.5, 14, 10), PER.head),
             ball: make(new THREE.SphereGeometry(0.5, 10, 8), PER.ball),        // hair, ponytail, beard, balloon
-            cyl:  make(new THREE.CylinderGeometry(0.5, 0.5, 1, 10), PER.cyl),  // limbs, neck, yoke, jacket, hat, wheels
+            // Extremities: small enough that a coarser sphere reads the same, and there are six of
+            // them per person, so they get their own cheaper geometry rather than riding on `ball`.
+            nub:  make(new THREE.SphereGeometry(0.5, 8, 6), PER.nub),          // shoulder caps, hands, feet
+            cyl:  make(new THREE.CylinderGeometry(0.5, 0.5, 1, 10), PER.cyl),  // limbs, neck, jacket, hat, wheels
             cone: make(new THREE.CylinderGeometry(0.02, 0.5, 1, 10), PER.cone),
-            box:  make(new THREE.BoxGeometry(1, 1, 1), PER.box),               // feet, glasses, bag, accessories, frames
+            box:  make(new THREE.BoxGeometry(1, 1, 1), PER.box),               // glasses, bag, accessories, frames
         };
     }
 

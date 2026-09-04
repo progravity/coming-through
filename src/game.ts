@@ -91,6 +91,7 @@ function startRun(nextSeed: number): void {
     seed = nextSeed >>> 0;
     sim = new Simulation(seed);
     sim.onBump = () => ui.flash();
+    rig.setBody(sim.player.recipe);
     sim.prime(targetCount);
     recorder = new Recorder(seed, targetCount);
     acc = 0;

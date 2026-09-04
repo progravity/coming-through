@@ -57,6 +57,12 @@ export interface Recipe {
     shoulder: number;
     /** Forward stoop of the torso in radians; rises at the older end of the age axis. */
     stoop: number;
+    /**
+     * Limb-length multiplier from the age axis. A child is not a scaled-down adult: their legs and
+     * arms are proportionally shorter and their torso longer. drawPerson derives the hip height
+     * from this so the feet stay on the ground and the torso takes up the difference.
+     */
+    limb: number;
     // ---- colour ----
     skin: number;
     shirt: number;
@@ -94,6 +100,8 @@ interface AgeProfile {
     /** Head radius relative to an adult of the same height: children are famously top-heavy. */
     head: number;
     shoulder: number;
+    /** Leg and arm length relative to an adult of the same height. */
+    limb: number;
     stride: number;
     cadence: number;
     stoop: number;
@@ -104,10 +112,10 @@ interface AgeProfile {
 }
 
 const AGE: Record<Age, AgeProfile> = {
-    child: { height: 0.62, head: 1.24, shoulder: 0.88, stride: 0.78, cadence: 1.5,  stoop: 0,    speed: 0.92, accel: 1.1,  aid: 0.3 },
-    teen:  { height: 0.89, head: 1.08, shoulder: 0.94, stride: 0.96, cadence: 1.12, stoop: 0.02, speed: 1.03, accel: 1.05, aid: 0.35 },
-    adult: { height: 1,    head: 1,    shoulder: 1,    stride: 1,    cadence: 1,    stoop: 0,    speed: 1,    accel: 1,    aid: 0.7 },
-    older: { height: 0.955, head: 1,   shoulder: 0.97, stride: 0.8,  cadence: 0.9,  stoop: 0.15, speed: 0.84, accel: 0.85, aid: 3.4 },
+    child: { height: 0.62, head: 1.24, shoulder: 0.88, limb: 0.85, stride: 0.78, cadence: 1.5,  stoop: 0,    speed: 0.92, accel: 1.1,  aid: 0.3 },
+    teen:  { height: 0.89, head: 1.08, shoulder: 0.94, limb: 0.96, stride: 0.96, cadence: 1.12, stoop: 0.02, speed: 1.03, accel: 1.05, aid: 0.35 },
+    adult: { height: 1,    head: 1,    shoulder: 1,    limb: 1,    stride: 1,    cadence: 1,    stoop: 0,    speed: 1,    accel: 1,    aid: 0.7 },
+    older: { height: 0.955, head: 1,   shoulder: 0.97, limb: 0.98, stride: 0.8,  cadence: 0.9,  stoop: 0.15, speed: 0.84, accel: 0.85, aid: 3.4 },
 };
 
 interface MobilityProfile extends MotionProfile {
@@ -193,7 +201,8 @@ export function makeRecipe(rng: Rng, A: Archetype, opts: RecipeOptions = {}): Re
     // so a body reads as one person rather than three independent rolls stacked on top of each other.
     const w = (lk.w ?? 1) * (0.84 + 0.36 * build0);
     // Taller bodies carry relatively smaller heads; the age profile then pushes children the other way.
-    const headR = ((0.243 - 0.034 * height0) * ap.head * (1 + 0.06 * (w - 1))) + 0.006 * headR0;
+    // Sized so an adult lands near five and a half heads tall against the skeleton in person.ts.
+    const headR = ((0.179 - 0.025 * height0) * ap.head * (1 + 0.06 * (w - 1))) + 0.004 * headR0;
 
     const hat: HatType = hat0 < lk.hat
         ? (lk.hatType ?? fromList(HAT_TYPES[child ? 'child' : 'grown'], hatType0))
@@ -207,8 +216,11 @@ export function makeRecipe(rng: Rng, A: Archetype, opts: RecipeOptions = {}): Re
         h: lerpRange(lk.h, height0) * ap.height,
         w,
         headR,
-        shoulder: (0.295 + 0.055 * build0) * (lk.w ?? 1) * ap.shoulder,
+        // Today's shoulders were nearly twice life-size as a fraction of height, which is the
+        // single loudest reason the old figure did not read as human. Same build sensitivity ratio.
+        shoulder: (0.183 + 0.034 * build0) * (lk.w ?? 1) * ap.shoulder,
         stoop: ap.stoop + (mobility === 'cane' ? 0.06 : 0),
+        limb: ap.limb,
 
         skin: skinTone(skin0),
         shirt: opts.shirt ?? fromFamily(SHIRT_FAMILY[lk.shirt], shirt0),
