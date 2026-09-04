@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Crowd walk – proof of concept</title>
+<style>
+  html,body{margin:0;height:100%;overflow:hidden;background:#20242c;font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#f2f0ea;touch-action:none;-webkit-user-select:none;user-select:none}
+  canvas{display:block}
+  .chip{position:fixed;background:rgba(20,22,28,.72);border-radius:12px;padding:8px 12px;font-size:14px;line-height:1.35;pointer-events:none}
+  #stats{top:max(12px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left))}
+  #stats b{font-weight:500;font-size:20px;display:block}
+  #controls{position:fixed;top:max(12px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:60vw}
+  button{font:inherit;font-size:14px;color:#f2f0ea;background:rgba(20,22,28,.72);border:0;border-radius:12px;padding:8px 12px;min-width:40px;touch-action:manipulation}
+  button:active{background:rgba(60,64,72,.9)}
+  #legend{bottom:max(12px,env(safe-area-inset-bottom));right:max(12px,env(safe-area-inset-right));font-size:13px}
+  #legend div{display:flex;align-items:center;gap:8px}
+  #legend i{width:12px;height:12px;border-radius:3px;display:inline-block;flex:none}
+  #legend span{color:#b9b6ad}
+  #stick{position:fixed;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);display:none;pointer-events:none}
+  #knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.35)}
+  #flash{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,rgba(230,70,60,.55));opacity:0;transition:opacity .12s}
+  #overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,22,28,.8);text-align:center;padding:24px}
+  #overlay h1{font-weight:500;font-size:26px;margin:0 0 12px}
+  #overlay p{margin:6px auto;font-size:15px;color:#c9c6bd;max-width:420px}
+  #overlay .go{margin-top:18px;font-size:17px;padding:12px 24px;background:#e8c34a;color:#2b2200}
+  #fps{bottom:max(12px,env(safe-area-inset-bottom));left:max(12px,env(safe-area-inset-left));font-size:12px;color:#9a978f}
+  @media (max-width:640px){#legend{display:none}}
+</style>
+</head>
+<body>
+<div id="stats" class="chip"><b id="time">0.0s</b><span id="bumps">0 bumps</span></div>
+<div id="controls">
+  <button id="less" aria-label="Fewer people">−</button><button id="count" aria-label="Crowd size">80</button><button id="more" aria-label="More people">+</button>
+  <button id="cam">Camera: shoulder</button>
+  <button id="ink">Ink: on</button>
+</div>
+<div id="legend" class="chip"></div>
+<div id="stick"><div id="knob"></div></div>
+<div id="flash"></div>
+<div id="fps" class="chip"></div>
+<div id="overlay"><div>
+  <h1>Crowd walk</h1>
+  <p>Get from the blue pad to the green pad without bumping into anyone.</p>
+  <p>Touch and drag anywhere to move. Keyboard: WASD or arrows, shift to hurry. C cycles the camera, O toggles ink, [ and ] change the crowd size.</p>
+  <p id="result"></p>
+  <button class="go" id="start">Start</button>
+</div></div>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>
