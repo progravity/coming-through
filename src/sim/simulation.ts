@@ -106,4 +106,26 @@ export class Simulation {
         }
         return h.digest();
     }
+
+    /**
+     * Hash of *who the seed spawns*, and nothing else: archetype, direction, spawn placement, group
+     * structure, and the first behaviour-stream draws each agent starts life with.
+     *
+     * Deliberately excludes everything the `recipe` stream owns -- proportions, colours, gait,
+     * speed, mobility -- and everything that moves. That is what makes it useful: appearance work
+     * may freely change `hash()`, but if it has disturbed the `spawn` or `behavior` streams this
+     * value changes too. Meant to be read off a freshly filled crowd, before any step, so no
+     * position here has been touched by a movement profile.
+     */
+    identityHash(): string {
+        const h = new Hasher();
+        h.u32(this.seed).u32(this.crowd.spawned).u32(this.crowd.agents.length);
+        for (const a of this.crowd.agents) {
+            h.u32(a.index).u32(ARCH_KEYS.indexOf(a.type)).u32(a.dir > 0 ? 1 : 0).u32(a.group);
+            h.f64(a.spawnX).f64(a.spawnZ).f64(a.offset);
+            h.u32(a.leader ? a.leader.index : 0xffffffff).u32(a.parent ? a.parent.index : 0xffffffff);
+            h.f64(a.nextWander).f64(a.nextStop);
+        }
+        return h.digest();
+    }
 }

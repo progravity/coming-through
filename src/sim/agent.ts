@@ -37,6 +37,9 @@ export class Agent implements GridItem, Poseable {
     readonly type: ArchKey;
     readonly A: Archetype;
     x: number; z: number; vx: number; vz: number;
+    /** Where the spawner put this agent, kept so identity can be hashed without replaying motion. */
+    readonly spawnX: number;
+    readonly spawnZ: number;
     readonly dir: 1 | -1;
     readonly speed: number;
     readonly r: number;
@@ -70,7 +73,7 @@ export class Agent implements GridItem, Poseable {
         this.rng = streams.behavior.fork(label);
         this.index = index;
         this.type = type; this.A = A;
-        this.x = x; this.z = z; this.vx = 0; this.vz = dir * 0.5; this.dir = dir;
+        this.x = x; this.z = z; this.spawnX = x; this.spawnZ = z; this.vx = 0; this.vz = dir * 0.5; this.dir = dir;
         this.recipe = makeRecipe(recipeRng, A, opts);
         this.speed = opts.speed ?? recipeRng.sample(A.speed); this.r = A.radius; this.colOff = A.colOffset ?? 0;
         this.yaw = dir > 0 ? 0 : Math.PI; this.hx = 0; this.hz = dir;

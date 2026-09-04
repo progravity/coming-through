@@ -17,9 +17,20 @@ import { Simulation } from '../src/sim/simulation.ts';
 import type { StepCommand } from '../src/sim/simulation.ts';
 
 const EXPECTED_PATH = new URL('./determinism.expected.json', import.meta.url);
-interface Expected { seed: number; steps: number; crowd: number; hash: string; }
+interface Expected { seed: number; steps: number; crowd: number; hash: string; identity: string; }
 
 const SEED = 20260903, STEPS = 3600, CROWD = 80;
+/** Seeds the crowd-identity hash covers, so one stored value guards more than a single run. */
+const IDENTITY_SEEDS = [SEED, 1, 7, 4294967295, 20260904];
+const IDENTITY_CROWD = 160;
+
+/**
+ * Fold `identityHash` over several seeds' freshly filled crowds. Nothing here has been stepped, so
+ * the value depends only on the `spawn` and `behavior` streams -- never on how anyone looks or moves.
+ */
+function crowdIdentity(): string {
+    return IDENTITY_SEEDS.map(s => { const sim = new Simulation(s); sim.crowd.fill(IDENTITY_CROWD); return sim.identityHash(); }).join(':');
+}
 
 /** Scripted player: waits, walks up the path, weaves, hurries, then reads the results. */
 function scriptedCommand(step: number, crowd: number, cmd: StepCommand): StepCommand {
@@ -51,7 +62,10 @@ test('simulation state hash matches the stored value', () => {
     assert.ok(sim.bumps >= 0);
     assert.equal(sim.steps, PRIME_STEPS + STEPS);
     if (process.env.UPDATE_DETERMINISM_HASH) {
-        const next: Expected = { seed: SEED, steps: STEPS, crowd: CROWD, hash };
+        const prev = JSON.parse(readFileSync(EXPECTED_PATH, 'utf8')) as Expected;
+        // Only the state hash is regenerated. The crowd-identity hash is written once, by hand, and
+        // is meant to survive every later change; see the test below.
+        const next: Expected = { seed: SEED, steps: STEPS, crowd: CROWD, hash, identity: prev.identity };
         writeFileSync(EXPECTED_PATH, JSON.stringify(next, null, 4) + '\n');
         console.log(`determinism hash updated to ${hash}`);
         return;
@@ -60,6 +74,18 @@ test('simulation state hash matches the stored value', () => {
     assert.equal(expected.seed, SEED); assert.equal(expected.steps, STEPS); assert.equal(expected.crowd, CROWD);
     assert.equal(hash, expected.hash,
         `simulation diverged from the stored hash (${expected.hash}); if this change is intended, run npm run test:update-hash`);
+});
+
+test('the crowd a seed produces is unchanged', () => {
+    // This hash covers only the spawn and behavior streams: which archetype each spawn event
+    // produces, where and facing which way, how groups are put together, and the timers each agent
+    // starts with. Work on appearance, proportions, gait or movement profiles must never move it.
+    // If this fails, a draw was added, removed or reordered in the spawn or behavior streams --
+    // never regenerate it to make appearance work go green.
+    const identity = crowdIdentity();
+    if (process.env.UPDATE_DETERMINISM_HASH) return;
+    const expected = JSON.parse(readFileSync(EXPECTED_PATH, 'utf8')) as Expected;
+    assert.equal(identity, expected.identity, 'the spawn/behavior streams changed: a seed no longer produces the same crowd');
 });
 
 test('a primed run opens on the same crowd every time', () => {
