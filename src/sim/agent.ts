@@ -1,23 +1,23 @@
 import { ARCH } from '../archetypes.ts';
 import type { ArchKey, Archetype } from '../archetypes.ts';
+import type { Rng, Streams } from '../core/rng.ts';
+import { SIM_DT } from '../core/time.ts';
 import { makeRecipe } from '../recipe.ts';
 import type { Recipe } from '../recipe.ts';
-import { clamp, rand, rr, wrapAngle } from '../util.ts';
+import { clamp, wrapAngle } from '../util.ts';
 import { L, W } from '../world/layout.ts';
 import type { GridItem, SpatialGrid } from './grid.ts';
 import type { Player } from './player.ts';
+import { copyPose, newPose } from './pose.ts';
+import type { Pose } from './pose.ts';
 import { avoidPlayer, separation, steerToward, wallRepulsion } from './steering.ts';
 import type { Steer } from './steering.ts';
 
 /** Anything drawPerson needs to pose a body. Shared by agents and the player. */
-export interface Poseable {
-    x: number;
-    z: number;
-    yaw: number;
-    phase: number;
-    mv: number;
-    lean: number;
+export interface Poseable extends Pose {
     recipe: Recipe;
+    /** Phase offset for idle fidget and balloon sway; from the cosmetic stream. */
+    fidget: number;
 }
 
 export interface AgentOptions {
@@ -29,7 +29,11 @@ export interface AgentOptions {
     group?: number;
 }
 
+const TAU = Math.PI * 2;
+
 export class Agent implements GridItem, Poseable {
+    /** Position in spawn order across the whole run; also names this agent's RNG forks. */
+    readonly index: number;
     readonly type: ArchKey;
     readonly A: Archetype;
     x: number; z: number; vx: number; vz: number;
@@ -40,9 +44,10 @@ export class Agent implements GridItem, Poseable {
     yaw: number;
     /** Unit heading vector. */
     hx: number; hz: number;
-    /** Age in seconds. */
+    /** Age in simulation seconds. */
     t: number;
     phase: number; mv: number; lean: number;
+    readonly fidget: number;
     wanderX: number; wanderZ: number; nextWander: number;
     stopUntil: number; nextStop: number;
     readonly leader: Agent | null;
@@ -53,20 +58,29 @@ export class Agent implements GridItem, Poseable {
     dead: boolean;
     readonly recipe: Recipe;
     readonly slot: number;
+    /** This agent's private fork of the behavior stream: wander targets and stop timers. */
+    private readonly rng: Rng;
+    /** Rendered state at the end of the previous step, for interpolation. */
+    readonly prev: Pose = newPose();
 
-    constructor(type: ArchKey, x: number, z: number, dir: 1 | -1, slot: number, opts: AgentOptions = {}) {
+    constructor(streams: Streams, index: number, type: ArchKey, x: number, z: number, dir: 1 | -1, slot: number, opts: AgentOptions = {}) {
         const A: Archetype = ARCH[type];
+        const label = `agent:${index}`;
+        const recipeRng = streams.recipe.fork(label), cosmetic = streams.cosmetic.fork(label);
+        this.rng = streams.behavior.fork(label);
+        this.index = index;
         this.type = type; this.A = A;
         this.x = x; this.z = z; this.vx = 0; this.vz = dir * 0.5; this.dir = dir;
-        this.speed = opts.speed ?? rr(A.speed); this.r = A.radius; this.colOff = A.colOffset ?? 0;
+        this.recipe = makeRecipe(recipeRng, A, opts);
+        this.speed = opts.speed ?? recipeRng.sample(A.speed); this.r = A.radius; this.colOff = A.colOffset ?? 0;
         this.yaw = dir > 0 ? 0 : Math.PI; this.hx = 0; this.hz = dir;
-        this.t = 0; this.phase = Math.random() * 6.28; this.mv = 0; this.lean = 0;
-        this.wanderX = x; this.wanderZ = 0; this.nextWander = rr(A.wanderEvery);
-        this.stopUntil = 0; this.nextStop = A.stopEvery ? rr(A.stopEvery) : Infinity;
+        this.t = 0; this.phase = cosmetic.range(0, TAU); this.fidget = cosmetic.range(0, TAU); this.mv = 0; this.lean = 0;
+        this.wanderX = x; this.wanderZ = 0; this.nextWander = this.rng.sample(A.wanderEvery);
+        this.stopUntil = 0; this.nextStop = A.stopEvery ? this.rng.sample(A.stopEvery) : Infinity;
         this.leader = opts.leader ?? null; this.offset = opts.offset ?? 0; this.parent = opts.parent ?? null;
         this.group = opts.group ?? 0; this.bumpCd = 0; this.dead = false;
-        this.recipe = makeRecipe(A, opts);
         this.slot = slot;
+        copyPose(this.prev, this);
     }
 
     /** Collision-circle centre (offset forward for stroller pushers). */
@@ -75,7 +89,7 @@ export class Agent implements GridItem, Poseable {
 
     /** Desired velocity from the agent's own goal: follow a leader, orbit a parent, or walk the path. */
     private intent(out: Steer): boolean {
-        const A = this.A;
+        const A = this.A, rng = this.rng;
         if (this.leader) {
             const Ld = this.leader; if (Ld.dead) { this.dead = true; return false; }
             const tx = clamp(Ld.x + this.offset, -W + 0.6, W - 0.6), tz = Ld.z;
@@ -84,23 +98,25 @@ export class Agent implements GridItem, Poseable {
             out.dx = dx; out.dz = dz;
         } else if (this.parent) {
             const P = this.parent; if (P.dead) { this.dead = true; return false; }
-            if (this.t > this.nextWander) { this.wanderX = rand(-3, 3); this.wanderZ = rand(-3, 3); this.nextWander = this.t + rr(A.wanderEvery); }
+            if (this.t > this.nextWander) { this.wanderX = rng.range(-3, 3); this.wanderZ = rng.range(-3, 3); this.nextWander = this.t + rng.sample(A.wanderEvery); }
             const tx = clamp(P.x + this.wanderX, -W + 0.5, W - 0.5), tz = P.z + this.wanderZ;
             const ex = tx - this.x, ez = tz - this.z, d = Math.hypot(ex, ez);
             if (d > 0.4) { out.dx = ex / d * this.speed; out.dz = ez / d * this.speed; }
         } else {
-            if (this.t > this.nextWander) { this.wanderX = rand(-W + 0.7, W - 0.7); this.nextWander = this.t + rr(A.wanderEvery); }
+            if (this.t > this.nextWander) { this.wanderX = rng.range(-W + 0.7, W - 0.7); this.nextWander = this.t + rng.sample(A.wanderEvery); }
             const lat = clamp((this.wanderX - this.x) * 0.8, -1, 1) * A.wander;
             let dx = lat, dz: number = this.dir;
             const m = Math.hypot(dx, dz); dx = dx / m * this.speed; dz = dz / m * this.speed;
             out.dx = dx; out.dz = dz;
         }
-        if (A.stopEvery && A.stopFor && this.t > this.nextStop) { this.stopUntil = this.t + rr(A.stopFor); this.nextStop = this.stopUntil + rr(A.stopEvery); }
+        if (A.stopEvery && A.stopFor && this.t > this.nextStop) { this.stopUntil = this.t + rng.sample(A.stopFor); this.nextStop = this.stopUntil + rng.sample(A.stopEvery); }
         if (this.stopUntil > this.t) { out.dx = 0; out.dz = 0; }
         return true;
     }
 
-    update(dt: number, player: Player, grid: SpatialGrid<Agent>): void {
+    /** Advance one fixed step. */
+    update(player: Player, grid: SpatialGrid<Agent>): void {
+        const dt = SIM_DT;
         this.t += dt; this.bumpCd -= dt;
         const A = this.A;
         const desired: Steer = { dx: 0, dz: 0 };
@@ -108,7 +124,7 @@ export class Agent implements GridItem, Poseable {
         separation(this, A, grid, desired);
         avoidPlayer(this, A, player, desired);
         wallRepulsion(this.x, this.r, desired);
-        steerToward(this, A, desired, dt);
+        steerToward(this, A, desired);
         this.x += this.vx * dt; this.z += this.vz * dt;
         this.x = clamp(this.x, -W + this.r, W - this.r);
         // heading, lean, gait

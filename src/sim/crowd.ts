@@ -1,21 +1,35 @@
+import type { Streams } from '../core/rng.ts';
+import { stepsFor } from '../core/time.ts';
 import { MAX } from '../world/layout.ts';
 import { Agent } from './agent.ts';
 import { SpatialGrid } from './grid.ts';
 import type { Player } from './player.ts';
+import { copyPose } from './pose.ts';
 import { spawn } from './spawner.ts';
 
 export interface BumpEvent { agent: Agent; nx: number; nz: number; }
 
-/** Owns the agent list, render-slot allocation and the per-frame simulation step. */
+/** Minimum gap between spawns, in fixed steps (150 ms). */
+const SPAWN_INTERVAL = stepsFor(0.15);
+
+/** Owns the agent list, render-slot allocation and the per-step simulation. Agents are kept in spawn order. */
 export class Crowd {
     readonly agents: Agent[] = [];
     readonly grid = new SpatialGrid<Agent>(2);
     private readonly freeSlots: number[] = [];
-    private spawnTimer = 0;
-    /** Slots released this frame, so the renderer can hide them. */
+    private spawnCooldown = 0;
+    private spawnEvents = 0;
+    private agentCount = 0;
+    private groupSeq = 0;
+    /** Slots released this step, so the renderer can hide them. */
     readonly released: number[] = [];
 
-    constructor() { for (let i = MAX - 1; i >= 0; i--) this.freeSlots.push(i); }
+    private readonly streams: Streams;
+
+    constructor(streams: Streams) {
+        this.streams = streams;
+        for (let i = MAX - 1; i >= 0; i--) this.freeSlots.push(i);
+    }
 
     get freeSlotCount(): number { return this.freeSlots.length; }
     takeSlot(): number {
@@ -24,18 +38,31 @@ export class Crowd {
         return s;
     }
     add(a: Agent): void { this.agents.push(a); }
+    nextSpawnEvent(): number { return this.spawnEvents++; }
+    nextAgentIndex(): number { return this.agentCount++; }
+    nextGroupId(): number { return ++this.groupSeq; }
+    /** How many agents have ever been spawned. */
+    get spawned(): number { return this.agentCount; }
 
-    /** Top the crowd up toward `target`, at most one spawn every 150 ms. */
-    populate(target: number, dt: number): void {
-        this.spawnTimer -= dt;
-        if (this.agents.length < target && this.spawnTimer <= 0) { spawn(this); this.spawnTimer = 0.15; }
+    /** Top the crowd up toward `target`, at most one spawn every SPAWN_INTERVAL steps. */
+    populate(target: number): void {
+        if (this.spawnCooldown > 0) this.spawnCooldown--;
+        if (this.agents.length < target && this.spawnCooldown === 0) { spawn(this, this.streams); this.spawnCooldown = SPAWN_INTERVAL; }
     }
 
-    /** Advance every agent, resolve overlaps, then push the player out of anyone they walked into. */
-    step(dt: number, player: Player, onBump: (e: BumpEvent) => void, bumpsCount: boolean): void {
+    /** Fill straight up to `target`, scattering people along the path. For stress mode and tests. */
+    fill(target: number): void {
+        while (this.agents.length < target && spawn(this, this.streams, { scatter: true })) { /* keep going */ }
+    }
+
+    /** Remember every agent's rendered state before the step moves it. */
+    snapshot(): void { for (const a of this.agents) copyPose(a.prev, a); }
+
+    /** Advance every agent one fixed step, resolve overlaps, then push the player out of anyone they walked into. */
+    step(player: Player, onBump: (e: BumpEvent) => void, bumpsCount: boolean): void {
         const { agents, grid } = this;
         grid.rebuild(agents);
-        for (const a of agents) a.update(dt, player, grid);
+        for (const a of agents) a.update(player, grid);
         // hard overlap resolution between agents
         grid.rebuild(agents);
         for (const a of agents) {

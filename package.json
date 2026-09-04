@@ -5,10 +5,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "npm run lint && vite build",
+    "lint": "tsc && node scripts/check-math-random.mjs",
+    "test": "npm run lint && node --test test/",
+    "test:update-hash": "UPDATE_DETERMINISM_HASH=1 node --test test/determinism.test.ts",
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@types/node": "^26.4.1",
     "@types/three": "^0.185.4",
     "typescript": "~6.0.2",
     "vite": "^8.2.2"

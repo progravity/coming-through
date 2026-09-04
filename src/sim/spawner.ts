@@ -1,30 +1,54 @@
 import { ARCH, SHIRT, weightedType } from '../archetypes.ts';
-import { clamp, pick, rand, rr } from '../util.ts';
+import type { Streams } from '../core/rng.ts';
+import { clamp } from '../util.ts';
 import { DOORS, L, W } from '../world/layout.ts';
 import { Agent } from './agent.ts';
 import type { Crowd } from './crowd.ts';
 
-let groupSeq = 0;
+export interface SpawnOptions {
+    /** Place path-end spawns anywhere along the path instead of at the ends (used to pre-fill a crowd). */
+    scatter?: boolean;
+}
 
-/** Add one new person (or family, or parent+child) at a path end or a doorway. */
-export function spawn(crowd: Crowd): void {
-    const type = weightedType(), A = ARCH[type];
+/**
+ * Add one new person (or family, or parent+child) at a path end or a doorway.
+ *
+ * Every random draw comes from a fork named after the spawn event number, and every agent's own
+ * rolls come from forks named after its spawn index, so spawn event N and agent N are the same
+ * regardless of crowd size, tier, or anything drawn elsewhere. Returns false if the crowd is full.
+ */
+export function spawn(crowd: Crowd, streams: Streams, opts: SpawnOptions = {}): boolean {
+    if (crowd.freeSlotCount < 5) return false;
+    const n = crowd.nextSpawnEvent();
+    const where = streams.spawn.fork(`spawn:${n}`);
+    const how = streams.behavior.fork(`spawn:${n}`);
+    const type = weightedType(where), A = ARCH[type];
+    // Every placement draw is taken unconditionally, then selected between. Drawing inside the
+    // branches would let `scatter` (which is not part of the seed) shift every later draw from
+    // this fork, so the same spawn event would produce a different person depending on whether it
+    // came from priming or from topping the crowd up.
+    const dir: 1 | -1 = where.chance(0.5) ? 1 : -1;
+    const atDoor = where.chance(0.25);
+    const door = where.pick(DOORS);
+    const alongPath = where.range(-L, L);
+    const acrossPath = where.range(-W + 1, W - 1);
     let x: number, z: number;
-    const dir: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
-    if (Math.random() < 0.25) { const d = pick(DOORS); x = d.x > 0 ? W - 0.8 : -W + 0.8; z = d.z; }
-    else { z = -dir * (L + 2); x = rand(-W + 1, W - 1); }
-    if (crowd.freeSlotCount < 5) return;
+    if (atDoor) { x = door.x > 0 ? W - 0.8 : -W + 0.8; z = door.z; }
+    else { x = acrossPath; z = opts.scatter ? alongPath : -dir * (L + 2); }
+    const make = (t: typeof type, ax: number, o: ConstructorParameters<typeof Agent>[7] = {}) =>
+        new Agent(streams, crowd.nextAgentIndex(), t, ax, z, dir, crowd.takeSlot(), o);
     if (A.group) {
-        const n = Math.round(rr(A.group)), gid = ++groupSeq, shirt = pick(SHIRT.green), spacing = A.spacing ?? 1;
-        const leader = new Agent(type, x, z, dir, crowd.takeSlot(), { group: gid, shirt });
+        const size = Math.round(how.sample(A.group)), gid = crowd.nextGroupId(), shirt = where.pick(SHIRT.green), spacing = A.spacing ?? 1;
+        const leader = make(type, x, { group: gid, shirt });
         crowd.add(leader);
-        for (let i = 1; i < n; i++) {
+        for (let i = 1; i < size; i++) {
             const off = (i % 2 ? 1 : -1) * Math.ceil(i / 2) * spacing;
-            crowd.add(new Agent(type, clamp(x + off, -W + 0.6, W - 0.6), z, dir, crowd.takeSlot(), { leader, offset: off, group: gid, shirt, speed: leader.speed }));
+            crowd.add(make(type, clamp(x + off, -W + 0.6, W - 0.6), { leader, offset: off, group: gid, shirt, speed: leader.speed }));
         }
     } else if (A.parentType) {
-        const parent = new Agent(A.parentType, x, z, dir, crowd.takeSlot());
+        const parent = make(A.parentType, x);
         crowd.add(parent);
-        crowd.add(new Agent(type, clamp(x + rand(-1, 1), -W + 0.5, W - 0.5), z, dir, crowd.takeSlot(), { parent }));
-    } else crowd.add(new Agent(type, x, z, dir, crowd.takeSlot()));
+        crowd.add(make(type, clamp(x + where.range(-1, 1), -W + 0.5, W - 0.5), { parent }));
+    } else crowd.add(make(type, x));
+    return true;
 }

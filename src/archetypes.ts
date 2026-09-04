@@ -1,3 +1,4 @@
+import type { Rng } from './core/rng.ts';
 import type { Range } from './util.ts';
 
 // ---------- palette ----------
@@ -94,9 +95,9 @@ export const ARCH: Record<ArchKey, Archetype> = {
 export const ARCH_KEYS = Object.keys(ARCH) as ArchKey[];
 const TOTAL_WEIGHT = ARCH_KEYS.reduce((s, k) => s + ARCH[k].weight, 0);
 
-/** Pick an archetype key at random, weighted by its `weight`. */
-export function weightedType(): ArchKey {
-    let r = Math.random() * TOTAL_WEIGHT;
+/** Pick an archetype key at random, weighted by its `weight`. Draws once from `rng` (the spawn stream). */
+export function weightedType(rng: Rng): ArchKey {
+    let r = rng.next() * TOTAL_WEIGHT;
     for (const k of ARCH_KEYS) { r -= ARCH[k].weight; if (r <= 0) return k; }
     return 'tourist';
 }

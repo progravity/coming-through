@@ -23,6 +23,11 @@
   #overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,22,28,.8);text-align:center;padding:24px}
   #overlay h1{font-weight:500;font-size:26px;margin:0 0 12px}
   #overlay p{margin:6px auto;font-size:15px;color:#c9c6bd;max-width:420px}
+  #overlay .seednote{font-size:13px;color:#9a978f}
+  #overlay .seedline{font-size:13px;color:#9a978f;display:flex;align-items:center;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+  #overlay .seedline input{font:inherit;font-size:14px;color:#f2f0ea;background:rgba(20,22,28,.72);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:6px 10px;text-align:center}
+  #overlay .seedline input:focus{outline:none;border-color:#e8c34a}
+  #overlay .seedline button{font-size:12px;padding:5px 10px}
   #overlay .go{margin-top:18px;font-size:17px;padding:12px 24px;background:#e8c34a;color:#2b2200}
   #fps{bottom:max(12px,env(safe-area-inset-bottom));left:max(12px,env(safe-area-inset-left));font-size:12px;color:#9a978f}
   #debugCanvas[hidden]{display:none}
@@ -47,8 +52,15 @@
 <div id="overlay"><div>
   <h1 id="overlayTitle">Coming Through!</h1>
   <p>Get from the blue pad to the green pad without bumping into anyone.</p>
-  <p>Touch and drag anywhere to move. Keyboard: WASD or arrows, shift to hurry. C cycles the camera, O toggles ink, [ and ] change the crowd size, T cycles the device tier, G toggles the debug view.</p>
+  <p>Touch and drag anywhere to move. Keyboard: WASD or arrows, shift to hurry. C cycles the camera, O toggles ink, [ and ] change the crowd size, T cycles the device tier, G toggles the debug view. R replays the current seed from the start, N rolls a new one.</p>
   <p id="result"></p>
+  <p class="seednote">Same seed, same crowd, every time. Share the link to race a friend through the same people.</p>
+  <p class="seedline">
+    <label for="seedInput">Seed</label>
+    <input id="seedInput" type="text" spellcheck="false" autocomplete="off" autocapitalize="off" autocorrect="off" size="11" aria-label="Seed">
+    <button id="randomSeed">Random</button>
+    <button id="copyLink">Copy link</button>
+  </p>
   <button class="go" id="start">Start</button>
 </div></div>
 

@@ -1,10 +1,11 @@
 import type { Archetype } from '../archetypes.ts';
+import { SIM_DT } from '../core/time.ts';
 import { W } from '../world/layout.ts';
 import type { SpatialGrid } from './grid.ts';
 import type { Agent } from './agent.ts';
 import type { Player } from './player.ts';
 
-/** Accumulated desired-velocity contributions for one agent this frame. */
+/** Accumulated desired-velocity contributions for one agent this step. */
 export interface Steer { dx: number; dz: number; }
 
 /** Push away from nearby agents within the archetype's separation radius. Group mates are excluded. */
@@ -39,12 +40,12 @@ export function wallRepulsion(x: number, r: number, out: Steer): void {
     if (x < -lim) out.dx += (-lim - x) * 4;
 }
 
-/** Accelerate the agent's velocity toward the desired velocity, honouring accel and speed caps. */
-export function steerToward(self: Agent, A: Archetype, desired: Steer, dt: number): void {
+/** Accelerate the agent's velocity toward the desired velocity over one fixed step, honouring accel and speed caps. */
+export function steerToward(self: Agent, A: Archetype, desired: Steer): void {
     let ax = desired.dx - self.vx, az = desired.dz - self.vz;
     const al = Math.hypot(ax, az);
     if (al > A.accel) { ax *= A.accel / al; az *= A.accel / al; }
-    self.vx += ax * dt; self.vz += az * dt;
+    self.vx += ax * SIM_DT; self.vz += az * SIM_DT;
     const sp = Math.hypot(self.vx, self.vz), cap = self.speed * 1.4;
     if (sp > cap) { self.vx *= cap / sp; self.vz *= cap / sp; }
 }

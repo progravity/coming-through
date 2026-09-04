@@ -1,13 +1,19 @@
 import type { Poseable } from '../sim/agent.ts';
+import type { Pose } from '../sim/pose.ts';
 import type { PartPools } from './pools.ts';
 
-/** Draw one person into a render slot. All parts are in "unit height" space and scaled by recipe.h. */
-export function drawPerson(pools: PartPools, slot: number, who: Poseable, t: number): void {
-    const r = who.recipe, { phase, mv, lean } = who;
-    pools.setBase(who.x, 0, who.z, who.yaw, r.h);
+/**
+ * Draw one person into a render slot. All parts are in "unit height" space and scaled by recipe.h.
+ * @param who   Identity: recipe and cosmetic fidget offset.
+ * @param pose  Where the body is this frame, already interpolated between simulation steps.
+ * @param t     Render clock in seconds; only used for purely visual idle motion.
+ */
+export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: Pose, t: number): void {
+    const r = who.recipe, { phase, mv, lean } = pose, fidget = who.fidget;
+    pools.setBase(pose.x, 0, pose.z, pose.yaw, r.h);
     const put = pools.put.bind(pools), hide = pools.hide.bind(pools);
     const g = r.gait, c6 = slot * 6, b5 = slot * 5, k2 = slot * 2;
-    const bob = Math.sin(phase * 2) * g.bob * mv + Math.sin(t * 1.7 + slot) * 0.008 * (1 - mv);
+    const bob = Math.sin(phase * 2) * g.bob * mv + Math.sin(t * 1.7 + fidget) * 0.008 * (1 - mv);
     const sw = Math.sin(phase) * g.stride * mv;
     // legs swing about the hip
     put('cyl', c6,     -0.11, 0.8 - 0.39 * Math.cos(sw), -0.39 * Math.sin(sw),  sw, 0, 0, 0.15, 0.78, 0.15, r.pants);
@@ -53,7 +59,7 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, t: num
         put('box', b5 + 3, -0.27, 0.15, 0.75, 0, 0, 0, 0.06, 0.3, 0.3, 0x2a2a2e);
         put('box', b5 + 4,  0.27, 0.15, 0.75, 0, 0, 0, 0.06, 0.3, 0.3, 0x2a2a2e);
     } else if (r.acc === 'balloon') {
-        const bx = 0.36 + Math.sin(t * 1.3 + slot) * 0.05;
+        const bx = 0.36 + Math.sin(t * 1.3 + fidget) * 0.05;
         put('ball', k2 + 1, bx, 2.35 + bob, 0.05, 0, 0, 0, 0.42, 0.5, 0.42, r.accColor);
         put('box', b5, bx * 0.9, 1.65 + bob, 0.05, 0, 0, 0, 0.015, 1.1, 0.015, 0xdddddd);
     }

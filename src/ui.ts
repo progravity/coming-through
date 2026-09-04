@@ -1,5 +1,5 @@
 import { ARCH, ARCH_KEYS } from './archetypes.ts';
-import type { CameraMode } from './camera.ts';
+import type { CameraMode } from './sim/player.ts';
 import { TIER_SETTINGS } from './device.ts';
 import type { Tier } from './device.ts';
 
@@ -26,6 +26,9 @@ export class UI {
     readonly stick = el<HTMLElement>('stick');
     readonly knob = el<HTMLElement>('knob');
     readonly debugCanvas = el<HTMLCanvasElement>('debugCanvas');
+    readonly copyLink = el<HTMLButtonElement>('copyLink');
+    readonly randomSeed = el<HTMLButtonElement>('randomSeed');
+    readonly seedInput = el<HTMLInputElement>('seedInput');
     private readonly flashEl = el<HTMLElement>('flash');
     private readonly title = el<HTMLElement>('overlayTitle');
     private readonly result = el<HTMLElement>('result');
@@ -53,12 +56,27 @@ export class UI {
         this.fps.textContent = `${fps} fps · ${people} people · ${drawCalls} draw calls`;
     }
 
-    hideOverlay(): void { this.overlay.style.display = 'none'; }
+    setSeed(seed: number): void { this.seedInput.value = String(seed); }
+    /** Whatever the player typed in the seed box, trimmed. */
+    seedText(): string { return this.seedInput.value.trim(); }
+    /** Briefly confirm on the copy button, then restore its label. */
+    copied(ok: boolean): void {
+        this.copyLink.textContent = ok ? 'Copied' : 'Copy failed';
+        setTimeout(() => { this.copyLink.textContent = 'Copy link'; }, 1200);
+    }
+    /** Stress-mode line: per-frame simulation and render cost, plus rolling averages. */
+    stressLine(simMs: number, renderMs: number, avgSim: number, avgRender: number, steps: number, people: number): void {
+        this.fps.textContent = `sim ${simMs.toFixed(2)} ms (${steps} steps) · render ${renderMs.toFixed(2)} ms · avg sim ${avgSim.toFixed(2)} / render ${avgRender.toFixed(2)} ms · ${people} people`;
+    }
+
+    hideOverlay(): void { this.seedInput.blur(); this.overlay.style.display = 'none'; }
     showFinish(elapsed: number, bumps: number): void {
         this.title.textContent = 'Made it';
         this.result.textContent = `${elapsed.toFixed(1)} seconds, ${bumps} bump${bumps === 1 ? '' : 's'}.`;
         this.start.textContent = 'Go again';
         this.overlay.style.display = 'flex';
     }
+    /** Label the start button for whether pressing it replays the same seed or plays a new one. */
+    setStartLabel(replaying: boolean): void { this.start.textContent = replaying ? 'Same seed again' : 'Start'; }
     flash(): void { this.flashEl.style.opacity = '1'; setTimeout(() => { this.flashEl.style.opacity = '0'; }, 120); }
 }
