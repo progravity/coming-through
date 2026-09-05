@@ -159,6 +159,12 @@ per-frame cost of posing a crowd into the instance buffers, with no GL context a
 `?seed=<uint32 or any string>` (strings are hashed), `?stress=1` (pinned seed, full crowd, no input,
 per-frame sim/render milliseconds), `?debug=1` (top-down overlay), `?tier=low|mid|high`.
 
+`?compare=1` (or `?compare=row`) opens a **throwaway** side-by-side of rendering directions -- the
+shipped look next to flat-faceted, bold-outline, no-outline, a voxelisation and a fused metaball
+figure. It exists to be looked at and then deleted: delete `src/compare/`, its branch in `main.ts`
+and this paragraph together. It changes nothing in the render path -- each panel builds its own
+`PartPools` and swaps materials on the meshes from outside -- and touches neither hash.
+
 `?inspect=1` opens the character turntable and `?inspect=row` its side-by-side row; both take
 `&seed=` and mirror the rest of their state back into the address bar (`arch`, `age`, `build`,
 `mob`, `walk`, `gizmos`, `ink`), so a reload after a code change brings back the same person at the

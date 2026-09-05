@@ -1,16 +1,21 @@
 /**
  * Entry point. A normal run loads the game; `?inspect=1` (or `?inspect=row`) loads the character
- * inspector instead.
+ * inspector instead, and `?compare=1` (or `?compare=row`) the throwaway render-comparison harness.
  *
- * The two are separate dynamic imports so a normal run never downloads or executes the dev tool:
- * the inspector is a driver for the character code, not a branch of it, and it costs a real run
- * nothing.
+ * All three are separate dynamic imports so a normal run never downloads or executes a dev tool:
+ * they are drivers for the character code, not branches of it, and they cost a real run nothing.
  */
-const inspect = new URLSearchParams(location.search).get('inspect');
+const q = new URLSearchParams(location.search);
+const off = (v: string | null): boolean => v === null || v === '' || v === '0';
+const inspect = q.get('inspect');
+const compare = q.get('compare');
 
-if (inspect === null || inspect === '' || inspect === '0') {
-    await import('./game.ts');
-} else {
+if (!off(inspect)) {
     const { startInspector } = await import('./inspect/index.ts');
-    startInspector(inspect);
+    startInspector(inspect as string);
+} else if (!off(compare)) {
+    const { startCompare } = await import('./compare/index.ts');
+    startCompare(compare as string);
+} else {
+    await import('./game.ts');
 }
