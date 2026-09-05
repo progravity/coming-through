@@ -120,6 +120,32 @@ const PHONE_TILT = 0.4;
  * actually are, and everything above the fist is then unobstructed phone.
  */
 const PHONE_RISE = 0.105, PHONE_OUT = 0.03;
+/**
+ * Held poses -- both hands on a stroller handle, a tiller, a pair of wheel rims -- as an upper-arm
+ * pitch and a forearm pitch. Both are absolute, and forward is negative, so the forearm's is
+ * always the *more* negative of the two. That is not a style preference: an elbow bends one way
+ * only, and an upper arm reaching further forward than the forearm continues puts the elbow ahead
+ * of the hand and the joint inside out. It reads as a broken arm from the side and hides
+ * completely from the front, where the whole limb foreshortens into one diagonal.
+ *
+ * The corollary is that a held hand cannot be at arm's length. UPPER_ARM + FOREARM is 0.53, and a
+ * handle placed 0.52 out leaves the elbow nowhere to go but the wrong side of the shoulder-to-hand
+ * line whatever the two pitches say. So each pair below reaches to about nine tenths of full
+ * extension and no further, which puts roughly 120 degrees in the elbow -- a hand resting on a
+ * handle rather than an arm pointing at one.
+ *
+ * `test/elbow.test.ts` measures this off the drawn bones rather than off these numbers, so it also
+ * covers whatever the age and build axes do to the arm underneath them.
+ */
+/** A stroller handle: the upper arm hangs at the ribs and only the forearm goes out to the bar. */
+const STROLLER_ARM = -0.05, STROLLER_FOREARM = -1.25;
+/** A scooter's tiller, which a seated rider meets higher and further out than a pram handle. */
+const TILLER_ARM = -0.45, TILLER_FOREARM = -1.40;
+/**
+ * A wheelchair's push rims, down beside the seat: this arm is very nearly straight, and the pair
+ * exists mostly to keep the small bend it does have pointing the right way.
+ */
+const RIM_ARM = -0.02, RIM_FOREARM = -0.10;
 /** Which hip a shoulder bag hangs at. Its strap crosses the opposite shoulder. */
 const BAG_SIDE = 1;
 /** Width of that strap, and how far it is meant to stand proud of the body it crosses. */
@@ -302,9 +328,9 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
     // holding a phone needs the forearm swung further forward than the upper arm, which as a bend
     // is a negative number and reads as nonsense.
     let holdA = 0, holdFA = 0, holding = true;
-    if (seat && r.mobility === 'scooter') { holdA = -0.95; holdFA = -0.60; }
-    else if (seat) { holdA = -0.10; holdFA = -0.02; }
-    else if (r.acc === 'stroller') { holdA = -0.75; holdFA = -0.40; }
+    if (seat && r.mobility === 'scooter') { holdA = TILLER_ARM; holdFA = TILLER_FOREARM; }
+    else if (seat) { holdA = RIM_ARM; holdFA = RIM_FOREARM; }
+    else if (r.acc === 'stroller') { holdA = STROLLER_ARM; holdFA = STROLLER_FOREARM; }
     else holding = false;
     // A cane and a phone are *one-handed*: they pose their own arm and leave the other swinging,
     // so they are decided per side below rather than for both arms at once. A rider whose hands
@@ -495,17 +521,50 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
         // Two anchors: the handle, which is wherever the posed hands ended up, and the axle, on the
         // ground a fixed reach in front. The frame is drawn between them, so the pram stays joined
         // to both however the arms or the proportions move.
+        /** Wheel diameter. The axle rides one radius up, which is what stands the tyres on the road. */
+        const WHEEL = 0.34;
         const barY = gripY, barZ = gripZ + 0.05;
-        const axleY = 0.17, axleZ = barZ + 0.60;
-        const bodyY = axleY + 0.40, bodyZ = axleZ - 0.02;
-        put('box', b + 3, 0, bodyY, bodyZ, 0, 0, 0, 0.5, 0.38, 0.64, r.accColor);
+        const axleY = WHEEL / 2, axleZ = barZ + 0.60;
+        const bodyZ = axleZ - 0.02;
+        const bodyW = 0.5, bodyD = 0.64;
+        /**
+         * The pram is two stacked boxes, and three heights decide how it reads. Each is measured
+         * off the one below it, so the stack cannot come apart:
+         *
+         *   floorY  carried down over the axle and past the tyre tops, so the wheels come out from
+         *           under the body rather than hanging below a gap. Taken off WHEEL rather than
+         *           guessed, so resizing the wheels keeps the body sitting on them.
+         *   rimY    the basket's top edge, and the seam the hood rises out of. This is the number
+         *           that sets how bulky the pram looks: a basket as deep as the hood is tall reads
+         *           as a packing crate on wheels, so the basket is kept the shallower of the two.
+         *   crownY  the top of the hood, which is the pram's silhouette.
+         */
+        const floorY = axleY + WHEEL / 2 - 0.03, rimY = floorY + 0.35, crownY = rimY + 0.30;
+        put('box', b + 3, 0, (floorY + rimY) / 2, bodyZ, 0, 0, 0, bodyW, rimY - floorY, bodyD, r.accColor);
         // Canopy over the pusher's end of the basket, where a baby's head would be.
-        put('box', b + 4, 0, bodyY + 0.26, bodyZ - 0.13, 0, 0, 0, 0.5, 0.26, 0.36, INK);
+        //
+        // Its floor is hung *below the rim* rather than sitting at a height of its own, so moving
+        // the rim lengthens the hood to meet it and no daylight can open up at the seam.
+        //
+        // Set *within* the basket's footprint rather than flush with it, at both sides and at the
+        // back. Two boxes that share a face plane z-fight the whole length of it, and the ink shell
+        // -- which stands about 0.028 proud of every part it outlines -- then surfaces through the
+        // neighbouring panel and paints a black band down the seam besides. It is the joint rule
+        // from the body applied to the equipment: sealed rather than butted, and the piece that is
+        // buried is the narrower one. Flush is the worst case here, not the tidiest.
+        //
+        // Taken off the basket's own edges, so an inset stays an inset if the basket is resized.
+        const hoodIn = 0.04, hoodBot = rimY - 0.06;
+        const hoodBack = bodyZ - bodyD / 2 + hoodIn, hoodFront = bodyZ + 0.05;
+        put('box', b + 4, 0, (hoodBot + crownY) / 2, (hoodBack + hoodFront) / 2, 0, 0, 0,
+            bodyW - 2 * hoodIn, crownY - hoodBot, hoodFront - hoodBack, INK);
         put('box', b + 5, 0, barY, barZ, 0, 0, 0, gripX * 2 + 0.12, 0.045, 0.045, INK);
-        rod(pools, c + 12, -gripX, barY, barZ, bodyY + 0.12, bodyZ - 0.28, 0.05, INK);
-        rod(pools, c + 13, gripX, barY, barZ, bodyY + 0.12, bodyZ - 0.28, 0.05, INK);
-        put('cyl', c + 14, -0.26, axleY, axleZ, 0, 0, Math.PI / 2, 0.34, 0.06, 0.34, INK);
-        put('cyl', c + 15, 0.26, axleY, axleZ, 0, 0, Math.PI / 2, 0.34, 0.06, 0.34, INK);
+        // The push-rods stop below the rim, so their far ends are buried in the basket rather than
+        // left in the open air above it.
+        rod(pools, c + 12, -gripX, barY, barZ, rimY - 0.08, bodyZ - 0.28, 0.05, INK);
+        rod(pools, c + 13, gripX, barY, barZ, rimY - 0.08, bodyZ - 0.28, 0.05, INK);
+        put('cyl', c + 14, -0.26, axleY, axleZ, 0, 0, Math.PI / 2, WHEEL, 0.06, WHEEL, INK);
+        put('cyl', c + 15, 0.26, axleY, axleZ, 0, 0, Math.PI / 2, WHEEL, 0.06, WHEEL, INK);
     }
 
     if (r.mobility === 'wheelchair') {

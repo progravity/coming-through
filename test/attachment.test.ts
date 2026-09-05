@@ -10,6 +10,8 @@
  * 2. It stays there through a stride. The body bobs; a cane does not. Placing a grip at the
  *    bobbing hand height rather than its rest height drives the cane through the pavement and out
  *    again twice a step, which reads as a limp rather than as a bug.
+ * 3. Where two boxes overlap, one is buried inside the other rather than flush with it -- the
+ *    joint rule from the body, applied to the equipment.
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -88,4 +90,80 @@ test('ground equipment holds still while the body bobs through a stride', () => 
         const spread = Math.max(...lows) - Math.min(...lows);
         assert.ok(spread < 0.005, `${label}: ground contact moves ${spread.toFixed(4)} over a stride`);
     }
+});
+
+/**
+ * How far apart two parallel faces have to be before they read as one surface rather than two.
+ *
+ * `PartPools.put` draws a back-face ink shell of every part at `1.06 * s + 0.025`, so the shell
+ * stands `0.03 * s + 0.0125` proud of the part it outlines -- around 0.028 at the size of the
+ * pieces here. Two overlapping boxes whose faces sit closer together than that get it twice over:
+ * the faces themselves z-fight, and each part's shell surfaces through the other one and paints a
+ * black band along the seam. Flush is the worst case of all, not the neatest.
+ */
+const FLUSH = 0.03;
+
+/** World-space bounding box of one recorded part. */
+function bounds(m: THREE.Matrix4): { lo: number[]; hi: number[] } {
+    const v = new THREE.Vector3();
+    const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    for (const [cx, cy, cz] of CORNERS) {
+        v.set(cx, cy, cz).applyMatrix4(m);
+        for (const [i, n] of [v.x, v.y, v.z].entries()) { lo[i] = Math.min(lo[i], n); hi[i] = Math.max(hi[i], n); }
+    }
+    return { lo, hi };
+}
+
+test('overlapping boxes are buried inside each other, never flush', () => {
+    // Boxes only. A sphere or a cylinder shares a *bounding* face with its neighbour long before it
+    // shares a surface with it, so the same measurement on a rounded part means nothing.
+    for (const { label, arch, o } of CASES) {
+        for (const seed of [SEED, 3948736537, 20260904]) {
+            const pools = new RecordingPools(new THREE.Scene());
+            const s = new Subject(seed, 0, arch, o);
+            s.mv = 1;
+            pools.beginRecord();
+            drawPerson(pools, 0, s, s, 0);
+            const boxes: { id: string; lo: number[]; hi: number[] }[] = [];
+            for (let p = 0; p < pools.recorded; p++) {
+                const rec = pools.parts[p];
+                if (rec.pool === 'box') boxes.push({ id: `box ${rec.idx}`, ...bounds(rec.matrix) });
+            }
+            for (let i = 0; i < boxes.length; i++) {
+                for (let j = i + 1; j < boxes.length; j++) {
+                    const a = boxes[i], b = boxes[j];
+                    // Only parts that actually interpenetrate can fight; ones merely near each
+                    // other are two separate objects and may line up however they like.
+                    if ([0, 1, 2].some(k => Math.min(a.hi[k], b.hi[k]) - Math.max(a.lo[k], b.lo[k]) <= 0)) continue;
+                    for (const k of [0, 1, 2]) {
+                        for (const face of ['lo', 'hi'] as const) {
+                            const d = Math.abs(a[face][k] - b[face][k]);
+                            assert.ok(d > FLUSH,
+                                `${label} (seed ${seed}): ${a.id} and ${b.id} overlap with their ` +
+                                `${'xyz'[k]}.${face} faces ${d.toFixed(4)} apart`);
+                        }
+                    }
+                }
+            }
+        }
+    }
+});
+
+test('a pram body sits on its wheels rather than above them', () => {
+    // The wheels are the ground part here, not the basket, so the "touches the ground" test above
+    // stays green however far the body floats over them. Daylight between the two reads as a box
+    // parked near some wheels rather than as a pram, which is a gap no other check would catch.
+    const pools = new RecordingPools(new THREE.Scene());
+    const s = new Subject(SEED, 0, 'mary', NONE);
+    s.mv = 1;
+    pools.beginRecord();
+    drawPerson(pools, 0, s, s, 0);
+    let floor = Infinity, tyreTop = -Infinity;
+    for (let p = 0; p < pools.recorded; p++) {
+        const rec = pools.parts[p];   // see the part layout in drawPerson: box 3 basket, gear 14-15 wheels
+        if (rec.pool === 'box' && rec.idx === 3) floor = bounds(rec.matrix).lo[1];
+        if (rec.pool === 'cyl' && (rec.idx === 14 || rec.idx === 15)) tyreTop = Math.max(tyreTop, bounds(rec.matrix).hi[1]);
+    }
+    assert.ok(Number.isFinite(floor) && Number.isFinite(tyreTop), 'the pram was not drawn');
+    assert.ok(floor < tyreTop, `pram body floats ${(floor - tyreTop).toFixed(4)} above its wheels`);
 });
