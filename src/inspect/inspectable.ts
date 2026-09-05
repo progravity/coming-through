@@ -166,3 +166,32 @@ export function gateIds(e: Inspectable): Set<string> {
     for (const c of e.controls) if (c.kind === 'scalar' && c.gate !== undefined) g.add(c.gate);
     return g;
 }
+
+export type EnumControl = Extract<Control, { kind: 'enum' }>;
+export type ScalarControl = Extract<Control, { kind: 'scalar' }>;
+
+/** What one key press means for this entity. */
+export type KeyHit =
+    | { kind: 'control'; control: Control }
+    | { kind: 'nudge'; control: ScalarControl; delta: number }
+    | { kind: 'overlay'; overlay: OverlayDef };
+
+/**
+ * The entity's own half of the keyboard, read off its declaration.
+ *
+ * Letter keys are matched case-insensitively so shift can mean "the other way round"; a scalar's
+ * nudge keys are matched exactly, because `,` and `.` are not letters. A scalar is the one kind
+ * with no single `key` of its own -- two nudge keys are what it binds instead.
+ */
+export function findKey(e: Inspectable, key: string): KeyHit | undefined {
+    const k = key.toLowerCase();
+    for (const c of e.controls) {
+        if (c.kind === 'scalar') {
+            if (c.keys === undefined) continue;
+            if (key === c.keys[0]) return { kind: 'nudge', control: c, delta: -1 };
+            if (key === c.keys[1]) return { kind: 'nudge', control: c, delta: 1 };
+        } else if (c.key !== undefined && c.key === k) return { kind: 'control', control: c };
+    }
+    for (const o of overlaysOf(e)) if (o.key !== undefined && o.key === k) return { kind: 'overlay', overlay: o };
+    return undefined;
+}

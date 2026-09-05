@@ -2,11 +2,13 @@
  * Guards the property the whole generalisation rests on: the inspector's shell is driven by the
  * `Inspectable` interface and knows nothing about which entity it is holding.
  *
- * Three things are checked here and nowhere else -- that the universal overlays really are
+ * Five things are checked here and nowhere else -- that the universal overlays really are
  * universal, that a hypothetical entity nobody has written yet is inspectable without the shell
- * changing, and that every registered entity's declaration is well formed.
+ * changing, that every registered entity's declaration is well formed, that no file in the shell
+ * reaches an entity, and that every URL the character turntable ever wrote still reads.
  */
 import assert from 'node:assert/strict';
+import { readFileSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';
 import * as THREE from 'three';
 import { measure, newBounds } from '../src/inspect/gizmos.ts';
@@ -14,7 +16,10 @@ import type { DrawnPart } from '../src/inspect/inspectable.ts';
 import { PERSON } from '../src/inspect/entities/person.ts';
 import { Subject } from '../src/inspect/subject.ts';
 import { ARCH_KEYS } from '../src/archetypes.ts';
-import { defaultControls } from '../src/inspect/inspectable.ts';
+import { controlOf, defaultControls, findKey, overlaysOf } from '../src/inspect/inspectable.ts';
+import type { Cast, Inspectable } from '../src/inspect/inspectable.ts';
+import { ENTITIES } from '../src/inspect/registry.ts';
+import { queryOf, stateFor } from '../src/inspect/state.ts';
 
 /** A part is a unit cube under its own matrix, whichever pool or kit drew it. */
 const part = (x: number, y: number, z: number, sx: number, sy: number, sz: number): DrawnPart => ({
@@ -69,4 +74,113 @@ test('an axis override reaches the cast and nothing else does', () => {
     cast.draw(0, [0], 0);
     const rows = new Map(cast.readout(0, 1.2).rows);
     assert.equal(rows.get('age'), 'child');
+});
+
+/**
+ * An entity nobody has written yet: a stand-in for the buildings that come next, declared here and
+ * registered nowhere. If the shell's own state, URL and keymap can drive this, then conforming is
+ * genuinely all it takes to be inspectable.
+ */
+const FAKE: Inspectable = {
+    id: 'gate', family: 'structure', title: 'Gate',
+    controls: [
+        { kind: 'enum', id: 'style', label: 'style', options: ['seed', 'arch', 'post'], value: 'seed', key: 'y', rebuilds: true },
+        { kind: 'toggle', id: 'open', label: 'open', value: false, key: 'u' },
+        { kind: 'scalar', id: 'swing', label: 'swing', value: 0.25, keys: ['-', '='], gate: 'open' },
+    ],
+    overlays: [{ id: 'hinge', label: 'hinge', key: 'h' }],
+    stepping: 'style',
+    row: 2,
+    mount: (): Cast => { throw new Error('never mounted'); },
+};
+
+test('the shell knows nothing about any particular entity', () => {
+    // The whole generalisation in one assertion. Every file at the top of `src/inspect/` is shell:
+    // it may reach the registry and the interface, and must not reach an entity. `registry.ts` is
+    // the one place that names them, and it has to name at least one or nothing is registered.
+    const dir = new URL('../src/inspect/', import.meta.url);
+    let checked = 0;
+    for (const file of readdirSync(dir).filter(f => f.endsWith('.ts'))) {
+        const src = readFileSync(new URL(file, dir), 'utf8');
+        const reaches = [...src.matchAll(/from '([^']+)'/g)]
+            .map(m => m[1])
+            .filter(spec => spec.includes('entities/') || spec.endsWith('subject.ts'));
+        if (file === 'registry.ts') {
+            assert.ok(reaches.length > 0, 'the registry is where the entities are named');
+        } else {
+            assert.deepEqual(reaches, [], `${file} reaches an entity: ${reaches.join(', ')}`);
+        }
+        checked++;
+    }
+    assert.ok(checked >= 6, `only scanned ${checked} files of src/inspect/`);
+});
+
+test('a hypothetical entity is inspectable without the shell changing', () => {
+    const s = stateFor(FAKE, 'single', '?style=post&open=1&hinge=1&seed=9');
+    assert.equal(s.controls.style, 'post');
+    assert.equal(s.controls.open, true);
+    assert.equal(s.seed, 9);
+    assert.ok(s.overlays.has('hinge'));
+    assert.ok(s.overlays.has('ink'), 'ink is on unless the URL turns it off');
+    // Its declaration drives the keymap with no help from anywhere.
+    assert.deepEqual(findKey(FAKE, 'y'), { kind: 'control', control: controlOf(FAKE, 'style') });
+    assert.equal(findKey(FAKE, '=')?.kind, 'nudge');
+    assert.equal(findKey(FAKE, 'h')?.kind, 'overlay');
+    // And it round-trips through the address bar.
+    const back = stateFor(FAKE, 'single', `?${queryOf(s, FAKE)}`);
+    assert.deepEqual(back.controls, s.controls);
+    assert.deepEqual([...back.overlays].sort(), [...s.overlays].sort());
+});
+
+test('every person URL that worked before still works', () => {
+    const person = ENTITIES[0];
+    const url = '?inspect=1&seed=3&arch=dave&age=child&build=broad&mob=cane&walk=1' +
+        '&paused=1&yaw=45&phase=0.5&gizmos=1&ink=0';
+    const s = stateFor(person, 'single', url);
+    assert.equal(s.seed, 3);
+    assert.equal(s.controls.arch, 'dave');
+    assert.equal(s.controls.age, 'child');
+    assert.equal(s.controls.build, 'broad');
+    assert.equal(s.controls.mob, 'cane');
+    assert.equal(s.controls.walk, true);
+    // A gated scalar in the URL means "hold it there", so `phase` alone turns the gait freeze on.
+    assert.equal(s.controls.phase, 0.5);
+    assert.equal(s.controls.freeze, true);
+    assert.equal(s.paused, true);
+    assert.ok(Math.abs(s.yaw - Math.PI / 4) < 1e-9);
+    assert.ok(s.overlays.has('gizmos'));
+    assert.ok(!s.overlays.has('ink'));
+
+    // And writing it back uses the same keys it was read from -- `freeze` is carried by `phase`,
+    // never under its own name, and the default entity is never named.
+    const q = queryOf(s, person);
+    assert.equal(q.get('entity'), null);
+    assert.equal(q.get('freeze'), null);
+    assert.equal(q.get('phase'), '0.500');
+    assert.equal(q.get('ink'), '0');
+    assert.equal(q.get('gizmos'), '1');
+    assert.equal(q.get('yaw'), '45.0');
+});
+
+test('every registered entity declares something the shell can render', () => {
+    for (const e of ENTITIES) {
+        const ids = new Set<string>();
+        for (const c of e.controls) {
+            assert.ok(!ids.has(c.id), `${e.id} declares ${c.id} twice`);
+            ids.add(c.id);
+            if (c.kind === 'enum') assert.ok(c.options.includes(c.value), `${e.id}.${c.id} defaults outside its options`);
+            if (c.kind === 'scalar' && c.gate !== undefined) {
+                assert.equal(controlOf(e, c.gate)?.kind, 'toggle', `${e.id}.${c.id} gates on a non-toggle`);
+            }
+        }
+        if (e.stepping !== 'seed') {
+            assert.equal(controlOf(e, e.stepping)?.kind, 'enum', `${e.id} steps a control that is not an enum`);
+        }
+        assert.ok(e.row >= 1, `${e.id} stands ${e.row} in a row`);
+        const seen = new Set<string>();
+        for (const o of overlaysOf(e)) {
+            assert.ok(!seen.has(o.id), `${e.id} declares overlay ${o.id} twice`);
+            seen.add(o.id);
+        }
+    }
 });
