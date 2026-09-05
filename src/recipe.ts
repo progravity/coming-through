@@ -13,7 +13,7 @@
 import { AGE_MIX_DEFAULT, AID_DEFAULT } from './archetypes.ts';
 import type { Accessory, AgeMix, AidChances, Archetype, HatType } from './archetypes.ts';
 import type { Rng } from './core/rng.ts';
-import { BAG, FRAME, HAIR, HAIR_OLDER, HAT, JACKET, SHIRT_FAMILY, SHOE, TROUSERS, fromFamily, fromList, skinTone } from './palette.ts';
+import { FRAME, HAIR, HAIR_OLDER, OUTFITS, OUTFIT_FAMILY, SHOE, fromFamily, fromList, pickOutfit, skinTone } from './palette.ts';
 import type { Range } from './util.ts';
 
 export type Age = 'child' | 'teen' | 'adult' | 'older';
@@ -64,6 +64,14 @@ export interface Recipe {
      */
     limb: number;
     // ---- colour ----
+    /**
+     * Index into `OUTFITS`: the coordinated combination every garment below was drawn from. Kept
+     * on the recipe rather than thrown away after the roll so the inspector can name it and so a
+     * group can be handed one.
+     */
+    outfit: number;
+    /** The one accent colour this person's hat, bag and accessory are allowed to reach for. */
+    accent: number;
     skin: number;
     shirt: number;
     pants: number;
@@ -147,7 +155,9 @@ const HAT_TYPES: Record<'child' | 'grown', readonly HatType[]> = {
 const HAIR_TYPES: readonly HairType[] = ['crop', 'crop', 'round', 'round', 'flat', 'bob', 'bob', 'none'];
 
 export interface RecipeOptions {
-    /** Fixed shirt colour, e.g. so a whole group matches. */
+    /** Fixed outfit index, so a whole group is dressed from one coordinated combination. */
+    outfit?: number;
+    /** Fixed shirt colour. Only the player uses this; everyone else takes theirs from the outfit. */
     shirt?: number;
 }
 
@@ -179,7 +189,7 @@ export function makeRecipe(rng: Rng, A: Archetype, opts: RecipeOptions = {}): Re
     // Every draw for this person, taken up front and in a fixed order. Nothing below this block
     // draws; it only selects. Adding a roll here is safe, reordering or conditioning one is not.
     const age0 = rng.next(), height0 = rng.next(), build0 = rng.next(), skin0 = rng.next();
-    const shirt0 = rng.next(), pants0 = rng.next(), shoe0 = rng.next();
+    const outfit0 = rng.next(), shirt0 = rng.next(), pants0 = rng.next(), shoe0 = rng.next();
     const hat0 = rng.next(), hatType0 = rng.next(), hatColor0 = rng.next();
     const hair0 = rng.next(), hairColor0 = rng.next(), ponytail0 = rng.next();
     const beard0 = rng.next(), glasses0 = rng.next();
@@ -188,6 +198,14 @@ export function makeRecipe(rng: Rng, A: Archetype, opts: RecipeOptions = {}): Re
     const acc0 = rng.next(), accColor0 = rng.next();
     const aid0 = rng.next(), frame0 = rng.next();
     const headR0 = rng.next(), bob0 = rng.next(), stride0 = rng.next(), cadence0 = rng.next(), arm0 = rng.next();
+
+    // One outfit per person, biased toward the archetype's family, and every garment below is a
+    // role within it. This is what makes someone read as "the terracotta-and-sand one" rather than
+    // as a pile of independently coloured parts.
+    const fit = opts.outfit ?? pickOutfit(OUTFIT_FAMILY[lk.palette], outfit0);
+    const O = OUTFITS[fit];
+    const top = fromFamily(O.top, shirt0), bottom = fromFamily(O.bottom, pants0);
+    const accent = fromFamily(O.accent, accColor0);
 
     const age = pickAge(lk.age ?? AGE_MIX_DEFAULT, age0);
     const ap = AGE[age];
@@ -222,12 +240,15 @@ export function makeRecipe(rng: Rng, A: Archetype, opts: RecipeOptions = {}): Re
         stoop: ap.stoop + (mobility === 'cane' ? 0.06 : 0),
         limb: ap.limb,
 
+        outfit: fit, accent,
         skin: skinTone(skin0),
-        shirt: opts.shirt ?? fromFamily(SHIRT_FAMILY[lk.shirt], shirt0),
-        pants: fromFamily(TROUSERS, pants0),
+        shirt: opts.shirt ?? top,
+        pants: bottom,
         shoe: fromFamily(SHOE, shoe0),
 
-        hat, hatColor: fromFamily(HAT, hatColor0),
+        // A hat is either the accent or a match for the shirt; both are choices a person could
+        // have made, and neither one can land outside the outfit.
+        hat, hatColor: hatColor0 < 0.6 ? accent : top,
         hair, hairColor: fromList(age === 'older' ? HAIR_OLDER : HAIR, hairColor0),
         // A ponytail hangs out from under a cap or a beanie, so it survives a hat; a bald head or a
         // party hat gets none.
@@ -236,11 +257,12 @@ export function makeRecipe(rng: Rng, A: Archetype, opts: RecipeOptions = {}): Re
         beard: beard0 < beardP ? (beard0 < beardP * 0.45 ? 'full' : 'stubble') : 'none',
         glasses: glasses0 < glassesP,
         jacket: jacket0 < (lk.jacket ?? 0.3),
-        jacketColor: fromFamily(JACKET, jacketColor0),
+        jacketColor: fromFamily(O.outer, jacketColor0),
         shorts: shorts0 < (lk.shorts ?? 0.28) * (child ? 1.7 : 1),
         bag: bag0 < (lk.bag ?? 0.2) && acc !== 'stroller',
-        bagColor: fromFamily(BAG, bagColor0),
-        acc, accColor: fromFamily(HAT, accColor0),
+        // A bag is a bag: half of them are the accent, half pick up the trousers.
+        bagColor: bagColor0 < 0.5 ? accent : bottom,
+        acc, accColor: accent,
 
         mobility,
         seated: mp.seated,

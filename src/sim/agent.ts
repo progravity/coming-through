@@ -22,7 +22,8 @@ export interface Poseable extends Pose {
 
 export interface AgentOptions {
     speed?: number;
-    shirt?: number;
+    /** Index into OUTFITS, so a group can be dressed from one coordinated combination. */
+    outfit?: number;
     leader?: Agent;
     offset?: number;
     parent?: Agent;

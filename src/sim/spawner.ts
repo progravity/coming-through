@@ -1,6 +1,6 @@
 import { ARCH, weightedType } from '../archetypes.ts';
 import type { Streams } from '../core/rng.ts';
-import { PALETTE, SHIRT_FAMILY } from '../palette.ts';
+import { OUTFIT_FAMILY } from '../palette.ts';
 import { clamp } from '../util.ts';
 import { DOORS, L, W } from '../world/layout.ts';
 import { Agent } from './agent.ts';
@@ -42,12 +42,14 @@ export function spawn(crowd: Crowd, streams: Streams, opts: SpawnOptions = {}): 
         // One draw, exactly as before: this is the last value this fork produces, so retuning the
         // green family cannot shift any other spawn decision.
         const size = Math.round(how.sample(A.group)), gid = crowd.nextGroupId(), spacing = A.spacing ?? 1;
-        const shirt = PALETTE[where.pick(SHIRT_FAMILY.green)];
-        const leader = make(type, x, { group: gid, shirt });
+        // The whole family is dressed from one outfit rather than issued one shirt colour: they
+        // still read as a set, but as people who coordinated rather than as a uniform.
+        const outfit = where.pick(OUTFIT_FAMILY.green);
+        const leader = make(type, x, { group: gid, outfit });
         crowd.add(leader);
         for (let i = 1; i < size; i++) {
             const off = (i % 2 ? 1 : -1) * Math.ceil(i / 2) * spacing;
-            crowd.add(make(type, clamp(x + off, -W + 0.6, W - 0.6), { leader, offset: off, group: gid, shirt, speed: leader.speed }));
+            crowd.add(make(type, clamp(x + off, -W + 0.6, W - 0.6), { leader, offset: off, group: gid, outfit, speed: leader.speed }));
         }
     } else if (A.parentType) {
         const parent = make(A.parentType, x);

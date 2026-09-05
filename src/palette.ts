@@ -1,10 +1,12 @@
 /**
  * The one place colour lives.
  *
- * Every colour a person can wear is an index into `PALETTE`; archetypes and recipe slots name
- * *families* (lists of indices into it) rather than raw hex, so the whole crowd can be retuned by
- * editing this file alone. Skin is the exception: a continuous ramp rather than a family, so tone
- * varies smoothly instead of landing on one of a handful of fixed values.
+ * Every colour a person can wear is an index into `PALETTE`. Clothes are not picked from it one at
+ * a time, though: they come from an `Outfit` -- a curated combination of a top, a bottom, an accent
+ * and an outer layer that were chosen to go together -- and an archetype names a *family* of
+ * outfits rather than raw hex, so the whole crowd can be retuned by editing this file alone. Skin
+ * is the exception: a continuous ramp rather than a family, so tone varies smoothly instead of
+ * landing on one of a handful of fixed values.
  *
  * Nothing here draws random numbers. Callers pass a roll they have already taken, which is what
  * lets `makeRecipe` keep its draw order fixed (see CLAUDE.md, "Determinism rules").
@@ -44,23 +46,98 @@ export const PALETTE: readonly number[] = [
 /** A colour family: indices into PALETTE. */
 export type Family = readonly number[];
 
-/** Shirt families an archetype can name. Overlapping entries are fine and keep the crowd cohesive. */
-export const SHIRT_FAMILY = {
-    any:    [0, 1, 2, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16, 18, 19, 20, 21, 22, 23],
-    orange: [17, 18, 16],
-    pink:   [21, 20, 18],
-    blue:   [9, 8, 7],
-    yellow: [16, 15, 17],
-    green:  [13, 14, 12],
-    purple: [22, 20, 21],
-} as const satisfies Record<string, Family>;
-export type ShirtKey = keyof typeof SHIRT_FAMILY;
+/**
+ * A coordinated outfit: the four roles one person's clothes are dressed from.
+ *
+ * This is the difference between a person who reads as *designed* and one who reads as an assembly
+ * of random parts. Every wearer rolls one outfit and then fills their roles from it, so a crowd
+ * member is "the terracotta-and-sand one" rather than "the one with a brick shirt, a lime hat and
+ * a violet bag". Two entries per role, so an outfit still has room to vary between the people
+ * wearing it -- the coordination is in the combination, not in a uniform.
+ */
+export interface Outfit {
+    /** For the inspector readout; never drawn. */
+    name: string;
+    /** Shirt: the colour a person is named by. */
+    top: Family;
+    /** Trousers or shorts. */
+    bottom: Family;
+    /** The third colour: hat, bag, balloon, backpack. Chosen to sing against the top. */
+    accent: Family;
+    /** Jacket, when one is worn: an outer layer that has to sit over the top without fighting it. */
+    outer: Family;
+}
 
-/** Trousers, jackets, hats, bags and shoes all draw from the same 24. */
-export const TROUSERS: Family = [6, 7, 4, 5, 3, 23, 2, 12];
-export const JACKET: Family   = [5, 6, 4, 19, 10, 12, 23, 3];
-export const HAT: Family      = [19, 6, 0, 11, 16, 5, 13, 4];
-export const BAG: Family      = [23, 5, 19, 6, 3, 20];
+/**
+ * The curated set. Each one is a deliberate combination -- a warm top over a cool bottom with a
+ * complementary accent, or the reverse -- rather than three colours that merely coexist. They are
+ * grouped by the family an archetype names, which is the order they appear in below.
+ */
+export const OUTFITS: readonly Outfit[] = [
+    // ---- blue ----
+    { name: 'Harbour',    top: [8, 9],   bottom: [6, 4],   accent: [16, 0],  outer: [6, 5] },
+    { name: 'Deep Denim', top: [7, 6],   bottom: [3, 2],   accent: [17, 0],  outer: [5, 4] },
+    { name: 'Tidepool',   top: [11, 9],  bottom: [10, 6],  accent: [15, 0],  outer: [10, 6] },
+    { name: 'Slate & Sky',top: [9, 8],   bottom: [5, 4],   accent: [21, 0],  outer: [5, 6] },
+    // ---- green ----
+    { name: 'Pine',       top: [12, 13], bottom: [3, 23],  accent: [16, 15], outer: [23, 5] },
+    { name: 'Meadow',     top: [13, 14], bottom: [4, 6],   accent: [0, 21],  outer: [12, 4] },
+    { name: 'Rust & Fern',top: [10, 12], bottom: [23, 5],  accent: [18, 17], outer: [23, 5] },
+    // ---- orange ----
+    { name: 'Clay',       top: [18, 17], bottom: [6, 4],   accent: [15, 0],  outer: [6, 5] },
+    { name: 'Marigold',   top: [17, 16], bottom: [23, 3],  accent: [10, 0],  outer: [23, 12] },
+    { name: 'Ember',      top: [19, 18], bottom: [5, 4],   accent: [1, 15],  outer: [5, 23] },
+    { name: 'Coral',      top: [18, 21], bottom: [0, 1],   accent: [10, 6],  outer: [4, 20] },
+    // ---- yellow ----
+    { name: 'Sunbleached',top: [16, 15], bottom: [7, 6],   accent: [0, 18],  outer: [7, 5] },
+    { name: 'Wheat',      top: [15, 1],  bottom: [12, 3],  accent: [19, 23], outer: [12, 23] },
+    // ---- pink ----
+    { name: 'Blossom',    top: [21, 20], bottom: [0, 1],   accent: [10, 22], outer: [20, 4] },
+    { name: 'Berry',      top: [20, 21], bottom: [5, 6],   accent: [15, 16], outer: [5, 22] },
+    // ---- purple ----
+    { name: 'Lilac',      top: [22, 9],  bottom: [2, 4],   accent: [16, 0],  outer: [5, 6] },
+    { name: 'Grape',      top: [22, 20], bottom: [6, 5],   accent: [14, 11], outer: [6, 5] },
+    // ---- neutral ----
+    { name: 'Bone',       top: [0, 2],   bottom: [4, 5],   accent: [19, 6],  outer: [4, 5] },
+    { name: 'Earth',      top: [1, 3],   bottom: [23, 12], accent: [10, 17], outer: [23, 5] },
+    { name: 'Ink',        top: [5, 4],   bottom: [5, 2],   accent: [16, 11], outer: [5, 0] },
+];
+
+const ALL_OUTFITS: Family = OUTFITS.map((_, i) => i);
+
+/**
+ * Outfit families an archetype can name: indices into OUTFITS. A family is a *bias*, not a
+ * restriction (see `pickOutfit`), so Dave still reads as the orange one without every Dave in the
+ * run being dressed from the same three combinations. Overlapping entries are deliberate.
+ */
+export const OUTFIT_FAMILY = {
+    any:     ALL_OUTFITS,
+    blue:    [0, 1, 2, 3],
+    green:   [4, 5, 6],
+    orange:  [7, 8, 9, 10],
+    yellow:  [11, 12, 8],
+    pink:    [13, 14, 10],
+    purple:  [15, 16, 14],
+    neutral: [17, 18, 19],
+} as const satisfies Record<string, Family>;
+export type OutfitKey = keyof typeof OUTFIT_FAMILY;
+
+/** How often an archetype's own family wins. The rest of the time the whole set is in play. */
+const FAMILY_BIAS = 0.85;
+
+/**
+ * Choose an outfit from an already-drawn roll: `FAMILY_BIAS` of the roll lands inside `fam`, the
+ * remainder anywhere in the set. One roll covers both, by rescaling whichever side it fell on --
+ * a second draw here would be a draw that only sometimes happened, which is exactly what the
+ * recipe's fixed roll order forbids.
+ */
+export function pickOutfit(fam: Family, roll: number): number {
+    return roll < FAMILY_BIAS
+        ? fam[index(fam.length, roll / FAMILY_BIAS)]
+        : ALL_OUTFITS[index(ALL_OUTFITS.length, (roll - FAMILY_BIAS) / (1 - FAMILY_BIAS))];
+}
+
+/** Shoes are not part of the outfit: they are the one thing everybody's wardrobe agrees on. */
 export const SHOE: Family     = [5, 23, 4, 6, 0];
 /** Equipment frames: wheelchairs, scooters, strollers, cane shafts. */
 export const FRAME: Family    = [5, 4, 6, 19, 10];

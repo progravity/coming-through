@@ -4,7 +4,7 @@
  * All of it is injected from here -- including the rules that hide the game's own HUD -- so
  * index.html carries nothing for a tool that a normal run never loads.
  */
-import { PALETTE } from '../palette.ts';
+import { OUTFITS, PALETTE } from '../palette.ts';
 import type { Recipe } from '../recipe.ts';
 import type { Subject } from './subject.ts';
 import { AGE_OPTIONS, ARCH_OPTIONS, BUILD_OPTIONS, MOBILITY_OPTIONS } from './subject.ts';
@@ -34,7 +34,7 @@ body.inspect > *:not(#inspector):not(canvas):not(script){display:none!important}
 #read .sw{display:inline-flex;align-items:center;gap:4px;margin:2px 6px 0 0;font-size:10.5px;color:#a8a49c}
 #read .sw i{width:11px;height:11px;border-radius:3px;border:1px solid rgba(0,0,0,.4);display:inline-block}
 #read .off{color:#6c6862}
-#cast{top:12px;left:12px;width:158px;padding:9px 11px;display:none}
+#cast{top:12px;left:12px;width:234px;padding:9px 11px;display:none}
 #inspector.row #read{display:none}
 #inspector.row #cast{display:block}
 #cast h3{margin:0 0 6px;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:#8f8b83;font-weight:500}
@@ -269,6 +269,7 @@ export class Panel {
         this.readout.innerHTML =
             `<h2>${s.arch.name} <em>seed ${s.seed} · agent:${s.index}</em></h2><dl>` +
             row('age', `${r.age}`) +
+            row('outfit', OUTFITS[r.outfit].name) +
             row('height', `h ${n(r.h)} · ${n(top)} m tall`) +
             row('build', `w ${n(r.w)} · shoulder ${n(r.shoulder)}`) +
             row('head', `r ${n(r.headR, 3)} · pitch ${n(r.headPitch)}`) +
@@ -288,7 +289,7 @@ export class Panel {
         this.cast.innerHTML = '<h3>cast · left to right</h3><ol>' + subjects.map((s, i) => {
             const r = s.recipe;
             const aid = r.mobility === 'none' ? '' : ` ${r.mobility}`;
-            return `<li><b>${s.arch.name}</b><span>${r.age}${aid} · ${(tops[i] ?? 0).toFixed(2)}m</span></li>`;
+            return `<li><b>${s.arch.name}</b><span>${OUTFITS[r.outfit].name} · ${r.age}${aid} · ${(tops[i] ?? 0).toFixed(2)}m</span></li>`;
         }).join('') + '</ol>';
     }
 
