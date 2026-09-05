@@ -29,20 +29,27 @@ check and the determinism test. `npm run lint` is the first two on their own.
   renderer draws and the simulation takes footprints out of),
   `props.ts`, `box.ts`, `material.ts` (the one shading model the whole world takes).
 - `src/render/`, `src/camera.ts`, `src/ui.ts`, `src/debug.ts` — presentation only.
-- `src/main.ts` — the entry point and nothing else: it dynamic-imports the game, the character
+- `src/main.ts` — the entry point and nothing else: it dynamic-imports the game, the entity
   inspector when `?inspect=` is present, or the render comparator when `?compare=` is, so a normal
   run never loads a dev tool.
 - `src/game.ts` — wires the game together: fixed-step accumulator loop, interpolated rendering,
   stress mode.
-- `src/inspect/` — the character turntable. A driver for the character code, never a copy of it;
-  see "Character inspection" below.
+- `src/inspect/` — the entity inspector. `inspectable.ts` is the interface every entity type
+  conforms to, `registry.ts` the only file that knows they exist, `entities/` the conformances,
+  and `index.ts`/`panel.ts`/`state.ts` a shell that has never heard of any of them. A driver for
+  the game's own assemblers, never a copy of them; see "Entity inspection" below.
 - `src/compare/` — the render-direction comparator. Its `treatments.ts` is not tool-only: `?look=`
   plays an ordinary run under one of its six treatments, so `game.ts` depends on it and the
   directory cannot be deleted without breaking the build. See "URL parameters" below.
 - `test/determinism.test.ts` — headless run with a fixed seed and scripted input, hashed against
   `test/determinism.expected.json`, which stores two values: `hash` (whole state) and `identity`
   (the crowd a seed produces). See "Two hashes" below.
-- `test/inspect.test.ts` — proves a turntable person is byte-identical to the crowd's agent.
+- `test/inspect.test.ts` — proves a turntable person is byte-identical to the crowd's agent,
+  guarding `Subject` against `Agent` specifically.
+- `test/inspectable.test.ts` — that the inspector's shell depends only on the interface: its
+  imports reach no entity, a hypothetical entity nobody has written is driven through the shell's
+  state, URL and keymap, every person URL that worked before still works, and every registered
+  entity declares something the panel can render.
 - `test/path.test.ts` — the path-coordinate convention, including the exactness today's straight,
   level, uniform-width path gives; that a bent centreline still measures along and across itself;
   and that a test-only curve which bends, widens and climbs puts edge elements and world heights
@@ -604,34 +611,88 @@ Anything outside the renderer that needs to know how tall a person is imports `s
 `eyeHeight` from `render/person.ts`; `camera.ts` derives all three of its heights that way, so a
 proportion change cannot leave the camera aimed where the chest used to be.
 
-## Character inspection
+## Entity inspection
 
-`?inspect=1` opens a turntable for tuning how people look: one person on a neutral stage, a fixed
-camera, a slow spin, and controls for the recipe. `?inspect=row` puts the whole cast side by side.
+`?inspect=1` opens a turntable: one thing on a neutral stage, a fixed camera, a slow spin, and
+controls for whatever varies about it. `?inspect=row` puts a whole family side by side.
+`&entity=` chooses what is on the stage — `person` (the default, so every URL written before this
+existed still works), `kiosk`, `furniture`, and `bench`/`lamp`/`bin` as names for the furniture
+with its kind pinned.
 
-Its entire value rests on one rule: **it renders people through the game's own character code.**
-`makeRecipe` rolls them, `drawPerson` poses them, the shared instanced `PartPools` draw them,
-`palette.ts` colours them, `addLights` lights them. There is no inspection-only copy of any of that
-and there must never be one — a turntable that draws a person differently from the crowd is worse
-than no turntable. `src/inspect/` is only a stage, a camera, a panel, and `Subject`, which mirrors
-the two lines of `Agent`'s constructor that follow `makeRecipe` and the one line of `Agent.update`
-that advances the gait. Anything that would need character code changed belongs in the character
-code, not here. `test/inspect.test.ts` compares `Subject` against a real `Agent` and fails if they
-ever drift apart.
+Its entire value rests on one rule: **it renders everything through the game's own assembler.**
+`makeRecipe` and `drawPerson` for people, `placeStructure` and `buildEdge` for the carts, the
+`bench`/`lamp`/`bin` builders and `buildEdge` for the furniture. There is no inspection-only copy
+of any of it and there must never be one — a turntable that draws a thing differently from the game
+is worse than no turntable. `test/inspect.test.ts` compares `Subject` against a real `Agent`,
+`test/edge.test.ts` rebuilds `furniturePlan` out of the three builders the inspector calls, and
+`test/kiosks.test.ts` pins that a cart on the stage is its archetype with only the paint rolled.
+
+**The shell knows nothing about any of them.** `index.ts`, `panel.ts` and `state.ts` drive one
+small interface in `inspectable.ts` and import `registry.ts` and nothing else entity-shaped —
+`test/inspectable.test.ts` reads their imports and fails if an entity ever appears in one. What is
+shared is the stage, the camera, the turntable, the pause, the seed, the bounding boxes, the origin
+crosses, the ground shadow, the measured height, the keymap and the address bar. What an entity
+declares is: its controls (an **enum** is a segmented row, a **toggle** a button, a **scalar** a
+slider), the overlays it offers beyond the universal two, what next/prev browses, and how many
+stand in a row. What its `Cast` does is rebuild, step, draw, hand back its parts, switch its
+overlays and describe itself.
+
+Four things about that interface are load-bearing:
+
+- **A `DrawnPart` is a matrix and a colour, and that covers everything.** Every pool geometry and
+  every kit geometry is unit-sized and centred on its origin, so a unit cube under a part's matrix
+  *is* its bounding box — for a thigh and for a kiosk wheel alike. That single fact is why the
+  bounding boxes, the origin crosses, the measured height and the ground shadow are universal, and
+  it is what keeps the interface small enough to be worth having.
+- **A control is carried in the URL under its own id.** The person's controls are named `arch`,
+  `age`, `build`, `mob`, `walk` and `phase` because those were already the query keys, so the
+  generic scheme reproduces every URL the character turntable ever wrote. `gate` is why `?phase=`
+  still means a frozen gait: a gated scalar is written only while its gate is on, and reading one
+  turns the gate on.
+- **`rebuilds` on a control is the difference between an archetype and a slider.** Changing the
+  archetype has to build a new person; dragging the gait phase must not build seven of them a frame.
+- **A cast may write back a scalar it drives.** The gait slider tracks a walking figure that way.
+  A write-back reaches the panel and never the address bar.
+
+**A path-placed entity is built where the game builds it and only staged elsewhere.** A person
+turns through `drawPerson`'s own `yaw`; an edge object has no such parameter, so `entities/edge.ts`
+puts it on the real `PATH`, at its real offset from the real edge, inside an inner group that
+brings its own place to the origin and an outer group that carries it to the stage anchor and turns
+it. The collider, the orientation arrows and a kiosk's service and attendant points live in that
+inner group, so they cannot drift off the thing they describe. A collider is drawn flat, because
+the collider *is* flat: the crowd walks in the x/z plane and is draped onto the surface at render
+time.
+
+The four families are `agent` (people), `kiosk`, `path-furniture` (benches, lamps, bins) and
+`structure` — the last of which has no members yet and is where buildings go.
+
+**Adding an entity is two steps.** Write `src/inspect/entities/<thing>.ts` exporting an
+`Inspectable` whose `Cast` builds through the game's own assembler and reports its parts, then add
+one line to `registry.ts`. If it stands on the path, `entities/edge.ts` already does the staging,
+the collider overlay and the orientation overlay. Nothing in `index.ts`, `panel.ts` or `state.ts`
+changes — and the test in `test/inspectable.test.ts` that drives a hypothetical entity through the
+shell's own state, URL and keymap is what keeps that true.
 
 Two consequences worth knowing:
 
-- The age, build and mobility overrides are **archetype edits**, not recipe edits. They set
-  `look.age`, `look.w` and `look.aid` — the same fields `archetypes.ts` already uses to make Timmy
-  a child and Dave narrow — so `makeRecipe` still takes every draw in its fixed order and only the
-  selection from rolls already in hand changes. A person keeps their seeded colours and parts while
-  an axis moves under them, which is the point.
+- The person's age, build and mobility overrides are **archetype edits**, not recipe edits. They
+  set `look.age`, `look.w` and `look.aid` — the same fields `archetypes.ts` already uses to make
+  Timmy a child and Dave narrow — so `makeRecipe` still takes every draw in its fixed order and
+  only the selection from rolls already in hand changes. A person keeps their seeded colours and
+  parts while an axis moves under them, which is the point.
 - The part gizmos read matrices back from a `PartPools` subclass that records what `put` writes and
   calls straight through to the real implementation, so nothing the inspector does can change what
-  is drawn.
+  is drawn. A kiosk's and a bench's come from `standingMatrix` and `barMatrix` — the same two
+  functions `kit.ts` draws them with.
 
 The inspector reads no `spawn` or `behavior` draws and never builds a `Simulation`, so it cannot
-move either determinism hash.
+move either determinism hash. A cart's paint comes from the kiosk layer's own constant-seeded
+stream through `rollKiosk`, and `Rng.fork` derives from a seed rather than a state, so the tool
+cannot disturb the promenade.
+
+**Not in scope, deliberately:** the nine authored `KIOSK_PLACEMENTS` are not individually
+browsable. Where the carts stand is a question about the promenade's layout rather than about a
+cart, and `?debug=1` and the game answer it.
 
 ## Two hashes
 
@@ -716,10 +777,11 @@ the winning treatment into `render/materials.ts` and drop the flag, or keep both
 and the six names are one list in `compare/treatments.ts`; adding a treatment there gives it a
 panel and a `?look=` name together.
 
-`?inspect=1` opens the character turntable and `?inspect=row` its side-by-side row; both take
-`&seed=` and mirror the rest of their state back into the address bar (`arch`, `age`, `build`,
-`mob`, `walk`, `gizmos`, `ink`), so a reload after a code change brings back the same person at the
-same settings.
+`?inspect=1` opens the turntable and `?inspect=row` its side-by-side row; `&entity=` chooses what
+stands on it (`person` by default, plus `kiosk`, `furniture`, `bench`, `lamp`, `bin`). Both take
+`&seed=` and mirror the rest of their state back into the address bar — every control under its own
+id, every active overlay under its own, plus `paused`, `yaw` and `ink` — so a reload after a code
+change brings back the same thing at the same settings.
 
 ## Determinism rules
 
