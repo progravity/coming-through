@@ -219,13 +219,16 @@ export interface EdgeLayer {
 interface Mover { batch: Batch; index: number; st: Standing; }
 
 /**
- * Place every plan's pieces through the curve and hand the scene one group holding all of it.
+ * Place every plan's pieces through the curve and hand `parent` one group holding all of it.
  *
  * A group rather than a handful of loose children on purpose: `compare/treatments.ts` restyles the
  * character pools by finding instanced meshes, and the edge is instanced too. Pool meshes carry a
  * tag it filters on, and keeping the edge one level down means it is not even offered.
+ *
+ * `parent` is an `Object3D` rather than a `Scene` so the inspection stage can hang one object's
+ * worth of edge under a group it moves and turns. The game passes its scene, as it always did.
  */
-export function buildEdge(scene: THREE.Scene, plans: readonly EdgePlan[], curve: PathCurve = PATH): EdgeLayer {
+export function buildEdge(parent: THREE.Object3D, plans: readonly EdgePlan[], curve: PathCurve = PATH): EdgeLayer {
     const kit = new Kit();
     const m = new THREE.Matrix4(), frame = newPathFrame();
     const movers: Mover[] = [];
@@ -243,7 +246,7 @@ export function buildEdge(scene: THREE.Scene, plans: readonly EdgePlan[], curve:
         }
     }
     const built = kit.build();
-    scene.add(built.group);
+    parent.add(built.group);
 
     // Only the batches something actually moves in are re-uploaded, and only when there is one.
     const touched = [...new Set(movers.map(mv => mv.batch))];

@@ -18,13 +18,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
 import { clearOf, freeRuns } from '../src/world/edge.ts';
-import type { EdgePlan, Standing } from '../src/world/edge.ts';
+import type { Bar, EdgePlan, Solid, Standing } from '../src/world/edge.ts';
 import { barMatrix, standingMatrix } from '../src/world/kit.ts';
-import { furniturePlan } from '../src/world/furniture.ts';
-import { PAD_SPANS, SHOP_SPANS, W } from '../src/world/layout.ts';
+import { bench, bin, furniturePlan, lamp } from '../src/world/furniture.ts';
+import { KIOSK_SPANS } from '../src/world/kiosks.ts';
+import { L, PAD_SPANS, SHOP_SPANS, W } from '../src/world/layout.ts';
 import type { EdgeSpan } from '../src/world/layout.ts';
 import { railingPlan } from '../src/world/railings.ts';
-import { PathCurve, newPathFrame, newWorldPoint, pathPlace } from '../src/world/path.ts';
+import { PATH, PathCurve, newPathFrame, newWorldPoint, pathPlace } from '../src/world/path.ts';
 import type { Along, PathRun } from '../src/world/path.ts';
 
 /** A right-angled bend at the origin, long enough to carry the whole railing run either way. */
@@ -213,4 +214,48 @@ test('the stub walkway really bends, widens and climbs', () => {
     const before = { nx: frame.nx, nz: frame.nz };
     VARIED.frameAt(40, frame);
     assert.ok(Math.hypot(before.nx - frame.nx, before.nz - frame.nz) > 0.5, 'and the two runs point different ways');
+});
+
+/** The spans the furniture routes around, exactly as `furniturePlan` assembles them. */
+const INSIDE = [...SHOP_SPANS, ...PAD_SPANS, ...KIOSK_SPANS];
+const OUTSIDE = [...SHOP_SPANS, ...PAD_SPANS];
+const BENCH_STEP = 15, BENCH_LEN = 1.7, LAMP_STEP = 12, LAMP_T = 0.11;
+const BIN_EVERY = 2, BIN_OFF = 1.35, RIM_D = 0.5;
+
+function stopsAlong(spans: readonly EdgeSpan[], side: number, step: number, phase: number, extent: number): number[] {
+    const out: number[] = [];
+    const first = Math.ceil((-L - phase) / step) * step + phase;
+    for (let s = first; s <= L; s += step) if (clearOf(spans, side, s - extent / 2, s + extent / 2)) out.push(s);
+    return out;
+}
+const benchPlaces = (side: 1 | -1): number[] => stopsAlong(INSIDE, side, BENCH_STEP, side === 1 ? 0 : BENCH_STEP / 2, BENCH_LEN);
+const lampPlaces = (side: 1 | -1): number[] => stopsAlong(OUTSIDE, side, LAMP_STEP, side === 1 ? LAMP_STEP / 2 : 0, LAMP_T);
+const binPlace = (s: number, i: number, side: 1 | -1): number | null => {
+    const bs = s + BIN_OFF;
+    if (i % BIN_EVERY !== 0 || !clearOf(INSIDE, side, bs - RIM_D / 2, bs + RIM_D / 2)) return null;
+    return bs;
+};
+
+test('the per-object builders are what the furniture plan is made of', () => {
+    // The plan is the only reader that matters, and the inspector calls the same three functions:
+    // if they ever stop composing back into it, one of the two is drawing something the other is
+    // not, which is exactly the drift the whole tool exists to make impossible.
+    const plan = furniturePlan(PATH);
+    const rebuilt = { standing: [] as Standing[], bars: [] as Bar[], solids: [] as Solid[] };
+    let piece = 0;
+    const add = (p: EdgePlan): void => {
+        rebuilt.standing.push(...p.standing);
+        rebuilt.bars.push(...p.bars);
+        rebuilt.solids.push(...p.solids);
+    };
+    for (const side of [-1, 1] as const) {
+        const benches = benchPlaces(side);
+        benches.forEach((s, i) => {
+            add(bench(PATH, s, side, ++piece));
+            const bs = binPlace(s, i, side);
+            if (bs !== null) add(bin(PATH, bs, side, ++piece));
+        });
+        for (const s of lampPlaces(side)) add(lamp(PATH, s, side, ++piece));
+    }
+    assert.deepEqual(rebuilt, plan);
 });

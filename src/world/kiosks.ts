@@ -60,7 +60,7 @@ import type { Paint, Prim, Slot, StructureArchetype } from './structure.ts';
  * The thing to preserve if this ever moves: `KIOSK_N - r` is the corridor, and it has to stay
  * comfortably over the widest collision circle the crowd produces.
  */
-const KIOSK_N = 2.3;
+export const KIOSK_N = 2.3;
 /** How far the serving side and the attendant's side stand from the cart's own centre. */
 const SERVE_OUT = 0.95, ATTEND_BACK = 0.95;
 
@@ -355,6 +355,22 @@ export const KIOSK_SPANS: readonly EdgeSpan[] = KIOSK_PLACEMENTS.map(k => ({
  */
 const PAINT_STREAM = new Rng(hashString('kiosks'));
 
+/**
+ * One cart's paint and its cosmetic phase, off this layer's own stream.
+ *
+ * A function rather than two lines inside `kiosks()` because the inspector rolls carts too, and a
+ * second copy of "paint, then phase, off a fork of this label" is a second chance to draw them in
+ * the other order -- which would repaint every cart in the tool and nowhere else. `Rng.fork`
+ * derives from the parent's seed rather than its state, so no caller here can disturb another.
+ */
+export function rollKiosk(arch: StructureArchetype, label: string): { paint: Paint; phase: number } {
+    const rng = PAINT_STREAM.fork(label);
+    // The phase comes after the paint, off the same fork: cosmetic, and drawn unconditionally so
+    // adding one cannot shift the colours of the cart it belongs to.
+    const paint = structurePaint(arch, rng);
+    return { paint, phase: rng.next() * Math.PI * 2 };
+}
+
 /** One cart, placed: everything drawn about it, plus the handles later mechanics will want. */
 export interface Kiosk {
     type: KioskType;
@@ -386,11 +402,7 @@ export function kiosks(curve: PathCurve = PATH, spans: readonly EdgeSpan[] = [..
         if (Math.abs(at.s) > L) return;
         if (!clearOf(spans, at.side, at.s - KIOSK_CLEAR, at.s + KIOSK_CLEAR)) return;
         const arch = KIOSK_ARCHETYPES[at.type];
-        const rng = PAINT_STREAM.fork(`kiosk:${i}`);
-        const paint = structurePaint(arch, rng);
-        // The bob and spin phases come after the paint, off the same fork: cosmetic, and drawn
-        // unconditionally so adding one cannot shift the colours of the cart it belongs to.
-        const phase = rng.next() * Math.PI * 2;
+        const { paint, phase } = rollKiosk(arch, `kiosk:${i}`);
         const n = at.side * (curve.halfWidth(at.s) - KIOSK_N);
         const facing = -at.side as 1 | -1;
         const piece = i + 1;

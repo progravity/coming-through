@@ -84,6 +84,60 @@ function everyAlong(spans: readonly EdgeSpan[], side: number, step: number, phas
 }
 
 /**
+ * One object, at one place on the path. The plan is built out of these and so is the inspector's
+ * stage, which is the point of them being functions rather than three loops: `?inspect&entity=bench`
+ * shows the bench the promenade is made of, not a second bench that agrees with it by hand.
+ *
+ * Each carries its own `piece` id, which is what ties the collider it emits to the parts it emits.
+ */
+export function bench(curve: PathCurve, s: number, side: 1 | -1, piece: number): EdgePlan {
+    const edge = curve.halfWidth(s);
+    const seat = side * (edge - SEAT_N), back = side * (edge - BACK_N);
+    const box = (colour: number, n: number, y: number, across: number, up: number, along: number, ahead = 0): Standing =>
+        ({ shape: 'box', colour, s, n, y, across, up, along, ahead, piece });
+    return {
+        standing: [
+            box(EDGE.timber, seat, SEAT_Y, SEAT_W, SEAT_T, BENCH_LEN),
+            // The back stands on the railing side, so a sitter faces across the path at the crowd.
+            box(EDGE.timber, back, SEAT_Y + SEAT_T / 2 + BACK_H / 2, BACK_W, BACK_H, BENCH_LEN),
+            // The legs slide along the tangent from the bench's own place rather than being placed
+            // at places of their own, so a bench stays one rigid object on a path that widens.
+            box(EDGE.iron, seat, SEAT_Y / 2, LEG_W, SEAT_Y, LEG_T, -(BENCH_LEN / 2 - LEG_T)),
+            box(EDGE.iron, seat, SEAT_Y / 2, LEG_W, SEAT_Y, LEG_T, BENCH_LEN / 2 - LEG_T),
+        ],
+        bars: [],
+        solids: [{ piece, s, n: side * (edge - BENCH_MID), half: BENCH_HALF, r: BENCH_R }],
+    };
+}
+
+export function bin(curve: PathCurve, s: number, side: 1 | -1, piece: number): EdgePlan {
+    const n = side * (curve.halfWidth(s) - BIN_N);
+    const round = (colour: number, y: number, d: number, up: number): Standing =>
+        ({ shape: 'cyl', colour, s, n, y, across: d, up, along: d, piece });
+    return {
+        standing: [round(EDGE.bin, BIN_H / 2, BIN_D, BIN_H), round(EDGE.iron, BIN_H + RIM_T / 2, RIM_D, RIM_T)],
+        bars: [],
+        solids: [{ piece, s, n, half: 0, r: RIM_D / 2 }],
+    };
+}
+
+export function lamp(curve: PathCurve, s: number, side: 1 | -1, piece: number): EdgePlan {
+    const n = side * (curve.halfWidth(s) + LAMP_OUT);
+    return {
+        standing: [
+            { shape: 'cyl', colour: EDGE.iron, s, n, y: LAMP_H / 2, across: LAMP_T, up: LAMP_H, along: LAMP_T, piece },
+            { shape: 'ball', colour: EDGE.globe, s, n, y: LAMP_H + GLOBE_D / 2 - 0.08, across: GLOBE_D, up: GLOBE_D, along: GLOBE_D, piece },
+        ],
+        bars: [],
+        // Solid like everything else, though nothing can reach it today: a lamp stands outside the
+        // railings and both the crowd and the player are fenced inside `halfWidth`. It is here so
+        // the rule is "furniture is solid" with no exception to remember, and so a lamp moved onto
+        // the walkway is already something you walk round.
+        solids: [{ piece, s, n, half: 0, r: LAMP_T / 2 }],
+    };
+}
+
+/**
  * The furniture, as a list of pieces standing on the path.
  *
  * Pure, like the railing plan: it reads the curve and returns placements, so the same list can be
@@ -96,55 +150,24 @@ export function furniturePlan(curve: PathCurve = PATH, spans: readonly EdgeSpan[
     // punch six holes in a rhythm that has nothing to do with them. This is the one interruption
     // the two loops do not share, and it is a fact about where the things stand rather than a tweak.
     const inside = [...spans, ...KIOSK_SPANS];
-    // Every part of one bench, one bin or one lamp carries the same id, so the collider derived
-    // from it can be checked against exactly the parts it is meant to match.
     let piece = 0;
-    const box = (colour: number, s: number, n: number, y: number, across: number, up: number, along: number, ahead = 0): void => {
-        standing.push({ shape: 'box', colour, s, n, y, across, up, along, ahead, piece });
-    };
-    const round = (shape: 'cyl' | 'ball', colour: number, s: number, n: number, y: number, d: number, up: number): void => {
-        standing.push({ shape, colour, s, n, y, across: d, up, along: d, piece });
-    };
+    const add = (p: EdgePlan): void => { standing.push(...p.standing); solids.push(...p.solids); };
 
     for (const side of [-1, 1] as const) {
-        // ---- benches: seat, back and two end legs, all measured in from the path's own edge ----
         const benches = everyAlong(inside, side, BENCH_STEP, side === 1 ? 0 : BENCH_STEP / 2, BENCH_LEN);
         benches.forEach((s, i) => {
-            piece++;
-            const edge = curve.halfWidth(s);
-            const seat = side * (edge - SEAT_N), back = side * (edge - BACK_N);
-            box(EDGE.timber, s, seat, SEAT_Y, SEAT_W, SEAT_T, BENCH_LEN);
-            solids.push({ piece, s, n: side * (edge - BENCH_MID), half: BENCH_HALF, r: BENCH_R });
-            // The back stands on the railing side, so a sitter faces across the path at the crowd.
-            box(EDGE.timber, s, back, SEAT_Y + SEAT_T / 2 + BACK_H / 2, BACK_W, BACK_H, BENCH_LEN);
-            // The legs slide along the tangent from the bench's own place rather than being placed
-            // at places of their own, so a bench stays one rigid object on a path that widens.
-            for (const end of [-1, 1]) {
-                box(EDGE.iron, s, seat, SEAT_Y / 2, LEG_W, SEAT_Y, LEG_T, end * (BENCH_LEN / 2 - LEG_T));
-            }
+            add(bench(curve, s, side, ++piece));
             // ---- a bin beside every other bench, on the same side and just along from it ----
             // Its own stretch has to be clear too: the bench is inside the spans by construction and
             // the bin is a metre and a bit further on, which is enough to reach into the next one.
             const bs = s + BIN_OFF;
             if (i % BIN_EVERY !== 0 || !clearOf(inside, side, bs - RIM_D / 2, bs + RIM_D / 2)) return;
-            piece++;
-            const bn = side * (curve.halfWidth(bs) - BIN_N);
-            round('cyl', EDGE.bin, bs, bn, BIN_H / 2, BIN_D, BIN_H);
-            round('cyl', EDGE.iron, bs, bn, BIN_H + RIM_T / 2, RIM_D, RIM_T);
-            solids.push({ piece, s: bs, n: bn, half: 0, r: RIM_D / 2 });
+            add(bin(curve, bs, side, ++piece));
         });
 
         // ---- lamp posts, standing just outside the railings so they light the walkway ----
         for (const s of everyAlong(spans, side, LAMP_STEP, side === 1 ? LAMP_STEP / 2 : 0, LAMP_T)) {
-            piece++;
-            const n = side * (curve.halfWidth(s) + LAMP_OUT);
-            round('cyl', EDGE.iron, s, n, LAMP_H / 2, LAMP_T, LAMP_H);
-            round('ball', EDGE.globe, s, n, LAMP_H + GLOBE_D / 2 - 0.08, GLOBE_D, GLOBE_D);
-            // Solid like everything else, though nothing can reach it today: a lamp stands outside
-            // the railings and both the crowd and the player are fenced inside `halfWidth`. It is
-            // here so the rule is "furniture is solid" without an exception to remember, and so a
-            // lamp moved onto the walkway is already something you walk round.
-            solids.push({ piece, s, n, half: 0, r: LAMP_T / 2 });
+            add(lamp(curve, s, side, ++piece));
         }
     }
     return { standing, bars: [], solids };
