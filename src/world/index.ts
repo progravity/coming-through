@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { buildPath } from './path.ts';
+import { buildGround } from './ground.ts';
 import { buildProps } from './props.ts';
 import type { Props } from './props.ts';
 import { buildRailings } from './railings.ts';
@@ -23,7 +23,7 @@ export function buildWorld(): World {
     scene.background = new THREE.Color(0x9ed0e6);
     scene.fog = new THREE.Fog(0x9ed0e6, 40, 110);
     addLights(scene);
-    buildPath(scene);
+    buildGround(scene);
     buildRailings(scene);
     const props = buildProps(scene);
     return { scene, props };

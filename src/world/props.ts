@@ -1,31 +1,44 @@
 import * as THREE from 'three';
+import { slab } from './ground.ts';
 import { DOORS, L, W } from './layout.ts';
-import { box } from './path.ts';
+import { PATH, newWorldPoint } from './path.ts';
 
 const SHOPC = [0xe37f3c, 0x3fb5a8, 0xd9534f, 0x8a6fd1];
+const _w = newWorldPoint();
 
 export interface Props {
     /** Ferris wheel; rotated by the main loop. */
     wheel: THREE.Mesh;
 }
 
-/** Shops behind the doorways, lamp posts, and a distant skyline. */
+/**
+ * Shops behind the doorways, lamp posts, and a distant skyline.
+ *
+ * Everything here is placed in path coordinates, the landmarks past the ends included: `s` beyond
+ * the path extrapolates along the end run, so the skyline stays behind the goal however the
+ * walkway is shaped.
+ */
 export function buildProps(scene: THREE.Scene): Props {
     DOORS.forEach((d, i) => {
-        box(scene, 6, 3.2, 7, 0xf2ead8, d.x + Math.sign(d.x) * 3.2, 1.6, d.z);
-        box(scene, 6.4, 0.5, 2, SHOPC[i], d.x + Math.sign(d.x) * 0.9, 2.6, d.z);
+        slab(scene, d.s, d.side * (W + 3.2), 6, 3.2, 7, 0xf2ead8, 1.6);
+        slab(scene, d.s, d.side * (W + 0.9), 6.4, 0.5, 2, SHOPC[i], 2.6);
     });
-    for (let z = -L; z <= L; z += 12) {
+    for (let s = -L; s <= L; s += 12) {
         for (const side of [-1, 1]) {
-            box(scene, 0.12, 3.2, 0.12, 0x3b3a36, side * (W + 0.7), 1.6, z);
+            const n = side * (W + 0.7);
+            slab(scene, s, n, 0.12, 3.2, 0.12, 0x3b3a36, 1.6);
+            const p = PATH.toWorld(s, n, _w);
             const g = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), new THREE.MeshLambertMaterial({ color: 0xfff2c4 }));
-            g.position.set(side * (W + 0.7), 3.3, z); scene.add(g);
+            g.position.set(p.x, 3.3, p.z); scene.add(g);
         }
     }
+    const WHEEL_S = -(L + 40), WHEEL_N = -24;
+    const p = PATH.toWorld(WHEEL_S, WHEEL_N, _w);
     const wheel = new THREE.Mesh(new THREE.TorusGeometry(9, 0.5, 8, 24), new THREE.MeshLambertMaterial({ color: 0xd9534f }));
-    wheel.position.set(-24, 11, -L - 40); scene.add(wheel);
-    box(scene, 0.8, 11, 0.8, 0x5d5a52, -24, 5.5, -L - 40);
-    for (let i = 0; i < 7; i++) box(scene, 3, 1 + i * 2.2, 3, 0x4a7fb5, 12 + i * 3.5, (1 + i * 2.2) / 2, -L - 38);
-    box(scene, 14, 20, 14, 0x9a8f7a, 40, 10, -L - 60);
+    // Turned to face the path; the main loop spins it about its own z, which stays in its plane.
+    wheel.position.set(p.x, 11, p.z); wheel.rotation.y = PATH.yawAt(WHEEL_S); scene.add(wheel);
+    slab(scene, WHEEL_S, WHEEL_N, 0.8, 11, 0.8, 0x5d5a52, 5.5);
+    for (let i = 0; i < 7; i++) slab(scene, -(L + 38), 12 + i * 3.5, 3, 1 + i * 2.2, 3, 0x4a7fb5, (1 + i * 2.2) / 2);
+    slab(scene, -(L + 60), 40, 14, 20, 14, 0x9a8f7a, 10);
     return { wheel };
 }

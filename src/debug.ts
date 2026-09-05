@@ -1,9 +1,14 @@
 import { ARCH } from './archetypes.ts';
 import type { Crowd } from './sim/crowd.ts';
 import type { Player } from './sim/player.ts';
-import { DOORS, L, W } from './world/layout.ts';
+import { DOORS, EXIT_S, GOAL_S, L, PAD_LENGTH, START_S, W } from './world/layout.ts';
+import { PATH, newWorldPoint } from './world/path.ts';
 
 export interface DebugStats { fps: number; drawCalls: number; }
+
+/** How many points the centreline is sampled at to draw the walkway; enough for a bend to read. */
+const SAMPLES = 48;
+const _w = newWorldPoint();
 
 /**
  * Toggleable top-down 2D overlay: the whole path, every agent as a dot in its archetype colour,
@@ -42,15 +47,37 @@ export class DebugOverlay {
         const ox = cssW / 2, oy = cssH / 2;
         const X = (x: number) => ox + x * s, Y = (z: number) => oy + z * s;
 
-        // path, pads, railings, doors
-        ctx.fillStyle = 'rgba(207,196,173,.35)';
-        ctx.fillRect(X(-W), Y(-L - 4), 2 * W * s, (2 * L + 8) * s);
-        ctx.fillStyle = 'rgba(74,127,181,.6)'; ctx.fillRect(X(-W), Y(L - 4.5), 2 * W * s, 3 * s);
-        ctx.fillStyle = 'rgba(89,178,95,.6)';  ctx.fillRect(X(-W), Y(-(L - 1.5)), 2 * W * s, 3 * s);
+        // path, pads, railings and doors, all traced along the centreline rather than assumed
+        // straight, so this overlay keeps telling the truth when the path bends.
+        const at = (ps: number, pn: number): [number, number] => { const p = PATH.toWorld(ps, pn, _w); return [X(p.x), Y(p.z)]; };
+        /** Walk one edge of the walkway from `from` to `to`, opening a subpath or continuing one. */
+        const edge = (pn: number, from: number, to: number, back: boolean, open: boolean): void => {
+            for (let k = 0; k <= SAMPLES; k++) {
+                const i = back ? SAMPLES - k : k;
+                const [px, py] = at(from + (to - from) * (i / SAMPLES), pn);
+                if (open && k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+        };
+        /** The strip of walkway between two lateral offsets, as one closed polygon. */
+        const band = (from: number, to: number): void => {
+            ctx.beginPath();
+            edge(-W, from, to, false, true);
+            edge(W, from, to, true, false);
+            ctx.closePath();
+        };
+        ctx.fillStyle = 'rgba(207,196,173,.35)'; band(-EXIT_S, EXIT_S); ctx.fill();
+        const HALF = PAD_LENGTH / 2;
+        ctx.fillStyle = 'rgba(74,127,181,.6)'; band(START_S - HALF, START_S + HALF); ctx.fill();
+        ctx.fillStyle = 'rgba(89,178,95,.6)';  band(GOAL_S - HALF, GOAL_S + HALF); ctx.fill();
         ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(X(-W), Y(-L - 4)); ctx.lineTo(X(-W), Y(L + 4)); ctx.moveTo(X(W), Y(-L - 4)); ctx.lineTo(X(W), Y(L + 4)); ctx.stroke();
+        ctx.beginPath();
+        for (const side of [-1, 1]) edge(side * W, -EXIT_S, EXIT_S, false, true);
+        ctx.stroke();
         ctx.strokeStyle = 'rgba(255,220,120,.9)'; ctx.lineWidth = 2;
-        for (const d of DOORS) { ctx.beginPath(); ctx.moveTo(X(d.x), Y(d.z - 1.6)); ctx.lineTo(X(d.x), Y(d.z + 1.6)); ctx.stroke(); }
+        for (const d of DOORS) {
+            const n = d.side * W;
+            ctx.beginPath(); ctx.moveTo(...at(d.s - 1.6, n)); ctx.lineTo(...at(d.s + 1.6, n)); ctx.stroke();
+        }
 
         // agents
         ctx.lineWidth = 1;

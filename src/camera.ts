@@ -4,7 +4,8 @@ import type { Recipe } from './recipe.ts';
 import { CAMERA_MODES } from './sim/player.ts';
 import type { CameraMode } from './sim/player.ts';
 import type { Pose } from './sim/pose.ts';
-import { L } from './world/layout.ts';
+import { START_S } from './world/layout.ts';
+import { PATH, newWorldPoint } from './world/path.ts';
 
 export type { CameraMode };
 
@@ -22,7 +23,9 @@ export class CameraRig {
     mode: CameraMode = 'shoulder';
     readonly persp = new THREE.PerspectiveCamera(70, 1, 0.1, 200);
     readonly top = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 200);
-    private readonly pos = new THREE.Vector3(0, 3, L + 2);
+    /** Where the rig sits before a run: a few paces behind the start pad, on the path. */
+    private readonly home = PATH.toWorld(START_S + 5, 0, newWorldPoint());
+    private readonly pos = new THREE.Vector3(this.home.x, 3, this.home.z);
     private readonly target = new THREE.Vector3();
     /**
      * Heights taken from the player's own body rather than hardcoded, so a change to the character
@@ -49,7 +52,7 @@ export class CameraRig {
         return this.mode;
     }
 
-    reset(): void { this.pos.set(0, 3, L + 2); }
+    reset(): void { this.pos.set(this.home.x, 3, this.home.z); }
 
     resize(width: number, height: number): void {
         const a = width / height;

@@ -1,6 +1,7 @@
 import type { Archetype } from '../archetypes.ts';
 import { SIM_DT } from '../core/time.ts';
 import { W } from '../world/layout.ts';
+import type { PathFrame } from '../world/path.ts';
 import type { SpatialGrid } from './grid.ts';
 import type { Agent } from './agent.ts';
 import type { Player } from './player.ts';
@@ -8,7 +9,10 @@ import type { Player } from './player.ts';
 /** Accumulated desired-velocity contributions for one agent this step. */
 export interface Steer { dx: number; dz: number; }
 
-/** Push away from nearby agents within the agent's separation radius. Group mates are excluded. */
+/**
+ * Push away from nearby agents within the agent's separation radius. Group mates are excluded.
+ * Distance between two bodies is Euclidean whatever shape the path is, so this stays world-space.
+ */
 export function separation(self: Agent, A: Archetype, grid: SpatialGrid<Agent>, out: Steer): void {
     let sx = 0, sz = 0;
     const cx = self.cx, cz = self.cz;
@@ -33,11 +37,16 @@ export function avoidPlayer(self: Agent, A: Archetype, player: Player, out: Stee
     }
 }
 
-/** Soft repulsion from the railings on either side of the path. */
-export function wallRepulsion(x: number, r: number, out: Steer): void {
+/**
+ * Soft repulsion from the railings on either side of the path. Takes the offset from the
+ * centreline and pushes back along the curve's normal there, so a bend does not slide anyone into
+ * the railing it turns toward.
+ */
+export function wallRepulsion(n: number, r: number, frame: PathFrame, out: Steer): void {
     const lim = W - r - 0.6;
-    if (x > lim) out.dx -= (x - lim) * 4;
-    if (x < -lim) out.dx += (-lim - x) * 4;
+    const push = n > lim ? -((n - lim) * 4) : n < -lim ? (-lim - n) * 4 : 0;
+    if (push === 0) return;
+    out.dx += frame.nx * push; out.dz += frame.nz * push;
 }
 
 /** Accelerate the agent's velocity toward the desired velocity over one fixed step, honouring accel and speed caps. */

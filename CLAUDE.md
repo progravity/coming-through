@@ -13,7 +13,10 @@ check and the determinism test. `npm run lint` is the first two on their own.
 - `src/sim/` — pure simulation, no DOM or three.js: `simulation.ts` is the whole game state and its
   fixed step; `crowd.ts`, `agent.ts`, `spawner.ts`, `steering.ts`, `player.ts`, `pose.ts`.
 - `src/input/` — adapters, per-step sampling, and `recorder.ts` (the input log).
-- `src/render/`, `src/world/`, `src/camera.ts`, `src/ui.ts`, `src/debug.ts` — presentation only.
+- `src/world/` — the path and everything standing on it: `layout.ts` (dimensions and landmarks, in
+  path coordinates), `path.ts` (the centreline curve and the conversion to world space; pure, no
+  three.js, so the simulation can import it), `ground.ts`, `railings.ts`, `props.ts`, `box.ts`.
+- `src/render/`, `src/camera.ts`, `src/ui.ts`, `src/debug.ts` — presentation only.
 - `src/main.ts` — the entry point and nothing else: it dynamic-imports the game, the character
   inspector when `?inspect=` is present, or the render comparator when `?compare=` is, so a normal
   run never loads a dev tool.
@@ -28,6 +31,8 @@ check and the determinism test. `npm run lint` is the first two on their own.
   `test/determinism.expected.json`, which stores two values: `hash` (whole state) and `identity`
   (the crowd a seed produces). See "Two hashes" below.
 - `test/inspect.test.ts` — proves a turntable person is byte-identical to the crowd's agent.
+- `test/path.test.ts` — the path-coordinate convention, including the exactness today's straight
+  centreline gives and that a bent one still measures along and across itself correctly.
 
 ## Seeds and restarting
 
@@ -46,6 +51,40 @@ Two rules make repeat runs comparable, and both must be preserved:
   to a settled crowd first. Otherwise the state at the moment the player presses Start would depend
   on how long they looked at the start screen. Because of this, changing the crowd size while idle
   re-primes the run.
+
+## Path coordinates
+
+Nothing on the walkway is placed in world x/z. A position is `(s, n)`: `s` is signed distance along
+the centreline from the path's midpoint, `n` is lateral offset from it. `PATH` in `world/path.ts`
+converts between that and world space, and the crowd, the spawner, the player's limits, the ground,
+the railings, the lamps and the debug overlay all go through it. Bending or forking the walkway is
+a change to the run list in that file; the code that reads `PATH` does not change with it.
+
+Three conventions hold the scheme together:
+
+- **The tangent points toward +s, which is the start-pad end.** `Agent.dir` is therefore the sign of
+  ds/dt, exactly as it used to be the sign of dz/dt. Turning the curve round would flip `dir` for
+  every agent and move `identityHash`.
+- **`s = 0` is the path's midpoint and sits at the world origin.** Today's centreline is a single
+  straight run anchored there, so `toWorld` and `toPath` are exact inverses: the conversion is
+  arithmetic on zeros and ones and every position round-trips to the same bits. That is what let the
+  whole game be rewritten in path coordinates with both determinism hashes untouched, and it is what
+  `test/path.test.ts` guards. Bending the path is expected to move `hash()` and to change that test
+  with it.
+- **Only path-shaped decisions are in path space.** Which lane to walk in, how far along a leader
+  is, where the railings are, where a run ends: those are `(s, n)`. The distance between two bodies
+  is Euclidean whatever shape the path is, so separation, player avoidance, overlap resolution and
+  the spatial grid stay in world space, and so does camera-relative player input. Converting those
+  would be wrong, not merely unnecessary.
+
+`pathDir(frame, along, side, out)` rotates a path-space direction into world. Use it rather than
+`frame.tx * along` alone: summing both terms is what stops a purely forward direction coming out
+with a negative zero across the path, which is invisible on screen and not invisible to `Hasher.f64`.
+
+The ground is still one slab covering the whole path, which is only the right shape while the
+centreline is a single straight run; a bend needs it built as a ribbon sampled off the curve. That
+is the ground layer's job. Everything else in `world/` is already placed and turned through the
+curve and needs no change when it happens.
 
 ## Character recipes
 
@@ -283,6 +322,9 @@ decisions, on any machine and at any frame rate. Everything below exists to keep
   delta in simulation code. Timers count in steps (`stepsFor`) or in seconds accumulated from `SIM_DT`.
 - Visual-only randomness uses the `cosmetic` stream; it must never influence spawn, recipe, or
   behavior. Gait phase and fidget offsets are cosmetic and are excluded from the determinism hash.
+- Positions on the walkway are path coordinates, not world x/z: see "Path coordinates" above. A
+  conversion that is exact today is exact because the centreline is one straight run through the
+  origin; never add an offset to `s` or move the anchor without regenerating `hash()` on purpose.
 - Anything that iterates over agents in a way that affects outcomes must iterate in a stable order
   (spawn order, which is `crowd.agents` order, or slot order), never in hash-map or Set insertion
   order that could vary.

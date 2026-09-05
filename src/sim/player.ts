@@ -4,10 +4,13 @@ import { SIM_DT } from '../core/time.ts';
 import { makeRecipe } from '../recipe.ts';
 import type { Recipe } from '../recipe.ts';
 import { clamp, wrapAngle } from '../util.ts';
-import { L, W } from '../world/layout.ts';
+import { GOAL_LINE_S, ROAM_S, START_S, W } from '../world/layout.ts';
+import { PATH, newPathPoint, newWorldPoint } from '../world/path.ts';
 import type { Poseable } from './agent.ts';
 import { copyPose, newPose } from './pose.ts';
 import type { Pose } from './pose.ts';
+
+const _here = newPathPoint(), _world = newWorldPoint();
 
 export type CameraMode = 'shoulder' | 'first' | 'top';
 export const CAMERA_MODES: readonly CameraMode[] = ['shoulder', 'first', 'top'];
@@ -27,8 +30,17 @@ export interface Player extends Poseable {
     prevCamYaw: number;
 }
 
-export const PLAYER_START = { x: 0, z: L - 3, yaw: Math.PI, camYaw: Math.PI } as const;
+/** Where a run begins, in path coordinates: the middle of the start pad. */
+export const PLAYER_START = { s: START_S, n: 0 } as const;
 const WALK = 1.7, HURRY = 2.4;
+
+/** Stand the player on the start pad at rest, facing down the path toward the goal. */
+function placeAtStart(p: Player): void {
+    const w = PATH.toWorld(PLAYER_START.s, PLAYER_START.n, _world);
+    p.x = w.x; p.z = w.z;
+    p.yaw = p.camYaw = PATH.yawAt(PLAYER_START.s) + Math.PI;
+    p.vx = 0; p.vz = 0;
+}
 
 export function createPlayer(): Player {
     // The player's look is fixed, so the recipe roll uses a constant seed rather than a run stream.
@@ -38,14 +50,16 @@ export function createPlayer(): Player {
     recipe.hair = 'none'; recipe.ponytail = false; recipe.beard = 'none'; recipe.acc = 'none';
     recipe.mobility = 'none'; recipe.seated = false; recipe.stoop = 0; recipe.jacket = false;
     recipe.limb = 1;
-    const p: Player = { x: PLAYER_START.x, z: PLAYER_START.z, yaw: PLAYER_START.yaw, camYaw: PLAYER_START.camYaw,
-        r: 0.32, vx: 0, vz: 0, phase: 0, mv: 0, lean: 0, fidget: 0, recipe, prev: newPose(), prevCamYaw: PLAYER_START.camYaw };
+    const p: Player = { x: 0, z: 0, yaw: 0, camYaw: 0,
+        r: 0.32, vx: 0, vz: 0, phase: 0, mv: 0, lean: 0, fidget: 0, recipe, prev: newPose(), prevCamYaw: 0 };
+    placeAtStart(p);
+    p.prevCamYaw = p.camYaw;
     copyPose(p.prev, p);
     return p;
 }
 
 export function resetPlayer(p: Player): void {
-    p.x = PLAYER_START.x; p.z = PLAYER_START.z; p.yaw = PLAYER_START.yaw; p.camYaw = PLAYER_START.camYaw; p.vx = p.vz = 0;
+    placeAtStart(p);
     snapshotPlayer(p);
 }
 
@@ -75,8 +89,11 @@ export function updatePlayer(p: Player, input: MoveInput, mode: CameraMode): voi
     const spd = input.hurry ? HURRY : WALK * Math.min(1, input.mag / 0.85);
     const tvx = mx * spd, tvz = mz * spd;
     p.vx += (tvx - p.vx) * Math.min(1, dt * 9); p.vz += (tvz - p.vz) * Math.min(1, dt * 9);
-    p.x = clamp(p.x + p.vx * dt, -W + p.r, W - p.r);
-    p.z = clamp(p.z + p.vz * dt, -L - 1, L + 1);
+    // Movement is camera-relative and therefore world-space; only the limits are path-space -- how
+    // far across the walkway, and how far past either end -- so the player is fenced in by the path.
+    const q = PATH.toPath(p.x + p.vx * dt, p.z + p.vz * dt, _here);
+    const w = PATH.toWorld(clamp(q.s, -ROAM_S, ROAM_S), clamp(q.n, -(W - p.r), W - p.r), _world);
+    p.x = w.x; p.z = w.z;
     const ps = Math.hypot(p.vx, p.vz);
     if (ps > 0.2 && !firstPerson) {
         const d = wrapAngle(Math.atan2(p.vx, p.vz) - p.yaw);
@@ -94,4 +111,4 @@ export function updateCameraYaw(p: Player, mode: CameraMode): void {
 }
 
 /** True once the player has crossed onto the goal pad. */
-export const reachedGoal = (p: Player): boolean => p.z < -(L - 4);
+export const reachedGoal = (p: Player): boolean => PATH.toPath(p.x, p.z, _here).s < GOAL_LINE_S;

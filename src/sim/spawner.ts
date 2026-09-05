@@ -2,9 +2,12 @@ import { ARCH, weightedType } from '../archetypes.ts';
 import type { Streams } from '../core/rng.ts';
 import { OUTFIT_FAMILY } from '../palette.ts';
 import { clamp } from '../util.ts';
-import { DOORS, L, W } from '../world/layout.ts';
+import { DOORS, L, SPAWN_S, W } from '../world/layout.ts';
+import { PATH, newWorldPoint } from '../world/path.ts';
 import { Agent } from './agent.ts';
 import type { Crowd } from './crowd.ts';
+
+const _w = newWorldPoint();
 
 export interface SpawnOptions {
     /** Place path-end spawns anywhere along the path instead of at the ends (used to pre-fill a crowd). */
@@ -20,9 +23,9 @@ export interface SpawnOptions {
  */
 export function spawn(crowd: Crowd, streams: Streams, opts: SpawnOptions = {}): boolean {
     if (crowd.freeSlotCount < 5) return false;
-    const n = crowd.nextSpawnEvent();
-    const where = streams.spawn.fork(`spawn:${n}`);
-    const how = streams.behavior.fork(`spawn:${n}`);
+    const event = crowd.nextSpawnEvent();
+    const where = streams.spawn.fork(`spawn:${event}`);
+    const how = streams.behavior.fork(`spawn:${event}`);
     const type = weightedType(where), A = ARCH[type];
     // Every placement draw is taken unconditionally, then selected between. Drawing inside the
     // branches would let `scatter` (which is not part of the seed) shift every later draw from
@@ -33,11 +36,15 @@ export function spawn(crowd: Crowd, streams: Streams, opts: SpawnOptions = {}): 
     const door = where.pick(DOORS);
     const alongPath = where.range(-L, L);
     const acrossPath = where.range(-W + 1, W - 1);
-    let x: number, z: number;
-    if (atDoor) { x = door.x > 0 ? W - 0.8 : -W + 0.8; z = door.z; }
-    else { x = acrossPath; z = opts.scatter ? alongPath : -dir * (L + 2); }
-    const make = (t: typeof type, ax: number, o: ConstructorParameters<typeof Agent>[7] = {}) =>
-        new Agent(streams, crowd.nextAgentIndex(), t, ax, z, dir, crowd.takeSlot(), o);
+    // Placement is decided in path coordinates and only turned into a world position at the last
+    // moment, so a spawn at "one end of the path" stays at the end of the path however it bends.
+    let s: number, n: number;
+    if (atDoor) { n = door.side > 0 ? W - 0.8 : -W + 0.8; s = door.s; }
+    else { n = acrossPath; s = opts.scatter ? alongPath : -dir * SPAWN_S; }
+    const make = (t: typeof type, an: number, o: ConstructorParameters<typeof Agent>[7] = {}) => {
+        const w = PATH.toWorld(s, an, _w);
+        return new Agent(streams, crowd.nextAgentIndex(), t, w.x, w.z, dir, crowd.takeSlot(), o);
+    };
     if (A.group) {
         // One draw, exactly as before: this is the last value this fork produces, so retuning the
         // green family cannot shift any other spawn decision.
@@ -45,16 +52,16 @@ export function spawn(crowd: Crowd, streams: Streams, opts: SpawnOptions = {}): 
         // The whole family is dressed from one outfit rather than issued one shirt colour: they
         // still read as a set, but as people who coordinated rather than as a uniform.
         const outfit = where.pick(OUTFIT_FAMILY.green);
-        const leader = make(type, x, { group: gid, outfit });
+        const leader = make(type, n, { group: gid, outfit });
         crowd.add(leader);
         for (let i = 1; i < size; i++) {
             const off = (i % 2 ? 1 : -1) * Math.ceil(i / 2) * spacing;
-            crowd.add(make(type, clamp(x + off, -W + 0.6, W - 0.6), { leader, offset: off, group: gid, outfit, speed: leader.speed }));
+            crowd.add(make(type, clamp(n + off, -W + 0.6, W - 0.6), { leader, offset: off, group: gid, outfit, speed: leader.speed }));
         }
     } else if (A.parentType) {
-        const parent = make(A.parentType, x);
+        const parent = make(A.parentType, n);
         crowd.add(parent);
-        crowd.add(make(type, clamp(x + where.range(-1, 1), -W + 0.5, W - 0.5), { parent }));
-    } else crowd.add(make(type, x));
+        crowd.add(make(type, clamp(n + where.range(-1, 1), -W + 0.5, W - 0.5), { parent }));
+    } else crowd.add(make(type, n));
     return true;
 }
