@@ -21,7 +21,7 @@ import { SLOTS, placeStructure } from '../../world/structure.ts';
 import type { Paint, Placed, StructureArchetype } from '../../world/structure.ts';
 import { INK } from '../inspectable.ts';
 import type { Cast, Controls, DrawnPart, Inspectable, Readout } from '../inspectable.ts';
-import { COLLIDER, EDGE_OVERLAYS, EdgeExhibit, FACING, spotMarker } from './edge.ts';
+import { EDGE_OVERLAYS, EdgeExhibit, spotMarker } from './edge.ts';
 
 const POINTS = 'points';
 const SERVICE_C = 0x7ad17a, ATTENDANT_C = 0xd17a9c;
@@ -77,10 +77,7 @@ class KioskCast implements Cast {
     overlays(active: ReadonlySet<string>): void { this.active = active; this.apply(); }
 
     private apply(): void {
-        for (const e of this.exhibits) {
-            e.setInk(this.active.has(INK));
-            for (const id of [COLLIDER, FACING, POINTS]) e.setOverlay(id, this.active.has(id));
-        }
+        for (const e of this.exhibits) { e.setInk(this.active.has(INK)); e.applyOverlays(this.active); }
     }
 
     readout(i: number, top: number): Readout {

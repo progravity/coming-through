@@ -92,13 +92,29 @@ export function spotMarker(at: { s: number; n: number }, colour: number): THREE.
     return g;
 }
 
+/**
+ * Give back what this exhibit made, and nothing it merely drew through.
+ *
+ * Two things in the tree belong to somebody else, and blanket disposal reached both. `worldToon` is
+ * a process-wide cache keyed by colour and every kit batch draws through the same white one, so
+ * disposing it throws away a shader program the rest of the page is still holding -- and three.js
+ * quietly rebuilds it, so a rebuild per `[`, per cart type, per kind of furniture bought a shader
+ * recompile that nothing on screen ever admitted to. It is the only toon material down here;
+ * everything the exhibit makes for itself is basic or line-basic. The other is `ArrowHelper`, which
+ * shares one line geometry and one cone geometry across every arrow three.js has ever made while
+ * giving each arrow materials of its own -- so an arrow's geometry is not ours and its material is.
+ *
+ * Only safe today because the inspector never runs beside a live world. `Stage` already imports
+ * `world/index.ts`, so that is not a property to keep leaning on.
+ */
 function disposeTree(root: THREE.Object3D): void {
     root.traverse(o => {
         const m = o as Partial<THREE.Mesh>;
-        m.geometry?.dispose();
+        if (!(o.parent instanceof THREE.ArrowHelper)) m.geometry?.dispose();
         const mat = m.material;
-        if (Array.isArray(mat)) for (const x of mat) x.dispose();
-        else mat?.dispose();
+        for (const x of Array.isArray(mat) ? mat : [mat]) {
+            if (x !== undefined && !(x instanceof THREE.MeshToonMaterial)) x.dispose();
+        }
     });
 }
 
@@ -109,6 +125,12 @@ function disposeTree(root: THREE.Object3D): void {
  * because that is where the bounding boxes, the origin crosses and the ground shadow have to be.
  * The kit's instances are children of the inner group, so `inner.matrixWorld * instanceMatrix` is
  * exactly where each part is drawn: the same arithmetic three.js is doing, not a second guess at it.
+ *
+ * It assumes an object is **one** solid and that its face looks straight across the path: it stands
+ * on `solids[0]` and turns by a `front` of `1` or `-1`. Both are true of every bench, bin, lamp and
+ * cart there is, and buildings are what will break them -- a shopfront has a footprint that is not
+ * one capsule and a face that need not be square to the centreline. Generalising either before
+ * there is a building to generalise for would be guessing at the shape of the answer.
  */
 export class EdgeExhibit {
     private readonly outer = new THREE.Group();
@@ -119,6 +141,8 @@ export class EdgeExhibit {
     private readonly standing: readonly Standing[];
     /** Each part where the game puts it, before staging. Movers are re-read every frame. */
     private readonly raw: THREE.Matrix4[] = [];
+    /** Reused by `draw`, the way `kit.ts`'s own `animate` closure keeps one. */
+    private readonly frame = newPathFrame();
     private readonly overlayOf = new Map<string, THREE.Object3D>();
     readonly parts: DrawnPart[] = [];
 
@@ -164,7 +188,7 @@ export class EdgeExhibit {
         this.outer.rotation.y = this.baseYaw + yaw;
         this.outer.updateMatrixWorld(true);
         const w = this.inner.matrixWorld;
-        const frame = newPathFrame();
+        const frame = this.frame;
         for (let i = 0; i < this.standing.length; i++) {
             const st = this.standing[i];
             // A balloon that bobs and a pinwheel that turns move under `animate`, so their own
@@ -176,9 +200,15 @@ export class EdgeExhibit {
 
     setInk(on: boolean): void { this.layer.setInk(on); }
 
-    setOverlay(id: string, on: boolean): void {
-        const o = this.overlayOf.get(id);
-        if (o !== undefined) o.visible = on;
+    /**
+     * Show whichever of this exhibit's overlays are in `active`, and hide the rest.
+     *
+     * The exhibit is the one that knows which ids it holds -- `addOverlay` put them there -- so it
+     * is the one that should say. A cast that listed them again would be a second copy of the same
+     * fact, and the third entity to stand on the path would have written a third.
+     */
+    applyOverlays(active: ReadonlySet<string>): void {
+        for (const [id, o] of this.overlayOf) o.visible = active.has(id);
     }
 
     dispose(): void { this.outer.removeFromParent(); disposeTree(this.outer); }

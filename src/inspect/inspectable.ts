@@ -40,6 +40,15 @@ export type Control =
     }
     | { kind: 'toggle'; id: string; label: string; value: boolean; key?: string; rebuilds?: boolean }
     | {
+        /**
+         * A **cyclic value in 0..1**, and the shell treats it as one throughout: `wrap01` when it
+         * is read from a URL and when a key nudges it, a 0..1000 slider, three decimals in the
+         * address bar. A gait phase is what it was built for and a gait phase is what it is.
+         *
+         * There is deliberately no `cyclic?: boolean`. A flag for a case that has never come up is
+         * exactly the speculative field this interface is small in order not to have; the day a
+         * scalar wants a range of its own is the day to give it one.
+         */
         kind: 'scalar'; id: string; label: string; value: number;
         /** The two keys that nudge it down and up. */
         keys?: readonly [string, string];
@@ -98,6 +107,10 @@ export const UNIVERSAL: readonly OverlayDef[] = [
  * `Controls` is handed over by reference and the shell mutates it in place, so a cast may keep the
  * object it was given -- and may **write back** a scalar it drives, which is how the gait slider
  * tracks a walking figure. A write-back reaches the slider and never the address bar.
+ *
+ * There is no `dispose`, on purpose. Switching entity reloads the page -- a fresh page is the
+ * cheapest clean stage there is -- so nothing outlives a cast, and what a cast has to give back
+ * between its own rebuilds is its own business and nobody else's.
  */
 export interface Cast {
     /**
@@ -124,7 +137,7 @@ export interface Inspectable {
     /** The address-bar name: `?inspect=1&entity=<id>`. */
     id: string;
     family: Family;
-    /** Shown in the picker and as the control card's title. */
+    /** The entity's name in prose. The seed row's label is where it appears; the picker is by `id`. */
     title: string;
     controls: readonly Control[];
     /** Beyond the universal ones. */
@@ -167,7 +180,6 @@ export function gateIds(e: Inspectable): Set<string> {
     return g;
 }
 
-export type EnumControl = Extract<Control, { kind: 'enum' }>;
 export type ScalarControl = Extract<Control, { kind: 'scalar' }>;
 
 /** What one key press means for this entity. */

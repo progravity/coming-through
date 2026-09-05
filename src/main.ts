@@ -1,9 +1,9 @@
 /**
- * Entry point. A normal run loads the game; `?inspect=1` (or `?inspect=row`) loads the character
+ * Entry point. A normal run loads the game; `?inspect=1` (or `?inspect=row`) loads the entity
  * inspector instead, and `?compare=1` (or `?compare=row`) the throwaway render-comparison harness.
  *
  * All three are separate dynamic imports so a normal run never downloads or executes a dev tool:
- * they are drivers for the character code, not branches of it, and they cost a real run nothing.
+ * they are drivers for the game's own code, not branches of it, and they cost a real run nothing.
  */
 const q = new URLSearchParams(location.search);
 const off = (v: string | null): boolean => v === null || v === '' || v === '0';

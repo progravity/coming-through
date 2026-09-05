@@ -183,7 +183,11 @@ export class Panel {
         this.enums.clear(); this.toggles.clear(); this.scalars.clear(); this.overlayBtns.clear();
         this.dyn.replaceChildren();
 
-        this.seedLabel.textContent = `${e.title.toLowerCase()} (seed)`;
+        // The label has to say what the buttons beside it actually do: for an entity that browses
+        // its kinds rather than its seeds, "(seed)" names a box that does nothing.
+        this.seedLabel.textContent = e.stepping === 'seed'
+            ? `${e.title.toLowerCase()} (seed)`
+            : e.title.toLowerCase();
         this.dyn.append(this.seedLabel, this.seedRow);
 
         const options = document.createElement('div');
@@ -219,8 +223,9 @@ export class Panel {
             this.dyn.append(label(c.label), row);
         }
 
-        this.dyn.append(label('hold angle'), this.angleRow);
-
+        // The overlays sit above the angle presets: they are what the collider and the service
+        // points are looked at through, and at the bottom of a strip that has grown an entity
+        // picker they fall below the fold on a 900-pixel window.
         const debug = document.createElement('div');
         debug.className = 'row';
         for (const o of overlaysOf(e)) {
@@ -229,6 +234,8 @@ export class Panel {
             debug.appendChild(b);
         }
         this.dyn.append(label('debug'), debug);
+
+        this.dyn.append(label('hold angle'), this.angleRow);
 
         this.keysEl.textContent = keysFor(e);
     }
