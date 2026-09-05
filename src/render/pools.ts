@@ -88,6 +88,24 @@ export class PartPools {
         _m2.multiplyMatrices(this.base, _m); P.out.setMatrixAt(idx, _m2);
     }
 
+    /**
+     * Draw a part with no ink shell, for the few things an outline spoils rather than defines.
+     *
+     * The shell stands 0.0125 proud of every face whatever the part's size, so on the smallest
+     * parts on a person it is most of what is drawn rather than a line around it -- a pair of
+     * glasses with one is a visor. Anything that ends up that fine belongs here too, and putting
+     * it here is one word at the call site.
+     *
+     * Deliberately a second method rather than a flag on `put`. `put` runs some eight thousand
+     * times a frame at a full crowd (`scripts/bench-pose.mjs` exists for it) and does not need a
+     * branch that three parts in forty-five would ever take; the shell it writes is simply
+     * overwritten here, which only the exempt parts pay for.
+     */
+    putBare(pool: PoolName, idx: number, x: number, y: number, z: number, rx: number, ry: number, rz: number, sx: number, sy: number, sz: number, color: number): void {
+        this.put(pool, idx, x, y, z, rx, ry, rz, sx, sy, sz, color);
+        this.pools[pool].out.setMatrixAt(idx, ZERO);
+    }
+
     hide(pool: PoolName, idx: number): void {
         const P = this.pools[pool]; P.mesh.setMatrixAt(idx, ZERO); P.out.setMatrixAt(idx, ZERO);
     }

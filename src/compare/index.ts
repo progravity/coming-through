@@ -3,15 +3,14 @@
  * `?compare=1` (one person per panel) or `?compare=row` (four).
  *
  * Six panels on one canvas, each rendering the *same* seeded people at the same size from the same
- * camera, so the only thing left for the eye to explain is the shading. Four of them run the game's
- * own `drawPerson` over the game's own `PartPools` and differ only in the materials swapped onto
- * those pools from outside (see treatments.ts). The remaining two cannot use the game's meshes at
- * all -- a voxel grid and a fused metaball surface -- so they are baked from the parts the first
- * panel recorded while it drew.
+ * camera, so the only thing left for the eye to explain is the shading. Every one of them runs the
+ * game's own `drawPerson` over the game's own `PartPools` and differs only in the materials swapped
+ * onto those pools from outside (see treatments.ts), which is what makes the comparison mean
+ * anything: no panel is a redrawing of a person, only a reshading of the same one.
  *
  * This is disposable. It exists to be looked at and then deleted, and it is deliberately wasteful:
- * six scenes, six part pools, no shared draw calls, a bake that would never survive a crowd. None
- * of that matters here; being able to judge the directions side by side does.
+ * six scenes, six part pools, no shared draw calls. None of that matters here; being able to judge
+ * the directions side by side does.
  *
  * Nothing in this directory is imported by the game, and `main.ts` only reaches it through a
  * dynamic import behind the flag. It reads no `spawn` or `behavior` draws and never builds a
@@ -21,33 +20,22 @@
 import * as THREE from 'three';
 import { parseSeed, randomSeed } from '../core/rng.ts';
 import { MAX_CATCHUP_STEPS, SIM_DT } from '../core/time.ts';
+import { RecordingPools, measure, newBounds } from '../inspect/gizmos.ts';
 import { ARCH_OPTIONS, Subject, archetypeForSeed } from '../inspect/subject.ts';
 import type { ArchOverride, Overrides } from '../inspect/subject.ts';
 import { drawPerson } from '../render/person.ts';
 import { PartPools } from '../render/pools.ts';
-import { fuse } from './blob.ts';
-import { TintedPools, solids } from './capture.ts';
-import type { Solid } from './capture.ts';
 import { PanelStage } from './stage.ts';
 import { ROW_COUNT, readState, writeState } from './state.ts';
 import type { CompareState } from './state.ts';
 import { LIVE_TREATMENTS, poolMeshes } from './treatments.ts';
 import type { LiveTreatment, PoolMeshes } from './treatments.ts';
-import { voxelise } from './voxel.ts';
 
 const TAU = Math.PI * 2;
 /** Turntable rate in radians per second, the turntable's own. */
 const SPIN = 0.4;
 /** The comparison is about how a *person* looks, so the axis overrides stay out of it. */
 const NO_OVERRIDES: Overrides = { age: 'seed', build: 'seed', mobility: 'seed' };
-/**
- * Marching-cubes field resolution. Cubed, and baked per figure, so the row gets a little less.
- *
- * The field is a cube while a person is tall and thin, and a balloon on a string stretches the
- * cube further still, so a good deal of this is spent on empty air either side of the figure --
- * which is why it takes numbers this large before a shin stops coming out as a thread.
- */
-const FUSE_RES = { single: 64, row: 56 };
 /** Height of the control bar, in CSS pixels. */
 const BAR = 46;
 /** Margin around each panel, in CSS pixels, so the panels read as separate cards. */
@@ -55,21 +43,14 @@ const GUTTER = 6;
 
 const wrapTau = (a: number): number => ((a % TAU) + TAU) % TAU;
 
-type Baked = 'voxel' | 'blob';
-
 interface Panel {
-    note: string;
     stage: PanelStage;
-    /** Live panels draw through the game's pools every frame. */
-    pools?: PartPools;
-    meshes?: PoolMeshes;
-    treatment?: LiveTreatment;
-    /** Baked panels hold one rebuilt group per figure and only spin it. */
-    baked?: Baked;
-    groups: THREE.Group[];
-    /** Chrome: the caption over the panel, and the line of numbers under it. */
+    /** Every panel draws through the game's pools every frame; only the materials differ. */
+    pools: PartPools;
+    meshes: PoolMeshes;
+    treatment: LiveTreatment;
+    /** The caption card over the panel. */
     caption: HTMLElement;
-    stat: HTMLElement;
     /** Pixel rect on the canvas, top-left origin. */
     x: number; y: number; w: number; h: number;
 }
@@ -94,7 +75,7 @@ body.compare > *:not(#compare):not(canvas):not(script){display:none!important}
 .cap em{font-style:normal;color:#e8c34a}
 `;
 
-const KEYS = '[ ] person · ← → turn · space pause · W walk · T type · K re-bake · − = voxels · 1 single · 2 row';
+const KEYS = '[ ] person · ← → turn · space pause · W walk · T type · 1 single · 2 row';
 
 export function startCompare(mode: string): void {
     const state: CompareState = readState(mode);
@@ -116,8 +97,7 @@ export function startCompare(mode: string): void {
 
     // ---------- panels ----------
     const panels: Panel[] = [];
-    /** Returns the caption box and the line inside it that carries the note and the numbers. */
-    const makeCaption = (name: string, note: string): [HTMLElement, HTMLElement] => {
+    const makeCaption = (name: string, note: string): HTMLElement => {
         const cap = document.createElement('div');
         cap.className = 'cap';
         const b = document.createElement('b');
@@ -126,47 +106,40 @@ export function startCompare(mode: string): void {
         s.textContent = note;
         cap.append(b, s);
         root.appendChild(cap);
-        return [cap, s];
+        return cap;
     };
 
     /**
-     * The baseline panel's pools also writes down every part it drew, and the two baked panels are
-     * rebuilt from that record. It is the untouched treatment on purpose: the recording rides along
-     * with the one draw that is guaranteed to be exactly what the game does.
+     * The baseline panel's pools also writes down every part it drew, which is what the framing is
+     * measured from. It is the untouched treatment on purpose: the recording rides along with the
+     * one draw that is guaranteed to be exactly what the game does. `RecordingPools` overrides
+     * `put` and `setBase` and calls straight through, so the panel is still drawn by shipped code.
      */
     const baseStage = new PanelStage();
-    const tinted = new TintedPools(baseStage.scene);
+    const recorder = new RecordingPools(baseStage.scene);
 
     for (let i = 0; i < LIVE_TREATMENTS.length; i++) {
         const treatment = LIVE_TREATMENTS[i];
         const stage = i === 0 ? baseStage : new PanelStage();
-        const pools = i === 0 ? tinted : new PartPools(stage.scene);
+        const pools = i === 0 ? recorder : new PartPools(stage.scene);
         const meshes = poolMeshes(stage.scene);
         treatment.dress(pools, meshes);
-        const [caption, stat] = makeCaption(treatment.name, treatment.note);
-        panels.push({ note: treatment.note, stage, pools, meshes, treatment, groups: [], caption, stat, x: 0, y: 0, w: 1, h: 1 });
-    }
-
-    for (const [baked, name, note] of [
-        ['voxel', 'Voxel', 'baked · true voxelisation of the real parts'],
-        ['blob', 'Smooth-fused', 'baked · metaballs fitted to the real parts'],
-    ] as const) {
-        const stage = new PanelStage();
-        const [caption, stat] = makeCaption(name, note);
-        panels.push({ note, stage, baked, groups: [], caption, stat, x: 0, y: 0, w: 1, h: 1 });
+        const caption = makeCaption(treatment.name, treatment.note);
+        panels.push({ stage, pools, meshes, treatment, caption, x: 0, y: 0, w: 1, h: 1 });
     }
 
     // ---------- cast ----------
     let subjects: Subject[] = [];
     let xs: number[] = [];
     let clock = 0, acc = 0, last = performance.now();
-    let needsBake = true;
+    let needsMeasure = true;
     /**
      * Worst-case horizontal radius of a figure, which sets the framing. Seeded with enough for a
-     * person standing with their arms down and replaced with the measured value once the first
-     * bake has the parts to measure -- one frame later, and only when it actually differs.
+     * person standing with their arms down and replaced with the measured value once there are
+     * parts to measure -- one frame later, and only when it actually differs.
      */
     let reach = 0.55;
+    const bounds = newBounds();
 
     function rebuild(): void {
         const count = state.mode === 'row' ? ROW_COUNT : 1;
@@ -176,8 +149,8 @@ export function startCompare(mode: string): void {
             subjects.push(new Subject(state.seed, i, type, NO_OVERRIDES));
         }
         relayout(count);
-        for (const p of panels) p.pools?.freeAll();
-        needsBake = true;
+        for (const p of panels) p.pools.freeAll();
+        needsMeasure = true;
         syncBar();
     }
 
@@ -185,89 +158,37 @@ export function startCompare(mode: string): void {
         for (const p of panels) xs = p.stage.layout(state.mode, count, reach);
     }
 
-    // ---------- baking the two panels that cannot use the game's meshes ----------
-    function clearBaked(p: Panel): void {
-        for (const g of p.groups) {
-            g.traverse(o => {
-                if (!(o instanceof THREE.Mesh)) return;
-                o.geometry.dispose();
-                (o.material as THREE.Material).dispose();
-            });
-            p.stage.scene.remove(g);
-        }
-        p.groups.length = 0;
-    }
-
     /**
-     * Record every figure standing on the spot facing the camera, then rebuild the voxel and fused
-     * panels from those parts. Baking canonically is what lets the baked figures be spun by turning
-     * their group: the yaw is not already cooked into the geometry.
+     * Measure how far a figure can swing from the spot it stands on, and reframe if that changed.
+     *
+     * The cast is drawn once standing on the origin facing front, so a part's world bounds *are*
+     * its figure-local bounds and the far corner of one is how far that part can ever reach as the
+     * turntable brings it round. Taking the widest corner per part rather than over the union is
+     * the point: a pram reaches forward and the arms reach sideways, and no single point on the
+     * figure does both, so the union would frame for a person who does not exist.
      *
      * The recorded draw lands in the same instance buffers the live draw is about to overwrite a
      * few lines later, so it is never seen.
      */
-    function bake(): void {
-        const t0 = performance.now();
+    function measureReach(): void {
         const saved = subjects.map(s => ({ x: s.x, z: s.z, yaw: s.yaw }));
         for (const s of subjects) { s.x = 0; s.z = 0; s.yaw = 0; }
-        tinted.beginRecord();
-        const spans: number[] = [];
-        for (let i = 0; i < subjects.length; i++) {
-            spans.push(tinted.recorded);
-            drawPerson(tinted, i, subjects[i], subjects[i], clock);
-        }
+        recorder.beginRecord();
+        for (let i = 0; i < subjects.length; i++) drawPerson(recorder, i, subjects[i], subjects[i], clock);
         for (let i = 0; i < subjects.length; i++) {
             const { x, z, yaw } = saved[i];
             subjects[i].x = x; subjects[i].z = z; subjects[i].yaw = yaw;
         }
 
-        // One list of primitives per figure, shared by both baked panels and by the framing.
-        const figures: Solid[][] = [];
-        for (let i = 0; i < subjects.length; i++) {
-            const to = i + 1 < subjects.length ? spans[i + 1] : tinted.recorded;
-            figures.push(solids(tinted.parts, tinted.colors, spans[i], to));
-        }
-
-        // These bounds are in figure-local space, because the bake draws every figure standing on
-        // the origin facing front, so the far corner of a part's box is how far that part can ever
-        // swing from the spot its figure stands on. Reframing from the widest of them is what stops
-        // a stroller leaving the panel when the turntable brings it round to the side.
         let widest = 0.35;
-        for (const parts of figures) {
-            for (const p of parts) {
-                const dx = Math.max(Math.abs(p.min.x), Math.abs(p.max.x));
-                const dz = Math.max(Math.abs(p.min.z), Math.abs(p.max.z));
-                widest = Math.max(widest, Math.hypot(dx, dz));
-            }
+        for (let i = 0; i < recorder.recorded; i++) {
+            measure(recorder.parts, i, i + 1, bounds);
+            const dx = Math.max(Math.abs(bounds.minX), Math.abs(bounds.maxX));
+            const dz = Math.max(Math.abs(bounds.minZ), Math.abs(bounds.maxZ));
+            widest = Math.max(widest, Math.hypot(dx, dz));
         }
         if (Math.abs(widest - reach) > 0.01) { reach = widest; relayout(subjects.length); reframe(); }
-
-        let boxes = 0, voxelSize = 0, balls = 0, grid = '';
-        for (const p of panels) {
-            if (p.baked === undefined) continue;
-            clearBaked(p);
-            for (let i = 0; i < figures.length; i++) {
-                const group = new THREE.Group();
-                group.position.x = xs[i];
-                if (p.baked === 'voxel') {
-                    const v = voxelise(figures[i], state.voxels);
-                    boxes += v.count; voxelSize = v.size; grid = v.dims.join('×');
-                    group.add(v.mesh);
-                } else {
-                    const f = fuse(figures[i], FUSE_RES[state.mode]);
-                    balls += f.balls;
-                    group.add(f.mesh);
-                }
-                p.stage.scene.add(group);
-                p.groups.push(group);
-            }
-        }
-        const ms = Math.round(performance.now() - t0);
-        for (const p of panels) {
-            if (p.baked === 'voxel') p.stat.innerHTML = `${p.note} · <em>${boxes} boxes</em> · ${Math.round(voxelSize * 1000)}mm grid ${grid} · ${ms}ms`;
-            else if (p.baked === 'blob') p.stat.innerHTML = `${p.note} · <em>${balls} balls</em> at ${FUSE_RES[state.mode]}³ · ${ms}ms`;
-        }
-        needsBake = false;
+        needsMeasure = false;
     }
 
     // ---------- chrome ----------
@@ -299,7 +220,7 @@ export function startCompare(mode: string): void {
     const spacer = document.createElement('span');
     spacer.className = 'sp';
     bar.append(title, seedLabel, seedBox, button('±', () => patch({ seed: randomSeed() })),
-        archBtn, walkBtn, pauseBtn, modeBtn, button('re-bake', () => { needsBake = true; }), spacer, keys);
+        archBtn, walkBtn, pauseBtn, modeBtn, spacer, keys);
 
     function syncBar(): void {
         if (document.activeElement !== seedBox) seedBox.value = String(state.seed);
@@ -314,13 +235,12 @@ export function startCompare(mode: string): void {
 
     /** Fields that rebuild the cast; everything else is a live value. */
     const REBUILDS = ['mode', 'seed', 'arch'] as const;
-    const IN_URL = [...REBUILDS, 'walking', 'paused', 'yaw', 'voxels'] as const;
+    const IN_URL = [...REBUILDS, 'walking', 'paused', 'yaw'] as const;
 
     function patch(p: Partial<CompareState>): void {
         const rebuilds = REBUILDS.some(k => p[k] !== undefined);
         Object.assign(state, p);
         if (p.yaw !== undefined) state.yaw = wrapTau(state.yaw);
-        if (p.voxels !== undefined) needsBake = true;
         if (rebuilds) { rebuild(); reframe(); }
         syncBar();
         if (IN_URL.some(k => p[k] !== undefined)) writeState(state);
@@ -355,13 +275,10 @@ export function startCompare(mode: string): void {
             case ' ': patch({ paused: !state.paused }); break;
             case '1': patch({ mode: 'single' }); break;
             case '2': patch({ mode: 'row' }); break;
-            case '-': patch({ voxels: Math.max(12, state.voxels - 4) }); break;
-            case '=': case '+': patch({ voxels: Math.min(96, state.voxels + 4) }); break;
             default: {
                 const k = e.key.toLowerCase();
                 if (k === 'w') patch({ walking: !state.walking });
                 else if (k === 't') patch({ arch: cycleArch(e.shiftKey ? -1 : 1) });
-                else if (k === 'k') needsBake = true;
                 else return;
                 break;
             }
@@ -434,21 +351,19 @@ export function startCompare(mode: string): void {
             while (acc >= SIM_DT) { for (const s of subjects) s.step(state.walking); acc -= SIM_DT; }
         }
 
-        if (needsBake) bake();
+        if (needsMeasure) measureReach();
 
         for (let i = 0; i < subjects.length; i++) {
             const s = subjects[i];
             s.x = xs[i]; s.z = 0; s.yaw = state.yaw;
         }
         for (const p of panels) {
-            if (p.pools === undefined) {
-                for (const g of p.groups) g.rotation.y = state.yaw;
-                continue;
-            }
-            if (p.pools === tinted) tinted.beginRecord();
+            // The recorder's record is only read by measureReach, but its count still has to be
+            // reset each frame or it would keep a growing part for every frame ever drawn.
+            if (p.pools === recorder) recorder.beginRecord();
             for (let i = 0; i < subjects.length; i++) drawPerson(p.pools, i, subjects[i], subjects[i], clock);
             p.pools.commit();
-            if (p.meshes !== undefined) p.treatment?.after?.(p.meshes);
+            p.treatment.after?.(p.meshes);
         }
 
         // Each panel clears only its own scissor box, so the gutter between them has to be painted

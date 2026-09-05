@@ -134,6 +134,15 @@ so the strap is fitted to a slightly grown ellipsoid (`STRAP_OVER`) that swallow
 to the bare torso, the strap's own profile reaches zero depth right at the shoulder and the last
 stretch of it passes *under* the deltoid, where the cap's ink shell slices across it.
 
+Every part is drawn twice: once shaded, and once as a back-face ink shell standing 0.0125 proud of
+every face. That clearance is a constant, not a proportion, which is what makes the outline read as
+one weight of line across a whole figure -- and what makes it swallow anything small. On a thigh it
+is a line; on a lens it was most of the part. Anything that fine goes through `putBare` rather than
+`put` and carries no shell, which also means its written size is its drawn size, with nothing to
+compensate for. The glasses are the only parts exempt today; the balloon string and the phone's
+depth are the next candidates. Adding one is one word at the call site -- deliberately not a list of
+part indices, because `box` 3-9 is shared between a phone, a camera and a pram.
+
 Anything outside the renderer that needs to know how tall a person is imports `standingHeight` or
 `eyeHeight` from `render/person.ts`; `camera.ts` derives all three of its heights that way, so a
 proportion change cannot leave the camera aimed where the chest used to be.
@@ -190,9 +199,10 @@ per-frame cost of posing a crowd into the instance buffers, with no GL context a
 `?seed=<uint32 or any string>` (strings are hashed), `?stress=1` (pinned seed, full crowd, no input,
 per-frame sim/render milliseconds), `?debug=1` (top-down overlay), `?tier=low|mid|high`.
 
-`?compare=1` (or `?compare=row`) opens a **throwaway** side-by-side of rendering directions -- the
-shipped look next to flat-faceted, bold-outline, no-outline, a voxelisation and a fused metaball
-figure. It exists to be looked at and then deleted: delete `src/compare/`, its branch in `main.ts`
+`?compare=1` (or `?compare=row`) opens a **throwaway** side-by-side of rendering directions -- four
+panels crossing toon ramp against soft diffuse and ink shell against none, so each edge of that
+table moves one thing only, then two that ask about the line and the light instead: a finer warm
+ink, and a matcap. It exists to be looked at and then deleted: delete `src/compare/`, its branch in `main.ts`
 and this paragraph together. It changes nothing in the render path -- each panel builds its own
 `PartPools` and swaps materials on the meshes from outside -- and touches neither hash.
 

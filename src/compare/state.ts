@@ -24,13 +24,10 @@ export interface CompareState {
     paused: boolean;
     /** Body yaw in radians; 0 faces the camera. */
     yaw: number;
-    /** Voxels along the figure's height in the voxel panel. */
-    voxels: number;
 }
 
 /** Fixed, never random: opening the tool twice has to show the same people. */
 export const DEFAULT_SEED = 1;
-export const DEFAULT_VOXELS = 40;
 
 const pick = (v: string | null, fallback: ArchOverride): ArchOverride =>
     v !== null && (ARCH_OPTIONS as readonly string[]).includes(v) ? (v as ArchOverride) : fallback;
@@ -51,7 +48,6 @@ export function readState(mode: string): CompareState {
         walking: flag(q.get('walk'), false),
         paused: flag(q.get('paused'), false),
         yaw: num(q.get('yaw'), 0) * (Math.PI / 180),
-        voxels: Math.max(12, Math.min(96, Math.round(num(q.get('vox'), DEFAULT_VOXELS)))),
     };
 }
 
@@ -63,6 +59,5 @@ export function writeState(s: CompareState): void {
     if (s.arch !== 'seed') q.set('arch', s.arch);
     if (s.walking) q.set('walk', '1');
     if (s.paused) { q.set('paused', '1'); q.set('yaw', ((s.yaw * 180) / Math.PI).toFixed(1)); }
-    if (s.voxels !== DEFAULT_VOXELS) q.set('vox', String(s.voxels));
     history.replaceState(null, '', `${location.pathname}?${q}`);
 }

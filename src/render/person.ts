@@ -321,6 +321,8 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
     const r = who.recipe, { phase, mv, lean } = pose, fidget = who.fidget;
     pools.setBase(slot, pose.x, 0, pose.z, pose.yaw, r.h);
     const put = pools.put.bind(pools), hide = pools.hide.bind(pools), hideRange = pools.hideRange.bind(pools);
+    // Parts an ink shell would swallow rather than outline; see PartPools.putBare.
+    const bare = pools.putBare.bind(pools);
     // Bases derived from the budget rather than repeated from it: a pool that grows must not
     // leave one of these behind, or every person would write over the next one's parts.
     const g = r.gait, c = slot * PER.cyl, b = slot * PER.box, k = slot * PER.ball, n = slot * PER.nub, d = slot * PER.body;
@@ -484,13 +486,15 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
     // past both cheeks; and one solid slab has no bridge, which is the thing the eye actually
     // reads as glasses rather than as a visor.
     //
-    // Scale first, because it is the trap here. The ink shell stands 0.0125 proud of *every* face
-    // whatever the part's size, and these are the smallest parts on the figure: at a typical head
-    // the old bar was specified 1.75 x 0.30 and drawn 1.99 x 0.46 -- the full width of the skull,
-    // and half again as tall as asked for. Nothing below is the size it looks: every piece renders
-    // about 0.025 fatter each way, and the gap between the lenses closes by the same amount, so
-    // the gap is written far wider than it wants to end up. Being INK already, the shell costs
-    // nothing but that growth -- it is the same colour as the part it wraps.
+    // Every piece here is drawn through `bare` and carries no ink shell. The shell stands 0.0125
+    // proud of *every* face whatever the part's size, and these are the smallest parts on the
+    // figure, so it was never an outline around them -- it was most of them: the bridge rendered
+    // about six times the thickness written for it, a lens over twice its height, and the gap
+    // between the lenses closed by 0.025. That is a visor, not a frame. It bought nothing either,
+    // being INK already: the same colour as the part it wrapped, so all it ever did was grow it.
+    //
+    // So what is written below is what is drawn, and the numbers no longer compensate for
+    // anything. To make the frames heavier, raise them.
     if (r.glasses) {
         // Each lens is laid along the sphere's own tangent at the eye. That yaw is the whole
         // difference between a pair of glasses and a slab: flat against the face, a lens is buried
@@ -503,7 +507,7 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
         const swing = Math.atan2(ex, er);
         for (let i = 0; i < 2; i++) {
             const side = i === 0 ? -1 : 1;
-            put('box', b + 10 + i, side * ex, faceY(ey, er), faceZ(ey, er), hp, side * swing, tilt,
+            bare('box', b + 10 + i, side * ex, faceY(ey, er), faceZ(ey, er), hp, side * swing, tilt,
                 0.34 * hr, 0.17 * hr, 0.05 * hr, INK);
         }
         // The bridge rides the top of the gap, not the middle of it: what has to survive is the
@@ -513,7 +517,7 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
         // at that height, which is further out than the lenses -- the frame curves, as it should.
         const by = ey + 0.055 * hr;
         const bz = Math.sqrt(Math.max(hr * hr - by * by, 1e-6));
-        put('box', b, 0, faceY(by, bz), faceZ(by, bz), hp, 0, tilt, 0.46 * hr, 0.04 * hr, 0.05 * hr, INK);
+        bare('box', b, 0, faceY(by, bz), faceZ(by, bz), hp, 0, tilt, 0.46 * hr, 0.04 * hr, 0.05 * hr, INK);
     } else { hide('box', b); hide('box', b + 10); hide('box', b + 11); }
 
     // hats
