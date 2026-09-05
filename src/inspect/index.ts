@@ -81,11 +81,24 @@ export function startInspector(mode: string): void {
         }
         panel.sync(state);
         if (must) { rebuild(); reframe(); }
+        // Once per change, never per frame: a held arrow key or a slider drag reaches here many
+        // times a second, and browsers rate-limit replaceState -- Safari throws past 100 in 30s.
         writeState(state, entity);
     }
 
+    /**
+     * Set one control. Every write to a control goes through here, which is what lets the gate rule
+     * live in one place: setting a gated scalar turns its gate on, so the slider and the nudge keys
+     * cannot drift apart. A rebuild is owed if either the scalar or the gate it just switched asked
+     * for one -- miss the second and a declared `rebuilds` would hold for the drag and not the key.
+     */
     function setControl(id: string, v: ControlValue): void {
-        patch({ controls: { [id]: v } }, controlOf(entity, id)?.rebuilds === true);
+        const c = controlOf(entity, id);
+        const gate = c?.kind === 'scalar' ? c.gate : undefined;
+        const controls = gate === undefined ? { [id]: v } : { [id]: v, [gate]: true };
+        const rebuilds = c?.rebuilds === true
+            || (gate !== undefined && controlOf(entity, gate)?.rebuilds === true);
+        patch({ controls }, rebuilds);
     }
 
     function toggleOverlay(id: string): void {
@@ -148,8 +161,7 @@ export function startInspector(mode: string): void {
         if (hit.kind === 'overlay') { toggleOverlay(hit.overlay.id); return true; }
         if (hit.kind === 'nudge') {
             const c = hit.control;
-            const next = wrap01(Number(state.controls[c.id]) + hit.delta * 0.02);
-            patch({ controls: c.gate === undefined ? { [c.id]: next } : { [c.id]: next, [c.gate]: true } });
+            setControl(c.id, wrap01(Number(state.controls[c.id]) + hit.delta * 0.02));
             return true;
         }
         const c = hit.control;

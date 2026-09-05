@@ -86,6 +86,7 @@ const swatch = (name: string, c: number): string => `<span class="sw"><i style="
 
 export interface Handlers {
     patch(p: Partial<InspectState>): void;
+    /** Set one control by id. A gated scalar's gate is the shell's to switch, not the panel's. */
     setControl(id: string, v: ControlValue): void;
     toggleOverlay(id: string): void;
     /** Next or previous variation: a fresh seed, or the next value of the stepping control. */
@@ -207,10 +208,10 @@ export class Panel {
             if (c.kind !== 'scalar') continue;
             const el = document.createElement('input');
             el.type = 'range'; el.min = '0'; el.max = '1000'; el.value = String(Math.round(c.value * 1000));
-            el.oninput = () => {
-                if (c.gate !== undefined) this.h.setControl(c.gate, true);
-                this.h.setControl(c.id, Number(el.value) / 1000);
-            };
+            // One setControl and not two: the gate is the shell's rule to apply, and a drag emits
+            // input events by the hundred, so a second patch per event would double the address-bar
+            // writes for nothing.
+            el.oninput = () => this.h.setControl(c.id, Number(el.value) / 1000);
             this.scalars.set(c.id, el);
             const row = document.createElement('div');
             row.className = 'row';
