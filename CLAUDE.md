@@ -7,7 +7,8 @@ check and the determinism test. `npm run lint` is the first two on their own.
 ## Layout
 
 - `src/core/` — `rng.ts` (seeded RNG and named streams), `time.ts` (`SIM_DT`), `hash.ts` (state hashing).
-- `src/palette.ts` — every colour in the game, as one 24-entry palette plus named families.
+- `src/palette.ts` — every colour in the game, as one 24-entry palette plus named families, and the
+  ground tones blended out of it.
 - `src/archetypes.ts` — who exists: behaviour numbers and look constraints per archetype.
 - `src/recipe.ts` — the appearance and gait roll for one person, and the age/mobility profiles.
 - `src/sim/` — pure simulation, no DOM or three.js: `simulation.ts` is the whole game state and its
@@ -15,7 +16,8 @@ check and the determinism test. `npm run lint` is the first two on their own.
 - `src/input/` — adapters, per-step sampling, and `recorder.ts` (the input log).
 - `src/world/` — the path and everything standing on it: `layout.ts` (dimensions and landmarks, in
   path coordinates), `path.ts` (the centreline curve and the conversion to world space; pure, no
-  three.js, so the simulation can import it), `ground.ts`, `railings.ts`, `props.ts`, `box.ts`.
+  three.js, so the simulation can import it), `ground.ts` (the surface, swept along that curve),
+  `railings.ts`, `props.ts`, `box.ts`.
 - `src/render/`, `src/camera.ts`, `src/ui.ts`, `src/debug.ts` — presentation only.
 - `src/main.ts` — the entry point and nothing else: it dynamic-imports the game, the character
   inspector when `?inspect=` is present, or the render comparator when `?compare=` is, so a normal
@@ -33,6 +35,8 @@ check and the determinism test. `npm run lint` is the first two on their own.
 - `test/inspect.test.ts` — proves a turntable person is byte-identical to the crowd's agent.
 - `test/path.test.ts` — the path-coordinate convention, including the exactness today's straight
   centreline gives and that a bent one still measures along and across itself correctly.
+- `test/ground.test.ts` — sweeps the ground's cross-section along a *bent* centreline and checks
+  every vertex and normal came out of the curve rather than out of world x.
 
 ## Seeds and restarting
 
@@ -81,10 +85,89 @@ Three conventions hold the scheme together:
 `frame.tx * along` alone: summing both terms is what stops a purely forward direction coming out
 with a negative zero across the path, which is invisible on screen and not invisible to `Hasher.f64`.
 
-The ground is still one slab covering the whole path, which is only the right shape while the
-centreline is a single straight run; a bend needs it built as a ribbon sampled off the curve. That
-is the ground layer's job. Everything else in `world/` is already placed and turned through the
-curve and needs no change when it happens.
+The ground is a ribbon swept along the centreline rather than a slab laid beside it, so it is
+already the right shape for a bend; see "The ground" below. Everything else in `world/` is placed
+and turned through the curve too, so nothing there changes when the centreline does.
+
+## The ground
+
+The ground is one **cross-section swept along the centreline**, not a slab: `HALF` in
+`world/ground.ts` is the walkway in profile from the middle outward -- surface, edge fade, trim
+strip, kerb, grass -- and `buildGround` steps along `s`, takes the path's frame at each step, and
+places that profile through it. Nothing in the mesh assumes a straight run: the section's offsets
+are `n`, its normals are rotated by the frame, and a bend needs no rework here. Only the sampling
+interval would: two units is smooth for any radius the walkway would plausibly take, and the grass
+reaching sixty units out is the part that pinches first if the curve ever gets tighter than that.
+
+Three things about the shape are worth knowing before changing it:
+
+- **A band is a strip, and bands do not share vertices.** Two bands meeting at one offset make a
+  crease -- a hard change of colour or of slope. A *gradient* is one band with two different
+  colours, which is what the edge fade is. That is the whole vocabulary; there is no third case.
+- **Bands are listed in order of increasing `n`, and that ordering is load-bearing.** One formula
+  orients every band from its own two stops, so a riser's outward face and a flat's upward face are
+  the same rule, and the triangle winding follows from the same pair. `section()` mirrors the half
+  profile into that order; a band written out of order comes out inside-out.
+- **The surface carries no pattern.** No grid, no tiles, nothing that repeats: a repeat is
+  something the eye locks onto and counts, and it competes with the crowd, which is the only thing
+  on screen the player has to read. The two tonal moves on it are both non-repeating -- a fade to a
+  slightly deeper concrete over the outer three metres, which reads as shading rather than as a
+  painted lane, and the grain below.
+
+There are two boundaries because the railings hide the outer one. A walker sees the trim strip at
+the railings' feet; the kerb, its lip and the grass are only visible through a doorway, from the
+top camera, or in the distance. Both get an **ink line** -- a thin dark strip laid along the edge,
+in `INK_LINE` from `render/materials.ts`, the same colour the people's outline shells are. It has
+to be drawn rather than inflated: a back-face shell works for a part because a part has a centre to
+grow away from, and a ribbon has none. It is a second mesh purely so `Ground.setInk` can switch it
+with `pools.setInk`, which `game.ts` does in one place so the ground and the crowd always carry the
+same line -- including under a `?look=` treatment that turns the shells off.
+
+A `Zone` recolours the walking surface over a range of `s`, which is the mechanism for varying the
+ground by place. It works by resolving the two *roles* the surface bands name (`centre` and `edge`)
+per sample, and by adding a pair of samples either side of each boundary so the change lands as an
+edge rather than a ramp. **The two pads are zones**, not slabs of their own: that keeps them flush
+with the path, saves two draw calls, and keeps the mechanism exercised on every run instead of
+rotting behind a flag. A plaza is one more entry in `ZONES`.
+
+Colours come from `GROUND` in `palette.ts`, and each one is one palette entry heavily diluted into
+another -- a ground picked independently would be the one thing on screen not made of the same
+world, and a blend cannot come out louder than either of its ends. The walkway is the case that
+took two goes: concrete has to read *cool*, and every neutral in the clothing palette is sand, so a
+surface mixed from oat and stone comes out beige however it is balanced. It is off-white with a
+quarter of navy stirred through it instead. The pads are the exception and are palette entries
+outright, because they are the only ground the player has to *read*.
+
+The surface's **grain** is the one thing here that is not geometry. It is a two-octave value noise
+patched into the ground's toon material by `grainy()`, multiplying the diffuse colour by about
+1 +/- 18%. Three things about it are settled and should not be relitigated without knowing why:
+
+- **It is per fragment, not per vertex.** The ground is seen at a grazing angle, so the whole lower
+  half of the screen is about six metres of surface. Vertex colour was tried first and measured: at
+  a metre between vertices the variation came out at a tenth of a grey level -- invisible -- for
+  four times the geometry, and it would have needed sub-metre vertices to read at all.
+- **It is sampled in path coordinates**, from a `path` attribute the sweep writes alongside the
+  positions. So the grain is anchored to the walkway: it travels round a bend with the surface
+  rather than sliding across it, and the sweep knew `(s, n)` anyway so it costs nothing to keep true.
+- **It fades out with distance and is a tier setting.** Grain finer than a pixel is not texture, it
+  is shimmer, so it is gone by 55 metres -- which is also where the fog has taken the ground. It is
+  the only thing in the ground that costs *fill* rather than geometry, so `low` turns it off, the
+  same lever the ink shells already had. It rides on a uniform rather than a baked constant so that
+  switch needs no recompile.
+
+It is still the same `MeshToonMaterial` on the same three-step ramp the crowd is shaded by, with one
+multiply added after the vertex colour: nothing about how the ground takes light has changed. Set
+`GRAIN` to 0 for a dead flat surface.
+
+All of it is two meshes and 4,920 triangles, which is the trade the sweep makes: large flat
+geometry is cheap and draw calls are not. The ground is pure presentation -- it draws no random
+numbers and the simulation never imports it -- so **neither hash moves when it changes**. The grain
+included: it is a function of place, reads no stream and takes no seed, so the world is grained
+identically in every run.
+
+`test/ground.test.ts` is what keeps the sweep honest, and it works the only way it can: by sweeping
+the section along a right-angled bend the game has never drawn, and measuring every vertex back off
+that curve. A straight-line shortcut in here would look perfect on today's walkway and fail there.
 
 ## Character recipes
 

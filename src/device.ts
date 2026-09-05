@@ -1,4 +1,4 @@
-/** Device tier: picks crowd size, pixel ratio and ink outlines to suit the platform. */
+/** Device tier: picks crowd size, pixel ratio, ink outlines and ground grain to suit the platform. */
 export type Tier = 'low' | 'mid' | 'high';
 export const TIERS: readonly Tier[] = ['low', 'mid', 'high'];
 
@@ -8,12 +8,14 @@ export interface TierSettings {
     /** Upper bound on devicePixelRatio. */
     maxPixelRatio: number;
     ink: boolean;
+    /** The ground's per-pixel surface grain: the only thing here that costs fill rather than geometry. */
+    grain: boolean;
 }
 
 export const TIER_SETTINGS: Record<Tier, TierSettings> = {
-    low:  { label: 'Low',  crowd: 40, maxPixelRatio: 1,   ink: false },
-    mid:  { label: 'Mid',  crowd: 60, maxPixelRatio: 1.5, ink: true },
-    high: { label: 'High', crowd: 80, maxPixelRatio: 2,   ink: true },
+    low:  { label: 'Low',  crowd: 40, maxPixelRatio: 1,   ink: false, grain: false },
+    mid:  { label: 'Mid',  crowd: 60, maxPixelRatio: 1.5, ink: true,  grain: true },
+    high: { label: 'High', crowd: 80, maxPixelRatio: 2,   ink: true,  grain: true },
 };
 
 const STORAGE_KEY = 'coming-through.tier';

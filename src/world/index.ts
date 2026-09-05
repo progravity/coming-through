@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { buildGround } from './ground.ts';
+import type { Ground } from './ground.ts';
 import { buildProps } from './props.ts';
 import type { Props } from './props.ts';
 import { buildRailings } from './railings.ts';
 
-export interface World { scene: THREE.Scene; props: Props; }
+export interface World { scene: THREE.Scene; ground: Ground; props: Props; }
 
 /**
  * Even hemisphere fill plus the key light every person is lit by. Shared with the character
@@ -23,8 +24,8 @@ export function buildWorld(): World {
     scene.background = new THREE.Color(0x9ed0e6);
     scene.fog = new THREE.Fog(0x9ed0e6, 40, 110);
     addLights(scene);
-    buildGround(scene);
+    const ground = buildGround(scene);
     buildRailings(scene);
     const props = buildProps(scene);
-    return { scene, props };
+    return { scene, ground, props };
 }

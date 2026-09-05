@@ -150,6 +150,66 @@ export const HAIR_OLDER: readonly number[] = [0x9a9490, 0xd8d4cc, 0x8c8c8c, 0x6e
 export const INK = 0x2a2a2e;
 
 /**
+ * Blend two packed colours, `t` of the way from `a` to `b`, per channel.
+ *
+ * This is how the ground tones below are written: a surface the crowd walks on has to sit *with*
+ * the clothes without being one of them, and the honest way to say that is "oat, let down toward
+ * stone" rather than a hex nobody can place. It is also what the skin ramp interpolates with.
+ */
+export function mix(a: number, b: number, t: number): number {
+    const r = Math.round(((a >> 16) & 255) + ((((b >> 16) & 255) - ((a >> 16) & 255)) * t));
+    const g = Math.round(((a >> 8) & 255) + ((((b >> 8) & 255) - ((a >> 8) & 255)) * t));
+    const c = Math.round((a & 255) + (((b & 255) - (a & 255)) * t));
+    return (r << 16) | (g << 8) | c;
+}
+
+/**
+ * The ground the crowd walks on.
+ *
+ * Not clothing, so like hair it gets its own names rather than being an index into `PALETTE` --
+ * but every one of them is *made of* palette entries, because a ground that were picked
+ * independently would be the one thing on screen that did not belong to the same world. Each tone
+ * is one palette entry heavily diluted into another, which is what keeps a surface quiet by
+ * construction: a blend lands between its two ends in chroma and so cannot come out louder than
+ * either, and diluting into off-white takes most of what chroma is left.
+ *
+ * The pads are the exception and are palette entries outright. They are the only ground the player
+ * has to *read* rather than merely stand on, and cornflower and sage are already the colours the
+ * game names them by.
+ */
+const VERGE = mix(PALETTE[13], PALETTE[14], 0.45);
+export const GROUND = {
+    /**
+     * The walkway: off-white with a quarter of navy stirred through it.
+     *
+     * Concrete has to be *cool*, and that is the one thing the clothing neutrals cannot supply --
+     * oat, stone and taupe are all sand, and a walkway mixed from them comes out beige however it
+     * is balanced. Navy is the palette's coolest entry, and a quarter of it is enough to take the
+     * warmth out without leaving a blue floor: what lands is very nearly neutral, a touch cooler
+     * than the cream shop fronts and clearly not the same material as the grass.
+     */
+    path: mix(PALETTE[0], PALETTE[6], 0.25),
+    /**
+     * The same concrete at the edges, a seventh darker. That is enough to give the walkway a
+     * shoulder across its width; much more and the shoulder starts reading as a painted lane, which
+     * is the pattern this ground exists to avoid.
+     */
+    pathEdge: mix(PALETTE[0], PALETTE[6], 0.4),
+    /** The strip that ends the walkway, inside the railings and again outside them. */
+    kerb: mix(PALETTE[2], PALETTE[3], 0.7),
+    /** Anything the kerb turns through: a face at that angle is a dark band under the toon ramp. */
+    kerbSide: mix(PALETTE[3], PALETTE[4], 0.45),
+    /** Grass beside the path. Sage alone is a poster green and lime alone is a highlighter. */
+    verge: VERGE,
+    /** The same grass further out, let down toward olive so the distance falls away. */
+    vergeFar: mix(VERGE, PALETTE[12], 0.4),
+    startPad: PALETTE[8],
+    startPadEdge: mix(PALETTE[8], PALETTE[6], 0.45),
+    goalPad: PALETTE[13],
+    goalPadEdge: mix(PALETTE[13], PALETTE[12], 0.4),
+} as const;
+
+/**
  * Skin as a continuous ramp rather than a fixed pick: eight anchors from light to deep, with a
  * little hue drift along the way, interpolated by the recipe's skin axis.
  */
@@ -160,11 +220,7 @@ export function skinTone(t: number): number {
     const n = SKIN_ANCHORS.length - 1;
     const f = (t < 0 ? 0 : t > 0.999999 ? 0.999999 : t) * n;
     const i = Math.floor(f), k = f - i;
-    const a = SKIN_ANCHORS[i], b = SKIN_ANCHORS[i + 1];
-    const r = Math.round(((a >> 16) & 255) + ((((b >> 16) & 255) - ((a >> 16) & 255)) * k));
-    const g = Math.round(((a >> 8) & 255) + ((((b >> 8) & 255) - ((a >> 8) & 255)) * k));
-    const c = Math.round((a & 255) + (((b & 255) - (a & 255)) * k));
-    return (r << 16) | (g << 8) | c;
+    return mix(SKIN_ANCHORS[i], SKIN_ANCHORS[i + 1], k);
 }
 
 /** Select from a family with an already-drawn roll in [0, 1). Never draws. */

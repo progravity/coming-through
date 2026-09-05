@@ -12,7 +12,14 @@ export function makeToonMaterial(gradientMap: THREE.DataTexture): THREE.MeshToon
     return new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap });
 }
 
+/**
+ * The outline colour. Named because the ground draws its own edge as a flat strip rather than as a
+ * back-face shell -- a ribbon has no centre to grow it away from -- and the two lines have to be
+ * the same line.
+ */
+export const INK_LINE = 0x1b1a1f;
+
 /** Back-face "ink" shell drawn slightly larger than the toon mesh to fake an outline. */
 export function makeInkMaterial(): THREE.MeshBasicMaterial {
-    return new THREE.MeshBasicMaterial({ color: 0x1b1a1f, side: THREE.BackSide });
+    return new THREE.MeshBasicMaterial({ color: INK_LINE, side: THREE.BackSide });
 }

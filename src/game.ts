@@ -119,13 +119,15 @@ function setCount(n: number): void {
     // starts has to re-prime; changing it mid-run just moves the target populate() tops up to.
     if (!running) startRun(seed);
 }
-function setInk(on: boolean): void { pools.setInk(on); ui.setInk(on); }
+// The ground carries the same line the people do, so both switch together.
+function setInk(on: boolean): void { pools.setInk(on); world.ground.setInk(on); ui.setInk(on); }
 function applyTier(t: Tier): void {
     tier = t;
     const s = TIER_SETTINGS[t];
     renderer.setPixelRatio(pixelRatioFor(t));
     if (!stress) setCount(s.crowd);
     setInk(s.ink);
+    world.ground.setGrain(s.grain);
     ui.setTier(t);
 }
 function cycleCamera(): void { ui.setCamera(rig.cycle()); }
@@ -158,8 +160,9 @@ async function applyLook(name: string): Promise<void> {
     }
     const meshes = poolMeshes(world.scene);
     treatment.dress(pools, meshes);
-    // dress() may have turned the shells off behind setInk()'s back; the button has to agree with
-    // what is actually drawn, and toggling it afterwards still works from there.
+    // dress() may have turned the shells off behind setInk()'s back; the ground's line and the
+    // button both have to agree with what is actually drawn, and toggling afterwards works from there.
+    world.ground.setInk(pools.inkOn);
     ui.setInk(pools.inkOn);
     const after = treatment.after;
     if (after !== undefined) lookAfter = () => after(meshes);
