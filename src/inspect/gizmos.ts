@@ -42,8 +42,18 @@ const CORNERS: readonly (readonly [number, number, number])[] = [
     [-0.5, -0.5, 0.5], [0.5, -0.5, 0.5], [-0.5, 0.5, 0.5], [0.5, 0.5, 0.5],
 ];
 
-/** Parts whose centre sits below this contribute to the ground shadow's footprint. */
-const FOOT_Y = 0.9;
+/**
+ * How far up an exhibit a part's centre may sit and still contribute to the ground shadow's
+ * footprint, as a fraction of the exhibit's own height.
+ *
+ * A fraction rather than a height in metres, because no height in metres works for more than one
+ * kind of thing. This used to be 0.9 -- a person's knee -- and a lamp post has no part centred
+ * anywhere near a knee: it is one cylinder centred at 1.6 m with a globe above it, so the cut-off
+ * matched nothing, the footprint fell through to its zero case and the lamp's shadow landed at the
+ * stage origin however far along the row the lamp was standing. Half of a person's height is where
+ * 0.9 already fell, so nobody's shadow moved.
+ */
+const FOOT_FRAC = 0.5;
 
 export class RecordingPools extends PartPools {
     /** Grows to the high-water mark and is then reused; `recorded` is how many are live. */
@@ -75,29 +85,44 @@ export class RecordingPools extends PartPools {
     }
 }
 
-/** World-space extent of one person, plus the footprint of everything low enough to cast a shadow. */
+/** World-space extent of one exhibit, plus the footprint of everything low enough to cast a shadow. */
 export interface Bounds {
     minX: number; maxX: number;
     minY: number; maxY: number;
     minZ: number; maxZ: number;
+    /**
+     * The furthest any corner reaches from the stage's own axis.
+     *
+     * Which is the exhibit's own radius only while it is drawn at the origin -- and that is exactly
+     * the case the stage measures it in, because a radius is the one horizontal size a turntable
+     * cannot change: an exhibit turns about its anchor, so what it sweeps at one angle it sweeps at
+     * all of them. A framing read off `minX`/`maxX` instead would be true of the angle it was taken
+     * at and of no other.
+     */
+    radius: number;
     footMinX: number; footMaxX: number;
     footMinZ: number; footMaxZ: number;
 }
 
 export const newBounds = (): Bounds => ({
-    minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0,
+    minX: 0, maxX: 0, minY: 0, maxY: 0, minZ: 0, maxZ: 0, radius: 0,
     footMinX: 0, footMaxX: 0, footMinZ: 0, footMaxZ: 0,
 });
 
-/** Measure the parts recorded in [from, to) into `out`. */
+/**
+ * Measure the parts recorded in [from, to) into `out`.
+ *
+ * Two passes, because the footprint's cut-off is a fraction of a height the first pass is what
+ * finds. Only the parts under it are walked twice, which on anything tall is a handful of them.
+ */
 export function measure(parts: readonly DrawnPart[], from: number, to: number, out: Bounds): Bounds {
     out.minX = out.minY = out.minZ = Infinity;
     out.maxX = out.maxY = out.maxZ = -Infinity;
     out.footMinX = out.footMinZ = Infinity;
     out.footMaxX = out.footMaxZ = -Infinity;
+    let r2 = 0;
     for (let i = from; i < to; i++) {
         const m = parts[i].matrix;
-        const low = m.elements[13] < FOOT_Y;
         for (const [cx, cy, cz] of CORNERS) {
             _corner.set(cx, cy, cz).applyMatrix4(m);
             if (_corner.x < out.minX) out.minX = _corner.x;
@@ -106,7 +131,22 @@ export function measure(parts: readonly DrawnPart[], from: number, to: number, o
             if (_corner.y > out.maxY) out.maxY = _corner.y;
             if (_corner.z < out.minZ) out.minZ = _corner.z;
             if (_corner.z > out.maxZ) out.maxZ = _corner.z;
-            if (!low) continue;
+            const d = _corner.x * _corner.x + _corner.z * _corner.z;
+            if (d > r2) r2 = d;
+        }
+    }
+    out.radius = Math.sqrt(r2);
+    // Nothing drawn measures as nothing, rather than as a box from +Infinity to -Infinity that
+    // whatever reads it has to know to distrust.
+    if (out.minX === Infinity) {
+        out.minX = out.maxX = out.minY = out.maxY = out.minZ = out.maxZ = 0;
+    }
+    const foot = out.minY + FOOT_FRAC * (out.maxY - out.minY);
+    for (let i = from; i < to; i++) {
+        const m = parts[i].matrix;
+        if (m.elements[13] > foot) continue;
+        for (const [cx, cy, cz] of CORNERS) {
+            _corner.set(cx, cy, cz).applyMatrix4(m);
             if (_corner.x < out.footMinX) out.footMinX = _corner.x;
             if (_corner.x > out.footMaxX) out.footMaxX = _corner.x;
             if (_corner.z < out.footMinZ) out.footMinZ = _corner.z;

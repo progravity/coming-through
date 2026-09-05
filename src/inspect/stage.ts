@@ -13,9 +13,10 @@ const BACK_Z = -10;
 /** Depth of the height reference. It hangs behind the figures so it can never intersect a body. */
 const REF_Z = -1.6;
 /** Half width of the reference, in figure-plane metres; wider than any framing so it always crops. */
-const REF_W = 10;
-/** Top of the height reference, in metres. */
-const REF_H = 2.5;
+const REF_W = 40;
+
+/** Clear air left between two neighbours in a row, and around the whole of what is framed. */
+const GAP = 0.3, MARGIN = 0.2;
 
 /** A vertical two-stop gradient, used unlit so the stage never competes with the figure. */
 function gradient(a: string, b: string): THREE.CanvasTexture {
@@ -52,30 +53,98 @@ function lines(points: number[], opacity: number): THREE.LineSegments {
 }
 
 /**
- * Horizontal marks every 25 cm with brighter ones at each whole metre, and a faint vertical grid
- * behind them. Built in *figure-plane* metres; `resize` then pushes the whole group back and
- * scales it up to match, so a mark still lands exactly where that height is on the body.
+ * Horizontal marks with brighter ones at each whole metre, and a faint vertical grid behind them.
+ * Built in *figure-plane* metres; `resize` then pushes the whole group back and scales it up to
+ * match, so a mark still lands exactly where that height is on the body.
+ *
+ * It is built to the top of the shot rather than to a constant, because a ruler that stops a third
+ * of the way up a 4.7 m cart is not a ruler -- and one that stops just inside the frame is a line
+ * across the backdrop. The step coarsens with it for the same reason: 25 cm marks are a scale on a
+ * person and a hatch on a cart, so the finest that stays readable is the one taken, and the grid
+ * behind them is twice whatever the marks are.
  */
-function buildReference(): THREE.Group {
+function buildReference(top: number): THREE.LineSegments[] {
+    const step = top <= 3 ? 0.25 : top <= 6 ? 0.5 : 1;
     const minor: number[] = [], major: number[] = [];
-    for (let i = 0; i * 0.25 <= REF_H + 1e-6; i++) {
-        const y = i * 0.25;
+    for (let i = 0; i * step <= top + 1e-6; i++) {
+        const y = i * step;
         (Math.abs(y - Math.round(y)) < 1e-6 ? major : minor).push(-REF_W, y, 0, REF_W, y, 0);
     }
-    for (let x = -REF_W; x <= REF_W + 1e-6; x += 0.5) {
-        (Math.abs(x) < 1e-6 ? major : minor).push(x, 0, 0, x, REF_H, 0);
+    for (let x = -REF_W; x <= REF_W + 1e-6; x += step * 2) {
+        (Math.abs(x) < 1e-6 ? major : minor).push(x, 0, 0, x, top, 0);
     }
-    const g = new THREE.Group();
-    g.add(lines(minor, 0.07), lines(major, 0.21));
-    return g;
+    return [lines(minor, 0.07), lines(major, 0.21)];
 }
 
-export type StageMode = 'single' | 'row';
+/**
+ * How much room one exhibit needs, measured off the parts it actually drew.
+ *
+ * Measured and not declared: `Inspectable` says what a thing *is*, and how big it comes out is a
+ * property of the geometry the game's own assembler produced, which the shell is already holding.
+ * A `size` on the interface would be a second statement of it that could disagree.
+ */
+export interface Extent {
+    /** What it sweeps as the turntable turns it, so the framing holds at every angle. */
+    radius: number;
+    minY: number;
+    maxY: number;
+}
+
+/** Where the exhibits stand, and the box the camera has to hold them in. */
+export interface Framing {
+    /** Each exhibit's x on the stage, the row centred on the origin. */
+    xs: number[];
+    halfW: number;
+    halfH: number;
+    centerY: number;
+}
+
+/**
+ * Pack the exhibits along the stage and work out what has to be in shot.
+ *
+ * Pure arithmetic on measured extents, kept out of `Stage` so it can be tested without a canvas --
+ * which is the thing a measured layout can be and an assumed one never could.
+ *
+ * Two decisions in here are worth stating. Neighbours are spaced by their **own** radii rather than
+ * on a common interval, so a stroller and a child each take the room they need instead of every
+ * figure taking the widest one's. And the framed height is rounded **up to a whole metre** -- the
+ * same marks the reference's majors are drawn at -- because the stage's promise is that a render
+ * taken before a change and one taken after put the head in the same pixels, and a camera that
+ * moved every time a hat made someone two centimetres taller would break it for a rounding error.
+ */
+export function frameFor(extents: readonly Extent[]): Framing {
+    const xs: number[] = [];
+    let x = 0;
+    for (let i = 0; i < extents.length; i++) {
+        if (i > 0) x += extents[i - 1].radius + GAP + extents[i].radius;
+        xs.push(x);
+    }
+    const first = extents[0], last = extents[extents.length - 1];
+    const left = first === undefined ? 0 : xs[0] - first.radius;
+    const right = last === undefined ? 0 : xs[xs.length - 1] + last.radius;
+    const mid = (left + right) / 2;
+    for (let i = 0; i < xs.length; i++) xs[i] -= mid;
+    // The ground line is always in shot, so the frame reaches down to it even when nothing does.
+    let low = 0, high = 0;
+    for (const e of extents) {
+        if (e.minY < low) low = e.minY;
+        if (e.maxY > high) high = e.maxY;
+    }
+    const reach = Math.max(1, Math.ceil(high - 1e-6));
+    return {
+        xs,
+        halfW: (right - left) / 2 + MARGIN,
+        halfH: (reach - low) / 2 + MARGIN,
+        centerY: (reach + low) / 2,
+    };
+}
 
 export class Stage {
     readonly scene = new THREE.Scene();
     readonly camera = new THREE.PerspectiveCamera(30, 1, 0.1, 120);
-    private readonly reference = buildReference();
+    /** Rebuilt whenever the framed height changes, so the ruler always reaches the top of the shot. */
+    private readonly reference = new THREE.Group();
+    private refTop = 0;
     private readonly shadows: THREE.Mesh[] = [];
     private readonly shadowGeo = new THREE.PlaneGeometry(1, 1);
     private readonly shadowMat: THREE.MeshBasicMaterial;
@@ -113,16 +182,40 @@ export class Stage {
         this.shadowMat = new THREE.MeshBasicMaterial({ map: shadowTexture(), transparent: true, depthWrite: false });
     }
 
-    /** Space `count` figures across the stage and frame them all. Returns each figure's x. */
-    layout(mode: StageMode, count: number): number[] {
-        const spacing = 1.15;
-        const xs: number[] = [];
-        for (let i = 0; i < count; i++) xs.push(mode === 'single' ? 0 : (i - (count - 1) / 2) * spacing);
-        this.halfH = mode === 'single' ? 1.2 : 1.32;
-        this.centerY = mode === 'single' ? 0.95 : 1.05;
-        this.halfW = mode === 'single' ? 0.95 : ((count - 1) / 2) * spacing + 0.4;
+    /**
+     * Stand the measured exhibits across the stage and frame the lot. Returns each one's x.
+     *
+     * The numbers in here used to be a person's: a fixed 1.15 m interval, 1.2 m of half height and a
+     * centre at 0.95. They framed a person because a person was all there was, and they cropped the
+     * topper off every cart -- which is the one view the carts were built to be judged in. So the
+     * stage no longer assumes a size; it is told the measured one and holds what it is given.
+     */
+    layout(extents: readonly Extent[]): number[] {
+        const f = frameFor(extents);
+        this.halfW = f.halfW;
+        this.halfH = f.halfH;
+        this.centerY = f.centerY;
         this.resize(innerWidth, innerHeight, this.insetL, this.insetR);
-        return xs;
+        return f.xs;
+    }
+
+    /**
+     * Draw the height reference to `top` metres, rebuilding it only when that changes.
+     *
+     * `resize` is what calls this, because the top of the shot is what it is drawn to and only
+     * `resize` knows where that is: on a wide row it is the *width* that sets how far back the
+     * camera stands, and the frame then reaches metres above anything the layout asked for.
+     */
+    private setReference(top: number): void {
+        if (top === this.refTop) return;
+        this.refTop = top;
+        for (const c of this.reference.children) {
+            const seg = c as THREE.LineSegments;
+            seg.geometry.dispose();
+            (seg.material as THREE.Material).dispose();
+        }
+        this.reference.clear();
+        this.reference.add(...buildReference(top));
     }
 
     /**
@@ -150,6 +243,8 @@ export class Stage {
         cam.position.set(shift, this.centerY, dist);
         cam.lookAt(shift, this.centerY, 0);
         cam.updateProjectionMatrix();
+
+        this.setReference(Math.ceil(this.centerY + dist * halfV));
 
         // Scale the reference about the camera axis by exactly the perspective it loses by hanging
         // further back, so a 1 m mark reads as 1 m against the body rather than as 0.85 m.

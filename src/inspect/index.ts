@@ -19,6 +19,7 @@ import type { ControlValue, DrawnPart, Inspectable, Readout } from './inspectabl
 import { Panel } from './panel.ts';
 import { DEFAULT_ENTITY, byId } from './registry.ts';
 import { Stage } from './stage.ts';
+import type { Extent } from './stage.ts';
 import { readState, writeState } from './state.ts';
 import type { InspectState } from './state.ts';
 
@@ -45,6 +46,10 @@ export function startInspector(mode: string): void {
     const bounds = newBounds();
 
     let xs: number[] = [];
+    /** Anchors for the probe draw: every exhibit at the origin, so each one measures only itself. */
+    const origins: number[] = [];
+    /** What the probe measured, handed to the stage so it frames what is actually on it. */
+    const extents: Extent[] = [];
     /** Highest silhouette seen per exhibit since the last rebuild, so heights settle and hold. */
     const tops: number[] = [];
     /** Every drawn part this frame, for the gizmo layer. Filled only when the gizmos are on. */
@@ -54,10 +59,30 @@ export function startInspector(mode: string): void {
 
     const count = (): number => (state.mode === 'row' ? entity.row : 1);
 
+    /**
+     * Build the cast, measure it, and frame what was measured.
+     *
+     * The measuring is a **probe draw**: the same `draw` the frame loop makes, with every anchor at
+     * the origin, so each exhibit reports its own size free of where it is about to stand. Asking
+     * the geometry is the honest way round -- the shell is already drawing the thing and already
+     * measuring every part of it, and a `size` declared on `Inspectable` would be a second statement
+     * of the same fact with nothing keeping the two in step. It also settles in no frames at all,
+     * where a high-water mark taken from the live draw would chase a layout that its own
+     * measurements had moved. One extra draw per rebuild, and `draw` writes nothing the next frame
+     * does not overwrite.
+     */
     function rebuild(): void {
         const n = count();
         cast.rebuild(state.seed, n, state.controls);
-        xs = stage.layout(state.mode, n);
+        while (origins.length < n) origins.push(0);
+        cast.draw(clock, origins, state.yaw);
+        extents.length = 0;
+        for (let i = 0; i < n; i++) {
+            const parts = cast.parts(i);
+            measure(parts, 0, parts.length, bounds);
+            extents.push({ radius: bounds.radius, minY: bounds.minY, maxY: bounds.maxY });
+        }
+        xs = stage.layout(extents);
         tops.length = 0;
         for (let i = 0; i < n; i++) tops.push(0);
         needsReadout = true;

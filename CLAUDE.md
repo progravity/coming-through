@@ -48,8 +48,10 @@ check and the determinism test. `npm run lint` is the first two on their own.
   guarding `Subject` against `Agent` specifically.
 - `test/inspectable.test.ts` — that the inspector's shell depends only on the interface: its
   imports reach no entity, a hypothetical entity nobody has written is driven through the shell's
-  state, URL and keymap, every person URL that worked before still works, and every registered
-  entity declares something the panel can render.
+  state, URL and keymap, every person URL that worked before still works and nothing a cast writes
+  back reaches one, every registered entity declares something the panel can render, the stage
+  frames what it measures rather than what a person is, and an object placed by the path's frame
+  lands where the staging says on the stage.
 - `test/path.test.ts` — the path-coordinate convention, including the exactness today's straight,
   level, uniform-width path gives; that a bent centreline still measures along and across itself;
   and that a test-only curve which bends, widens and climbs puts edge elements and world heights
@@ -626,6 +628,19 @@ of any of it and there must never be one — a turntable that draws a thing diff
 is worse than no turntable. `test/inspect.test.ts` compares `Subject` against a real `Agent`,
 `test/edge.test.ts` rebuilds `furniturePlan` out of the three builders the inspector calls, and
 `test/kiosks.test.ts` pins that a cart on the stage is its archetype with only the paint rolled.
+
+**The stage measures what it holds rather than assuming a size.** After each rebuild the shell
+draws the cast once with every anchor at the origin and measures each exhibit there, then hands
+`Stage.layout` what came back: neighbours are spaced by their own swept **radius** plus a gap, and
+the frame, the camera and the height ruler are set from the tallest. The radius rather than the
+width, because an exhibit turns about its anchor and a layout read off one angle is wrong at every
+other — which is how a pram used to end up inside the person beside it at 90°. Measured rather than
+declared, because the shell is already drawing the thing and already measuring every part of it, so
+a `size` on `Inspectable` could only be a second statement of the same fact that disagreed with the
+first. The framed height is rounded up to a whole metre so a centimetre of hat does not move the
+camera: a render taken before a change and one taken after have to put the head in the same pixels.
+The person-shaped constants that used to be here — a 1.15 m interval, 1.2 m of half height, a centre
+at 0.95 — cropped the topper off every cart, which is the one view a cart exists to be judged in.
 
 **The shell knows nothing about any of them.** `index.ts`, `panel.ts` and `state.ts` drive one
 small interface in `inspectable.ts` and import `registry.ts` and nothing else entity-shaped —
