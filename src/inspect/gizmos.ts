@@ -14,8 +14,17 @@
 import * as THREE from 'three';
 import { PartPools } from '../render/pools.ts';
 import type { PoolName } from '../render/pools.ts';
+import type { DrawnPart } from './inspectable.ts';
 
-export interface PartRecord {
+/**
+ * One part `drawPerson` put, as `RecordingPools` saw it.
+ *
+ * A `DrawnPart` with the pool and index it went into. The universal overlays take the narrower
+ * type, because a kiosk's parts come out of `standingMatrix` and have no pool behind them -- what
+ * the two have in common is a matrix over a unit-sized, origin-centred geometry, and that is all
+ * a bounding box or an origin cross ever needed.
+ */
+export interface PartRecord extends DrawnPart {
     pool: PoolName;
     idx: number;
     /** The colour the part was drawn in, which is what says whether a seam against it can show. */
@@ -81,7 +90,7 @@ export const newBounds = (): Bounds => ({
 });
 
 /** Measure the parts recorded in [from, to) into `out`. */
-export function measure(parts: readonly PartRecord[], from: number, to: number, out: Bounds): Bounds {
+export function measure(parts: readonly DrawnPart[], from: number, to: number, out: Bounds): Bounds {
     out.minX = out.minY = out.minZ = Infinity;
     out.maxX = out.maxY = out.maxZ = -Infinity;
     out.footMinX = out.footMinZ = Infinity;
@@ -135,7 +144,7 @@ export class PartGizmos {
     setVisible(on: boolean): void { this.group.visible = on; }
 
     /** Point one box and one cross at each recorded part; hide whatever is left over. */
-    update(parts: readonly PartRecord[], count: number): void {
+    update(parts: readonly DrawnPart[], count: number): void {
         if (!this.group.visible) return;
         for (let i = 0; i < count; i++) {
             const m = parts[i].matrix;
