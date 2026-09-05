@@ -7,11 +7,12 @@
  *
  * Adding an entity is a file in `entities/` and a line in `ENTITIES`. There is no step three.
  */
+import { FURNITURE } from './entities/furniture.ts';
 import { KIOSK } from './entities/kiosk.ts';
 import { PERSON } from './entities/person.ts';
 import type { Controls, Inspectable } from './inspectable.ts';
 
-export const ENTITIES: readonly Inspectable[] = [PERSON, KIOSK];
+export const ENTITIES: readonly Inspectable[] = [PERSON, KIOSK, FURNITURE];
 
 /** What `?inspect=1` means with no `entity` named. Every URL written before this existed. */
 export const DEFAULT_ENTITY = 'person';
@@ -22,7 +23,11 @@ export const DEFAULT_ENTITY = 'person';
  * Data rather than a branch in the shell, so `?entity=bench` is a bench without anything having to
  * know what a bench is. An explicit control in the URL still wins over a pin.
  */
-export const ALIASES: Readonly<Record<string, { entity: string; controls: Controls }>> = {};
+export const ALIASES: Readonly<Record<string, { entity: string; controls: Controls }>> = {
+    bench: { entity: 'furniture', controls: { kind: 'bench' } },
+    lamp: { entity: 'furniture', controls: { kind: 'lamp' } },
+    bin: { entity: 'furniture', controls: { kind: 'bin' } },
+};
 
 export const byId = (id: string): Inspectable | undefined => ENTITIES.find(e => e.id === id);
 

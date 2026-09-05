@@ -18,8 +18,11 @@ import { Subject } from '../src/inspect/subject.ts';
 import { ARCH_KEYS } from '../src/archetypes.ts';
 import { controlOf, defaultControls, findKey, overlaysOf } from '../src/inspect/inspectable.ts';
 import type { Cast, Inspectable } from '../src/inspect/inspectable.ts';
-import { ENTITIES } from '../src/inspect/registry.ts';
-import { queryOf, stateFor } from '../src/inspect/state.ts';
+import { ENTITIES, resolve } from '../src/inspect/registry.ts';
+import { queryOf, readState, stateFor } from '../src/inspect/state.ts';
+import { FURNITURE } from '../src/inspect/entities/furniture.ts';
+import { bench } from '../src/world/furniture.ts';
+import { PATH } from '../src/world/path.ts';
 
 /** A part is a unit cube under its own matrix, whichever pool or kit drew it. */
 const part = (x: number, y: number, z: number, sx: number, sy: number, sz: number): DrawnPart => ({
@@ -183,4 +186,34 @@ test('every registered entity declares something the shell can render', () => {
             seen.add(o.id);
         }
     }
+});
+
+test('a bench stands on the stage with the collider the crowd walks round', () => {
+    const cast = FURNITURE.mount(new THREE.Scene());
+    cast.rebuild(1, 1, { ...defaultControls(FURNITURE), kind: 'bench' });
+    cast.draw(0, [0], 0);
+    // The same builder the promenade is made of, so the thing on the stage is the thing out there.
+    const plan = bench(PATH, 0, 1, 1);
+    assert.equal(cast.parts(0).length, plan.standing.length);
+    const rows = new Map(cast.readout(0, 0.9).rows);
+    const s = plan.solids[0];
+    assert.equal(rows.get('collider'), `capsule · half ${s.half.toFixed(2)} · r ${s.r.toFixed(2)}`);
+});
+
+test('row mode puts the whole family side by side', () => {
+    const cast = FURNITURE.mount(new THREE.Scene());
+    cast.rebuild(1, FURNITURE.row, defaultControls(FURNITURE));
+    cast.draw(0, [-2, 0, 2], 0);
+    const titles = [0, 1, 2].map(i => cast.readout(i, 1).title);
+    assert.deepEqual(titles, ['Bench', 'Lamp post', 'Bin']);
+});
+
+test('the bench, lamp and bin names select the furniture with its kind pinned', () => {
+    for (const name of ['bench', 'lamp', 'bin'] as const) {
+        const { entity, pinned } = resolve(name);
+        assert.equal(entity.id, 'furniture', `${name} did not resolve to the furniture`);
+        assert.equal(pinned.kind, name);
+    }
+    // A pin is a default, not an override: an explicit control in the URL still wins.
+    assert.equal(readState('single', '?entity=bench&kind=bin').controls.kind, 'bin');
 });
