@@ -146,15 +146,72 @@ const TILLER_ARM = -0.45, TILLER_FOREARM = -1.40;
  * exists mostly to keep the small bend it does have pointing the right way.
  */
 const RIM_ARM = -0.02, RIM_FOREARM = -0.10;
+/**
+ * A jacket is the chest again, one size larger and hanging a little lower -- the *same* ellipsoid,
+ * not a tube over it. That is the whole idea, and it is what the barrel this replaces got wrong: a
+ * cylinder over an ellipsoid stands further and further proud as the body tapers away beneath it,
+ * so it flared at the hem, cut a flat lid across the upper chest, and read as a drum with a band of
+ * shirt above it rather than as a coat. An ellipsoid has no lid and no hem to flare.
+ *
+ * `COAT_OUT` scales it on both horizontal axes and `COAT_TALL` on the vertical; its top is then
+ * pinned to the chest's crown, so all the extra height hangs downward and the hem crosses the
+ * *pelvis* rather than stopping in mid-air where the chest has already tapered away.
+ *
+ * The pair has one rule, and breaking it is what the first attempt at this did:
+ *
+ *     1 <= COAT_TALL <= COAT_OUT * COAT_OUT
+ *
+ * Below 1 the coat is shorter than the chest and rides up; above the square the chest surfaces
+ * *through* the coat near the throat. Neither failure is a clean one, because the two surfaces are
+ * near-tangent all along the crown: they do not cross in a tidy neckline, they interleave, and what
+ * shows is a torn patch of shirt colour z-fighting its way through the coat. Pinned at the crown
+ * and inside that range the coat strictly encloses the chest, touching it only at the crown itself,
+ * which is a point no one ever sees -- the collar is over it.
+ *
+ * Both being scales of the chest, the whole garment is a fixed fraction of the body: the same coat
+ * on a broad adult, a child and a stooped rider, with no per-build tuning.
+ *
+ * It must also be drawn from the chest's *own* pool, and that is not a tidiness point. Pool spheres
+ * are polyhedra, and a coarser one sags further inside the sphere it approximates: `ball` is 10 by
+ * 8 and dips about 6.7% at a facet's centre, against `body` at 14 by 10 and about 3.7%. Six percent
+ * of clearance does not survive a three percent difference in sag, so a coat drawn from `ball` over
+ * a chest drawn from `body` z-fights it in shards wherever a coat facet meets a chest vertex --
+ * which looks exactly like a torn shirt showing through, and is why this is a `body` part. Same
+ * geometry, same sag, and the margin then means what it says.
+ */
+const COAT_OUT = 1.06, COAT_TALL = 1.06;
+/**
+ * The collar: one ring at the base of the neck, standing out of the coat.
+ *
+ * It is drawn in **shirt** colour, and that is the point of it rather than an economy. The coat
+ * covers the chest completely, so a jacket-coloured ring on a jacket-coloured coat would be an ink
+ * line and nothing more, and the shirt would leave the figure altogether -- which matters, because
+ * `outer` and `bottom` share a lot of dark neutrals and a coat that also matched the trousers would
+ * make one unbroken column from throat to ankle. A shirt collar standing up out of a coat solves
+ * both at once: it is the one place a jacket-wearer's shirt still reaches the eye, and it is a
+ * stronger read than the coat's own collar because it is a different colour from the coat.
+ *
+ * It is sized against the *neck*, because that is what it wraps. A collar cut from the torso's
+ * width would be a ruff on a narrow person and a choker on a broad one, and it stays narrower than
+ * the skull above it so it cannot read as a ruff on anyone. Its lower edge is buried in the coat
+ * and its upper cap in the skull, so what shows is a rim under the chin with both ends hidden --
+ * the joint rule, applied to clothing.
+ *
+ * `COLLAR_AT` is measured down from the chest's crown as a fraction of chest height, `COLLAR_H` is
+ * a fraction of the same, `COLLAR_W` a multiple of the neck's width, and `COLLAR_D` flattens it
+ * front-to-back.
+ */
+const COLLAR_W = 1.62, COLLAR_D = 0.86, COLLAR_AT = 0.105, COLLAR_H = 0.160;
 /** Which hip a shoulder bag hangs at. Its strap crosses the opposite shoulder. */
 const BAG_SIDE = 1;
 /** Width of that strap, and how far it is meant to stand proud of the body it crosses. */
 const STRAP_W = 0.055, STRAP_PROUD = 0.032;
 /**
- * How far *above* the shoulder the strap's taper is carried, as a fraction of the shoulder-to-bag
- * run, and where along that run the torso is deepest. Both feed the taper; see the strap block.
+ * How much larger than the torso the surface is that the strap is fitted to. It is the one number
+ * that says how far past the body's outline the strap runs before it fades out, so it is what
+ * carries the strap over the shoulder instead of under it; see the strap block.
  */
-const STRAP_RISE = 0.12, STRAP_FAT = 0.5;
+const STRAP_OVER = 1.15;
 
 /**
  * Body heights in world units, for anything outside the renderer that needs to know how tall a
@@ -235,11 +292,11 @@ let _soleY = 0, _footZ = 0;
  * The part budget per person is fixed (see PER in pools.ts) and laid out like this, so that a
  * person wearing everything costs exactly what a person wearing nothing costs:
  *
- *   body 0 chest       1 pelvis
+ *   body 0 chest       1 pelvis    2 jacket
  *   head 0 head
  *   nub  0-1 shoulder caps   2-3 hands   4-5 feet
  *   cyl  0-1 thighs    2-3 shins   4-5 upper arms   6-7 forearms
- *        8 neck        9 jacket    10-11 hat        12-16 gear      17 bag strap
+ *        8 neck        9 collar    10-11 hat        12-16 gear      17 bag strap
  *   ball 0 hair or beanie    1 ponytail   2 beard   3 balloon
  *   box  0 glasses     1-2 bag body and flap        3-5 accessory    6-9 mobility frame
  *   cone 0 party hat
@@ -290,6 +347,16 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
     // are the same colour -- disappears. The pelvis also pitches less than the chest, because a
     // stoop lives in the upper back and not in the hips.
     put('body', d + 1, 0, pelvisY, stoopZ * 0.3, torsoPitch * 0.35, 0, lean * 0.6, 0.365 * r.w, pelvisH, 0.29 * r.w, r.pants);
+    // The jacket: the chest again, a size larger, with the extra height all hanging below. It
+    // encloses the chest rather than crossing it, so the only edge on the whole garment is where it
+    // meets the pelvis -- two ellipsoids crossing, which is a curve and not a hem lip. It hangs
+    // *onto* the hips instead of stopping in mid-air where the chest has already tapered away.
+    // Named whether or not one is worn, because the strap below has to fit itself to whichever of
+    // the two ellipsoids is actually this person's outside.
+    const coatH = chestH * COAT_TALL, coatY = chestY + (chestH - coatH) / 2;
+    const coatW = chestW * COAT_OUT, coatD = chestD * COAT_OUT;
+    if (r.jacket) put('body', d + 2, 0, coatY, stoopZ, torsoPitch, 0, lean, coatW, coatH, coatD, r.jacketColor);
+    else hide('body', d + 2);
 
     // ---- legs: thigh and shin, so trousers can stop at the knee and a rider can fold up ----
     const thighW = THIGH_W * r.w, shinW = SHIN_W * r.w;
@@ -367,16 +434,20 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
         else { _offX = hx; _offY = hy; _offZ = hz; }
     }
 
-    // ---- jacket band, neck ----
-    // A band over the chest rather than a tube over the whole torso, so a jacket does not fill in
-    // the waist the body just gained.
-    if (r.jacket) put('cyl', c + 9, 0, chestY - chestH * 0.06, stoopZ, torsoPitch, 0, lean, chestW * 1.03, chestH * 0.74, chestD * 1.05, r.jacketColor);
-    else hide('cyl', c + 9);
+    // ---- collar, neck ----
     // The neck spans whatever gap the chest and head leave, overlapping into both so it cannot gape.
     const neckTop = HEAD_Y + drop + bob + 0.03, neckBot = chestY + chestH / 2 - 0.06;
     // Sized from the head, not from build: a broad body with a small head would otherwise get a
     // neck wider than the skull it meets, and the join would show as a disc above the collar.
     const neckW = 1.1 * r.headR;
+    // The collar rides the chest's crown, so it is placed by swinging a point up the chest's own
+    // axis from its centre rather than by an offset of its own: a stoop then carries it forward
+    // with the upper back, the same way the head is carried.
+    if (r.jacket) {
+        const up = chestH * (0.5 - COLLAR_AT);
+        put('cyl', c + 9, 0, chestY + up * Math.cos(torsoPitch), stoopZ + up * Math.sin(torsoPitch),
+            torsoPitch, 0, lean, neckW * COLLAR_W, chestH * COLLAR_H, neckW * COLLAR_W * COLLAR_D, r.jacketColor);
+    } else hide('cyl', c + 9);
     put('cyl', c + 8, 0, (neckTop + neckBot) / 2, stoopZ * 1.6, stoop * 0.8, 0, lean * 0.7, neckW, neckTop - neckBot, neckW, r.skin);
 
     // ---- head, and everything attached to it ----
@@ -462,28 +533,40 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
         const runX = tieX - topX, runY = tieY - topY;
         const run = Math.hypot(runX, runY) || 1e-4;
         const ux = runX / run, uy = runY / run;
-        // The strap is an elliptic cylinder lying along its own length: deepest at the middle and
-        // tapering to nothing at both tips. That profile is chosen to match the torso's, which
-        // swells from the shoulder to mid-chest and falls away again at the waist. The far tip is
-        // put at the bag, where the strap should fade out because the bag takes over; the near one
-        // is carried a little *above* the shoulder, so the strap still has depth crossing it
-        // rather than thinning to a knife edge exactly where it is most visible.
-        const rise = run * STRAP_RISE;
-        const len = run + rise;
-        const midX = topX + ux * (run - rise) / 2, midY = topY + uy * (run - rise) / 2;
-        // Depth is fitted where the torso is deepest beneath the strap, and the taper does the
-        // rest. This is the whole of the fix. The sash this replaces was one box of constant chest
-        // depth, so it was about right across the middle and stood out as a slab at the shoulder,
-        // where the chest ellipsoid has narrowed to nothing -- a plank driven through the torso.
-        // An ellipse along the strap has the same profile the torso has.
-        const fitX = topX + ux * run * STRAP_FAT, fitY = topY + uy * run * STRAP_FAT;
-        const ey = (fitY - chestY) / (chestH / 2), ex = fitX / (chestW / 2);
-        const solid = 1 - ey * ey - ex * ex;
-        const want = (solid > 0 ? chestD * Math.sqrt(solid) : 0) + STRAP_PROUD;
-        // Undo the taper at that point, so `want` is the depth the strap really has there.
-        const ft = (run * STRAP_FAT - (run - rise) / 2) / (len / 2);
-        put('cyl', c + 17, midX, midY, stoopZ, 0, 0, Math.atan2(runY, runX),
-            len, STRAP_W, want / Math.sqrt(Math.max(0.25, 1 - ft * ft)), r.bagColor);
+        // The strap is an elliptic cylinder lying along its own length, and that ellipse is not a
+        // fitted guess: it is the torso's own profile along this line, read off exactly.
+        //
+        // The surface the strap lies on is an ellipsoid, so at distance s along the run the torso's
+        // depth is `onD * sqrt(solid(s))` with solid quadratic in s -- and a quadratic under a
+        // square root *is* an ellipse. Completing the square hands over its centre and half-length
+        // directly, so the strap parallels the torso for its whole length, standing the same
+        // fraction proud everywhere and lying flush into the surface at both tips.
+        //
+        // Which torso, though, is the question a jacket asks. A bag is worn over a coat, so this is
+        // whichever ellipsoid is really the outside of this person. Fitting to the chest regardless
+        // is what made the strap read as a scar across a jacket: it was sunk inside the very
+        // garment it crosses, surfacing through it in patches instead of lying on it.
+        const onY = r.jacket ? coatY : chestY, onH = r.jacket ? coatH : chestH;
+        const onW = r.jacket ? coatW : chestW, onD = r.jacket ? coatD : chestD;
+        // The run in units of the ellipsoid's own semi-axes, where its surface is the unit sphere --
+        // grown by STRAP_OVER first, because the torso ellipsoid is not the whole of what the strap
+        // lies on. The shoulder cap stands proud of it exactly where the strap crosses the shoulder,
+        // and fitted to the bare torso the strap's ellipse reaches zero depth right there, so the
+        // last stretch of it passes *under* the deltoid and the cap's ink shell slices it. Growing
+        // the fit surface lifts both ends without disturbing the middle, where the run is close to
+        // the ellipsoid's centre and a few percent of semi-axis changes the depth barely at all.
+        const ax = onW * STRAP_OVER / 2, ay = onH * STRAP_OVER / 2;
+        const a0 = topX / ax, a1 = ux / ax, b0 = (topY - onY) / ay, b1 = uy / ay;
+        const qa = 1 - a0 * a0 - b0 * b0, qb = 2 * (a0 * a1 + b0 * b1), qc = a1 * a1 + b1 * b1;
+        // Where the torso is deepest beneath the strap, how deep it is there, and how far either
+        // way the strap reaches before the line leaves the body altogether. That last one is the
+        // number the old code had to guess at, as a flat fraction of the run, and it guessed short:
+        // the ellipse ran out of depth while the body underneath still had some left.
+        const at = -qb / (2 * qc);
+        const peak = Math.max(qa + qb * qb / (4 * qc), 1e-4);
+        const half = Math.sqrt(peak / qc);
+        put('cyl', c + 17, topX + ux * at, topY + uy * at, stoopZ, 0, 0, Math.atan2(runY, runX),
+            2 * half, STRAP_W, onD * Math.sqrt(peak) + STRAP_PROUD, r.bagColor);
     } else { hide('box', b + 1); hide('box', b + 2); hide('cyl', c + 17); }
 
     // ---- accessories and mobility aids share the gear range; the recipe never gives both ----

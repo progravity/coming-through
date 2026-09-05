@@ -170,6 +170,79 @@ export function skinTone(t: number): number {
 /** Select from a family with an already-drawn roll in [0, 1). Never draws. */
 export const fromFamily = (fam: Family, roll: number): number => PALETTE[fam[index(fam.length, roll)]];
 
+/**
+ * Perceptual distance between two packed colours: the "redmean" approximation, which is cheap and
+ * good enough to say whether two of these 24 read as one colour. Plain RGB distance is not -- it
+ * puts two dark neutrals further apart than the eye does.
+ */
+function apart(a: number, b: number): number {
+    const r1 = (a >> 16) & 255, g1 = (a >> 8) & 255, b1 = a & 255;
+    const r2 = (b >> 16) & 255, g2 = (b >> 8) & 255, b2 = b & 255;
+    const rbar = (r1 + r2) / 2, dr = r1 - r2, dg = g1 - g2, db = b1 - b2;
+    return Math.sqrt((2 + rbar / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rbar) / 256) * db * db);
+}
+
+/**
+ * How far apart two colours must be before a thing hanging off a person reads as a separate object
+ * rather than as part of whatever it hangs against.
+ *
+ * Identity is not the test, which is the trap here: a stone bag on taupe trousers is two different
+ * palette entries and still one shade of one colour, and so is a charcoal bag on navy. The palette
+ * offers no gap to sit in -- its pairs run continuously from 56 (off-white and oat) upward -- so
+ * this is a judgement, set just above the band where two entries read as one thing at a glance:
+ * slate/charcoal at 102, denim/cornflower at 103, brick/plum at 107 and taupe/stone at 129 are all
+ * refused. It rules out the closest 45 of the palette's 276 pairs and leaves the rest; the median
+ * pair is 215 and nothing near it is affected.
+ */
+const APART = 130;
+
+/** A family to look in, and the roll saying where in it to start. See `fromFamiliesUnlike`. */
+export type Pick = readonly [Family, number];
+
+/**
+ * The first colour these families can offer that the wearer does not already have on.
+ *
+ * This is for the things that have to read as *objects* rather than as garments -- a bag, chiefly.
+ * An outfit is a small set of colours used more than once on purpose, and that repetition is what
+ * makes a person read as designed; but a bag in the same colour as the trousers it hangs against
+ * stops being a bag and becomes a patch of the hip, and one matching the coat its strap crosses
+ * loses the strap with it. So the roles that hang *off* a person may refuse the outfit's own
+ * colours, and only those roles -- a hat matching a shirt is coordination, not a clash.
+ *
+ * "The same colour" means within `APART`, not equal: two entries of one family are often a single
+ * shade in two lightnesses, and swapping onto the neighbour would satisfy the letter of this and
+ * change nothing anyone can see.
+ *
+ * Each family carries its own roll, and that is the point of the pairing rather than a convenience:
+ * hand a family the roll that already dressed that garment and the first colour tried is the very
+ * one the wearer has there -- the accent their hat is in, the colour of their trousers -- so a
+ * wearer with no clash keeps the coordination exactly, and only a clash moves them, to that same
+ * family's other entry. Families are tried in order, so pass them in preference order.
+ *
+ * The last resort is the whole palette, walked from the first pick's roll, and it is there because
+ * the curated families cannot be relied on to contain an answer: they are small and several of them
+ * are a tight cluster of dark neutrals, so a wearer in charcoal trousers under a navy coat can
+ * exhaust every one. Reaching outside the outfit is a worse look than staying in it and a far
+ * better one than the clash, and with only a garment or three to avoid the palette always has
+ * something. It is rare enough to be worth measuring before assuming otherwise.
+ */
+export function fromFamiliesUnlike(picks: readonly Pick[], avoid: readonly number[]): number {
+    const ok = (c: number): boolean => !avoid.some(w => apart(c, w) < APART);
+    for (const [fam, roll] of picks) {
+        const start = index(fam.length, roll);
+        for (let i = 0; i < fam.length; i++) {
+            const c = PALETTE[fam[(start + i) % fam.length]];
+            if (ok(c)) return c;
+        }
+    }
+    const start = index(PALETTE.length, picks[0][1]);
+    for (let i = 0; i < PALETTE.length; i++) {
+        const c = PALETTE[(start + i) % PALETTE.length];
+        if (ok(c)) return c;
+    }
+    return fromFamily(picks[0][0], picks[0][1]);
+}
+
 /** Select from a plain list with an already-drawn roll in [0, 1). Never draws. */
 export const fromList = <T>(list: readonly T[], roll: number): T => list[index(list.length, roll)];
 

@@ -68,6 +68,16 @@ hardcoding it, so the feet stay on the ground and the torso lengthens to take up
 The chest and pelvis are then placed as fractions of the hip-to-shoulder span, not at absolute
 heights, so they stretch with it.
 
+Colour comes from a curated `Outfit` rather than per-garment rolls, and reusing one of its colours
+twice is the point: that repetition is what makes a person read as designed. The exception is the
+things that hang *off* a person rather than clothe them. A bag in the trousers' colour stops being
+a bag and becomes a patch of the hip, and one matching the coat its strap crosses loses the strap
+with it, so `fromFamiliesUnlike` lets those roles refuse what the wearer already has on. "The same
+colour" there means within a perceptual distance, not equal -- two entries of one family are often
+one shade in two lightnesses, and swapping onto the neighbour satisfies the letter of the rule and
+changes nothing anyone can see. Clothing does not get this treatment: a hat matching a shirt is
+coordination, not a clash.
+
 Mobility aids (`cane`, `wheelchair`, `scooter`) are people, not obstacles. Each carries a
 `MotionProfile` the simulation applies on top of the archetype — speed, turn rate, acceleration,
 collision radius and collision offset — so they behave plausibly in the crowd rather than just
@@ -76,9 +86,11 @@ looking different. Their odds rise steeply with the age axis.
 Parts are drawn from the shared instanced pools and the budget per person is **fixed**: a person
 wearing everything costs exactly what a person wearing nothing costs, because hidden parts write a
 zero-scale matrix. That also means the budget *is* the cost -- raising `PER` charges every person
-whether they wear the part or not. `PER` in `render/pools.ts` is that budget (42 parts across seven
+whether they wear the part or not. `PER` in `render/pools.ts` is that budget (43 parts across seven
 pools) and `drawPerson` documents the index layout within a slot. Adding a part means either
-finding a free index or raising `PER`; never add a mesh per person.
+finding a free index or raising `PER`; never add a mesh per person. A *shared* index is the cheaper
+half of that choice: the gear range serves a stroller or a mobility aid, which the recipe never
+gives to the same person.
 
 ## The body
 
@@ -102,6 +114,25 @@ The waist is not a part: it is where the chest and pelvis ellipsoid silhouettes 
 carries it -- chest in `shirt`, pelvis in `pants` -- and the shoulder cap plus upper arm share the
 shirt colour so they read as one sleeve. Recolouring either half breaks the read before the
 geometry does.
+
+A jacket is the one thing that takes the chest's place in that crossing, and it does so by *being*
+the chest: the same ellipsoid, scaled out and up, with its top pinned to the chest's crown so the
+extra height hangs downward and the hem crosses the pelvis instead of stopping in mid-air. It must
+be drawn from the chest's own pool. Pool spheres are polyhedra and a coarser one sags further
+inside the sphere it approximates, so a coat from `ball` (10x8) over a chest from `body` (14x10)
+z-fights it in shards that look exactly like a torn shirt showing through.
+
+The collar is a ring at the base of the neck, in the coat's own colour and sized against the neck
+rather than the torso, so a broad person does not get a ruff. A shirt-coloured one was tried and is
+wrong: at collar size it reads as a scarf, not as a collar.
+
+Anything worn *over* a coat is fitted to the coat's ellipsoid rather than the chest's -- the bag
+strap is. Two rules there, both learned the hard way. Fitting it to the chest sinks it inside the
+garment it crosses and it reads as a scar. And the surface a strap lies on is the body *plus its
+shoulders*: the shoulder cap stands proud of the torso ellipsoid exactly where a strap crosses it,
+so the strap is fitted to a slightly grown ellipsoid (`STRAP_OVER`) that swallows the cap. Fitted
+to the bare torso, the strap's own profile reaches zero depth right at the shoulder and the last
+stretch of it passes *under* the deltoid, where the cap's ink shell slices across it.
 
 Anything outside the renderer that needs to know how tall a person is imports `standingHeight` or
 `eyeHeight` from `render/person.ts`; `camera.ts` derives all three of its heights that way, so a

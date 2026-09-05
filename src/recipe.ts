@@ -13,7 +13,8 @@
 import { AGE_MIX_DEFAULT, AID_DEFAULT } from './archetypes.ts';
 import type { Accessory, AgeMix, AidChances, Archetype, HatType } from './archetypes.ts';
 import type { Rng } from './core/rng.ts';
-import { FRAME, HAIR, HAIR_OLDER, OUTFITS, OUTFIT_FAMILY, SHOE, fromFamily, fromList, pickOutfit, skinTone } from './palette.ts';
+import { FRAME, HAIR, HAIR_OLDER, OUTFITS, OUTFIT_FAMILY, SHOE, fromFamiliesUnlike, fromFamily, fromList, pickOutfit, skinTone } from './palette.ts';
+import type { Pick } from './palette.ts';
 import type { Range } from './util.ts';
 
 export type Age = 'child' | 'teen' | 'adult' | 'older';
@@ -222,6 +223,20 @@ export function makeRecipe(rng: Rng, A: Archetype, opts: RecipeOptions = {}): Re
     // Sized so an adult lands near five and a half heads tall against the skeleton in person.ts.
     const headR = ((0.179 - 0.025 * height0) * ap.head * (1 + 0.06 * (w - 1))) + 0.004 * headR0;
 
+    // Hoisted out of the return because the bag has to know what this person is already dressed in.
+    const jacket = jacket0 < (lk.jacket ?? 0.3);
+    const jacketColor = fromFamily(O.outer, jacketColor0);
+    const shirt = opts.shirt ?? top;
+    /**
+     * What a bag has to stand out against: the trousers it hangs beside, and the shirt or the coat
+     * its strap crosses. The coat only counts when one is worn -- an unworn `jacketColor` is a
+     * field, not a garment, and excluding it would narrow the choice for nothing.
+     */
+    const worn = jacket ? [bottom, shirt, jacketColor] : [bottom, shirt];
+    // Each family paired with the roll that already dressed it, so the bag's first choice in either
+    // is the colour the wearer is really in there rather than an unrelated entry of the same family.
+    const ACCENT: Pick = [O.accent, accColor0], TROUSERS: Pick = [O.bottom, pants0], SHOES: Pick = [SHOE, bagColor0];
+
     const hat: HatType = hat0 < lk.hat
         ? (lk.hatType ?? fromList(HAT_TYPES[child ? 'child' : 'grown'], hatType0))
         : 'none';
@@ -242,7 +257,7 @@ export function makeRecipe(rng: Rng, A: Archetype, opts: RecipeOptions = {}): Re
 
         outfit: fit, accent,
         skin: skinTone(skin0),
-        shirt: opts.shirt ?? top,
+        shirt,
         pants: bottom,
         shoe: fromFamily(SHOE, shoe0),
 
@@ -256,12 +271,18 @@ export function makeRecipe(rng: Rng, A: Archetype, opts: RecipeOptions = {}): Re
         // The same roll picks whether there is a beard and how full it is: still one draw.
         beard: beard0 < beardP ? (beard0 < beardP * 0.45 ? 'full' : 'stubble') : 'none',
         glasses: glasses0 < glassesP,
-        jacket: jacket0 < (lk.jacket ?? 0.3),
-        jacketColor: fromFamily(O.outer, jacketColor0),
+        jacket,
+        jacketColor,
         shorts: shorts0 < (lk.shorts ?? 0.28) * (child ? 1.7 : 1),
         bag: bag0 < (lk.bag ?? 0.2) && acc !== 'stroller',
-        // A bag is a bag: half of them are the accent, half pick up the trousers.
-        bagColor: bagColor0 < 0.5 ? accent : bottom,
+        // A bag is a bag: half of them reach for the accent first and half for the trousers, and
+        // `bagColor0` picks which. What it may not do is land on a colour the wearer already has
+        // on, so each family is entered at the colour that garment is actually in -- the accent
+        // their hat wears, the colour of their trousers -- and only steps off it when that is the
+        // clash. A bag reaching for the trousers therefore always lands on the *other* trouser
+        // colour, which is the whole of the fix and still reads as picking up the trousers. The
+        // shoes are last and never yet needed: a leather bag would have come from there anyway.
+        bagColor: fromFamiliesUnlike(bagColor0 < 0.5 ? [ACCENT, TROUSERS, SHOES] : [TROUSERS, ACCENT, SHOES], worn),
         acc, accColor: accent,
 
         mobility,
