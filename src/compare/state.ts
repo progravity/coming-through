@@ -24,6 +24,10 @@ export interface CompareState {
     paused: boolean;
     /** Body yaw in radians; 0 faces the camera. */
     yaw: number;
+    /** Whether the measured CPU cost is on the cards. Costs a blocking second to turn on. */
+    cost: boolean;
+    /** Cards down to their titles, for when the figure matters more than what is written on it. */
+    collapsed: boolean;
 }
 
 /** Fixed, never random: opening the tool twice has to show the same people. */
@@ -47,6 +51,8 @@ export function readState(mode: string): CompareState {
         arch: pick(q.get('arch'), 'seed'),
         walking: flag(q.get('walk'), false),
         paused: flag(q.get('paused'), false),
+        cost: flag(q.get('cost'), false),
+        collapsed: flag(q.get('cards'), false),
         yaw: num(q.get('yaw'), 0) * (Math.PI / 180),
     };
 }
@@ -58,6 +64,8 @@ export function writeState(s: CompareState): void {
     q.set('seed', String(s.seed));
     if (s.arch !== 'seed') q.set('arch', s.arch);
     if (s.walking) q.set('walk', '1');
+    if (s.cost) q.set('cost', '1');
+    if (s.collapsed) q.set('cards', '1');
     if (s.paused) { q.set('paused', '1'); q.set('yaw', ((s.yaw * 180) / Math.PI).toFixed(1)); }
     history.replaceState(null, '', `${location.pathname}?${q}`);
 }

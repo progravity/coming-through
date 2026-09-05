@@ -14,12 +14,16 @@ check and the determinism test. `npm run lint` is the first two on their own.
   fixed step; `crowd.ts`, `agent.ts`, `spawner.ts`, `steering.ts`, `player.ts`, `pose.ts`.
 - `src/input/` — adapters, per-step sampling, and `recorder.ts` (the input log).
 - `src/render/`, `src/world/`, `src/camera.ts`, `src/ui.ts`, `src/debug.ts` — presentation only.
-- `src/main.ts` — the entry point and nothing else: it dynamic-imports the game, or the character
-  inspector when `?inspect=` is present, so a normal run never loads the dev tool.
+- `src/main.ts` — the entry point and nothing else: it dynamic-imports the game, the character
+  inspector when `?inspect=` is present, or the render comparator when `?compare=` is, so a normal
+  run never loads a dev tool.
 - `src/game.ts` — wires the game together: fixed-step accumulator loop, interpolated rendering,
   stress mode.
 - `src/inspect/` — the character turntable. A driver for the character code, never a copy of it;
   see "Character inspection" below.
+- `src/compare/` — the render-direction comparator. Its `treatments.ts` is not tool-only: `?look=`
+  plays an ordinary run under one of its six treatments, so `game.ts` depends on it and the
+  directory cannot be deleted without breaking the build. See "URL parameters" below.
 - `test/determinism.test.ts` — headless run with a fixed seed and scripted input, hashed against
   `test/determinism.expected.json`, which stores two values: `hash` (whole state) and `identity`
   (the crowd a seed produces). See "Two hashes" below.
@@ -196,15 +200,68 @@ against a running dev server (see the note in that file about headless frame rat
 mixes CPU work with software rasterisation; `node scripts/bench-pose.mjs 190` times just the
 per-frame cost of posing a crowd into the instance buffers, with no GL context at all.
 
-`?seed=<uint32 or any string>` (strings are hashed), `?stress=1` (pinned seed, full crowd, no input,
-per-frame sim/render milliseconds), `?debug=1` (top-down overlay), `?tier=low|mid|high`.
+`npm run bench:looks -- http://localhost:5198` sweeps all six rendering treatments through
+`?stress=1&look=` at a full crowd and prints them as a table. Read its columns knowing where each
+comes from: `pose` is CPU only and is trustworthy headless, `render` is everything the driver did
+and under SwiftShader is software rasterisation saying nothing about a real GPU. Add `--gpu` to run
+Chrome headed on the real one, which is the only way to get a `render` column worth comparing --
+and the only place the fill cost of toon against PBR against matcap actually shows up.
 
-`?compare=1` (or `?compare=row`) opens a **throwaway** side-by-side of rendering directions -- four
-panels crossing toon ramp against soft diffuse and ink shell against none, so each edge of that
-table moves one thing only, then two that ask about the line and the light instead: a finer warm
-ink, and a matcap. It exists to be looked at and then deleted: delete `src/compare/`, its branch in `main.ts`
-and this paragraph together. It changes nothing in the render path -- each panel builds its own
-`PartPools` and swaps materials on the meshes from outside -- and touches neither hash.
+`?seed=<uint32 or any string>` (strings are hashed), `?stress=1` (pinned seed, full crowd, no input,
+per-frame sim/render milliseconds), `?debug=1` (top-down overlay), `?tier=low|mid|high`,
+`?look=<name>` (play under a comparator rendering treatment; see below).
+
+`?compare=1` (or `?compare=row`) opens a side-by-side of rendering directions -- four panels
+crossing toon ramp against soft diffuse and ink shell against none, so each edge of that table
+moves one thing only, then two that ask about the line and the light instead: a finer warm ink, and
+a matcap. It changes nothing in the render path -- each panel builds its own `PartPools` and swaps
+materials on the meshes from outside -- and touches neither hash.
+
+`?look=<name>` plays a **normal run** under one of those six treatments: `current`, `toon-bare`,
+`soft-ink`, `soft`, `soft-thin`, `matcap`. Every panel in the comparator prints its own name, so
+the loop is to read a panel and then type what it says. Six still turntables cannot answer how a
+direction holds up in motion, at crowd distance, from the game's own camera under the game's own
+lights, and that is the only place it has to hold up. `game.ts` dynamic-imports
+`compare/treatments.ts` and runs the same surgery on its single set of pools, so a run without the
+flag downloads none of it; it is applied after `applyTier` because a treatment that turns the ink
+off would otherwise be overruled a line later by the tier's own ink setting. An unknown name warns
+with the real list and plays the shipped look.
+
+Each panel prints what its treatment costs, split three ways because the three are not equally
+knowable. **Structure** is exact rather than measured: draw calls and instance matrices per person,
+which only the ink shells move -- each pool draws its shell as a second `InstancedMesh`, so turning
+them off halves both, 14 calls to 7 and 90 instances to 45. **CPU** is measured on demand, by the
+`cost` button, `B`, or `&cost=1`: it poses a full 190-person crowd and times it, which is fair to
+quote because posing costs the same whether those people land on six pixels or six hundred. Ink is
+worth something like a sixth of it and `soft-thin`'s per-frame `weighInk` sweep about a third more,
+while the choice of material costs nothing at all -- read the shape of that rather than the exact
+percentages, which move with the machine. **Fill** is deliberately absent from the cards. It scales with the
+pixels people cover, a panel covers almost none, and a millisecond quoted at panel size would rank
+the six by an effect that barely exists there -- confidently, which is worse. `?look=` and
+`npm run bench:looks` measure it where it is real.
+
+The cards collapse to their titles -- the `cards` button, `C`, clicking any card, or `&cards=1` --
+and collapsing is global because six panels showing different information are no longer a
+comparison. Cards are levelled to one height and width per row and kept inside their own grid
+cell; placing them against the top bar instead lets a second row's cards drift up over the first
+row's figures while leaving their own unlabelled. Where a layout leaves no slack above a panel the
+card sits over the figure's head, which is where shading reads hardest -- that is what collapsing
+is for.
+
+Two things in `compare/bench.ts` keep that CPU figure honest, and the test for both is that the
+three treatments doing identical CPU work report the same number. It times through a rig of its
+own rather than through each panel's pools, because the baseline panel draws through
+`RecordingPools`, whose `put` composes a second matrix per part -- benchmarking in place charges
+`Current` for the measuring apparatus and reports the shipped look as the slowest of the six. And
+it runs a throwaway pass before the first measurement, or whichever treatment leads the list
+carries the JIT's first sight of a crowd and reads a few percent high for being first.
+
+`src/compare/` is therefore **not** disposable. The game depends on `treatments.ts`, so deleting
+the directory fails `tsc` and takes `npm run lint` and `npm test` down with it -- the guard is a
+real dependency, not a note asking nicely. Retiring it is a decision about `?look=` first: promote
+the winning treatment into `render/materials.ts` and drop the flag, or keep both. The six panels
+and the six names are one list in `compare/treatments.ts`; adding a treatment there gives it a
+panel and a `?look=` name together.
 
 `?inspect=1` opens the character turntable and `?inspect=row` its side-by-side row; both take
 `&seed=` and mirror the rest of their state back into the address bar (`arch`, `age`, `build`,

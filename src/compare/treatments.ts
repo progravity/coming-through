@@ -17,6 +17,12 @@
  *
  * Meshes are told apart by what they are rather than by the order they were added: the ink shells
  * are the ones drawn back-face-out, and a pool is identified by its geometry's own parameters.
+ *
+ * This file is the one part of `src/compare/` the game itself imports. Each treatment carries a
+ * `slug`, and `?look=<slug>` performs exactly this surgery on the game's single set of pools, so a
+ * direction can be judged in motion and in a crowd rather than on a still turntable. Nothing here
+ * draws from an RNG stream or reads simulation state -- it only swaps materials and edits instance
+ * matrices the frame after they were written -- so playing under a treatment moves neither hash.
  */
 import * as THREE from 'three';
 import type { PartPools } from '../render/pools.ts';
@@ -133,8 +139,19 @@ const softDiffuse = (): THREE.Material =>
 
 export interface LiveTreatment {
     readonly name: string;
+    /**
+     * The name this treatment answers to as `?look=<slug>`, and the caption prints it. Short and
+     * typeable on purpose: the loop is meant to be read a panel, type its name, play the game.
+     */
+    readonly slug: string;
     /** One line under the label: what was changed, and whether this is the real thing. */
     readonly note: string;
+    /**
+     * The body shader, described rather than ranked. This is the one cost the comparator cannot
+     * measure -- fill scales with the pixels people cover, and a panel covers almost none -- so
+     * the card says what the shader does and leaves the milliseconds to a real run.
+     */
+    readonly fill: string;
     /** Restyle the meshes a freshly built `PartPools` just added to the panel's scene. */
     dress(pools: PartPools, meshes: PoolMeshes): void;
     /** Optional pass between `commit()` and the render. */
@@ -145,22 +162,30 @@ export const LIVE_TREATMENTS: readonly LiveTreatment[] = [
     // ---- the four corners: toon or soft, crossed with ink or none ----
     {
         name: 'Current',
+        slug: 'current',
         note: 'shipped · toon ramp + ink shell',
+        fill: 'toon ramp, lit',
         dress: () => {},
     },
     {
         name: 'Toon, no ink',
+        slug: 'toon-bare',
         note: 'shipped ramp · ink shell off',
+        fill: 'toon ramp, lit',
         dress: pools => { pools.setInk(false); },
     },
     {
         name: 'Soft + ink',
+        slug: 'soft-ink',
         note: 'real geometry · soft diffuse, ink shell',
+        fill: 'PBR, lit',
         dress: (_pools, meshes) => { retint(meshes, softDiffuse); },
     },
     {
         name: 'No-outline soft',
+        slug: 'soft',
         note: 'real geometry · soft diffuse, no ink',
+        fill: 'PBR, lit',
         dress: (pools, meshes) => {
             pools.setInk(false);
             retint(meshes, softDiffuse);
@@ -169,7 +194,9 @@ export const LIVE_TREATMENTS: readonly LiveTreatment[] = [
     // ---- and two that ask about the line and the light instead ----
     {
         name: 'Soft + thin ink',
+        slug: 'soft-thin',
         note: 'real geometry · soft diffuse, finer warm ink',
+        fill: 'PBR, lit',
         dress: (_pools, meshes) => {
             retint(meshes, softDiffuse);
             // Warm and a shade lighter than the shipped near-black, which is cool. Between this
@@ -181,10 +208,19 @@ export const LIVE_TREATMENTS: readonly LiveTreatment[] = [
     },
     {
         name: 'Matcap',
+        slug: 'matcap',
         note: 'real geometry · baked sphere lighting + ink shell',
+        fill: 'unlit, 1 texture fetch',
         dress: (_pools, meshes) => {
             const matcap = matcapTexture();
             retint(meshes, () => new THREE.MeshMatcapMaterial({ color: 0xffffff, matcap }));
         },
     },
 ];
+
+/** Every `?look=` name, in panel order, so a mistyped one can be answered with the real list. */
+export const LOOK_NAMES: readonly string[] = LIVE_TREATMENTS.map(t => t.slug);
+
+export function treatmentNamed(slug: string): LiveTreatment | null {
+    return LIVE_TREATMENTS.find(t => t.slug === slug) ?? null;
+}

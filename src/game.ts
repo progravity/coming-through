@@ -26,6 +26,8 @@ const params = new URLSearchParams(location.search);
 /** Stress mode pins this seed so runs are comparable across machines and commits. */
 const STRESS_SEED = 1;
 const stress = params.get('stress') === '1';
+/** Optional rendering treatment borrowed from the comparator; see applyLook below. */
+const lookParam = params.get('look');
 const seedParam = params.get('seed');
 const initialSeed = stress ? STRESS_SEED : seedParam !== null && seedParam !== '' ? parseSeed(seedParam) : randomSeed();
 
@@ -57,9 +59,11 @@ interface StressStats {
     avgSimMs: number; avgRenderMs: number; avgSimPerStepMs: number;
     /** Share of renderMs spent posing people into the instance buffers, before any GL work. */
     avgPoseMs: number;
+    /** Draw calls in the last frame, people and world together. Halves when the ink shells are off. */
+    drawCalls: number;
     frames: number; people: number;
 }
-const stressStats: StressStats = { simMs: 0, renderMs: 0, steps: 0, avgSimMs: 0, avgRenderMs: 0, avgSimPerStepMs: 0, avgPoseMs: 0, frames: 0, people: 0 };
+const stressStats: StressStats = { simMs: 0, renderMs: 0, steps: 0, avgSimMs: 0, avgRenderMs: 0, avgSimPerStepMs: 0, avgPoseMs: 0, drawCalls: 0, frames: 0, people: 0 };
 
 // ---------- settings and game state ----------
 let tier: Tier = initialTier();
@@ -127,6 +131,40 @@ function applyTier(t: Tier): void {
 function cycleCamera(): void { ui.setCamera(rig.cycle()); }
 function toggleDebug(): void { ui.setDebug(debug.toggle()); }
 
+/** A treatment's per-frame pass, run between commit() and the render. Null unless `?look=` is on. */
+let lookAfter: (() => void) | null = null;
+
+/**
+ * `?look=<name>` plays an ordinary run under one of the comparator's rendering treatments, named
+ * by the slug its panel prints (`current`, `toon-bare`, `soft-ink`, `soft`, `soft-thin`, `matcap`).
+ *
+ * Six still turntables cannot answer how a direction holds up in motion, at crowd distance, from
+ * the game's own camera under the game's own lights -- and that is where it has to hold up. This
+ * costs nothing to find out: the treatments already restyle a `PartPools` from outside the render
+ * path, so the same surgery runs on the game's single set of pools with no change to `pools.ts`,
+ * `materials.ts` or `person.ts`. `world.scene` holds no other `InstancedMesh`, so `poolMeshes`
+ * finds exactly the parts and nothing else.
+ *
+ * Dynamically imported, so a run without the flag never downloads the tool -- and applied after
+ * `applyTier`, or a treatment that turns the ink off would be overruled a line later by the tier's
+ * own ink setting.
+ */
+async function applyLook(name: string): Promise<void> {
+    const { LOOK_NAMES, poolMeshes, treatmentNamed } = await import('./compare/treatments.ts');
+    const treatment = treatmentNamed(name);
+    if (treatment === null) {
+        console.warn(`?look=${name} is not a rendering treatment. Try one of: ${LOOK_NAMES.join(', ')}`);
+        return;
+    }
+    const meshes = poolMeshes(world.scene);
+    treatment.dress(pools, meshes);
+    // dress() may have turned the shells off behind setInk()'s back; the button has to agree with
+    // what is actually drawn, and toggling it afterwards still works from there.
+    ui.setInk(pools.inkOn);
+    const after = treatment.after;
+    if (after !== undefined) lookAfter = () => after(meshes);
+}
+
 function finish(): void {
     running = false; finished = true;
     ui.showFinish(sim.elapsed, sim.bumps);
@@ -186,6 +224,7 @@ addEventListener('resize', () => {
 dispatchEvent(new Event('resize'));
 
 applyTier(tier);
+if (lookParam !== null && lookParam !== '') await applyLook(lookParam);
 ui.setCount(targetCount);
 ui.setCamera(rig.mode);
 ui.setStartLabel(false);
@@ -237,6 +276,9 @@ function frame(now: number): void {
     if (rig.mode === 'first') pools.freeSlot(PLAYER_SLOT);
     else drawPerson(pools, PLAYER_SLOT, p, playerView, t);
     pools.commit();
+    // Counted inside poseMs on purpose: it edits the same instance buffers the pose just filled,
+    // so a treatment that costs something should say so rather than hide in the gap before the GL.
+    lookAfter?.();
     const poseMs = performance.now() - renderStart;
     world.props.wheel.rotation.z = t * 0.15;
     renderer.render(world.scene, rig.update(frameDt, playerView));
@@ -252,6 +294,7 @@ function frame(now: number): void {
         ringIdx = (ringIdx + 1) % RING; ringCount = Math.min(RING, ringCount + 1);
         const s = stressStats;
         s.simMs = simMs; s.renderMs = renderMs; s.steps = steps; s.frames++; s.people = sim.crowd.agents.length;
+        s.drawCalls = renderer.info.render.calls;
         s.avgSimMs = ringSum.sim / ringCount; s.avgRenderMs = ringSum.render / ringCount; s.avgPoseMs = ringSum.pose / ringCount;
         s.avgSimPerStepMs = ringSum.steps > 0 ? ringSum.sim / ringSum.steps : 0;
         ui.stressLine(simMs, renderMs, s.avgSimMs, s.avgRenderMs, steps, s.people);

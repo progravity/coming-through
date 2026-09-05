@@ -8,6 +8,7 @@
     "build": "npm run lint && vite build",
     "lint": "tsc && node scripts/check-math-random.mjs",
     "test": "npm run lint && node --test test/",
+    "bench:looks": "node scripts/bench-looks.mjs",
     "test:update-hash": "UPDATE_DETERMINISM_HASH=1 node --test test/determinism.test.ts",
     "preview": "vite preview"
   },
