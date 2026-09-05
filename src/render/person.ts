@@ -2,6 +2,7 @@ import { INK } from '../palette.ts';
 import type { Recipe } from '../recipe.ts';
 import type { Poseable } from '../sim/agent.ts';
 import type { Pose } from '../sim/pose.ts';
+import { PER } from './pools.ts';
 import type { PartPools } from './pools.ts';
 
 /**
@@ -55,6 +56,48 @@ const HIP_X = 0.098;
 const SEAT_DROP = -0.22;
 /** Arm angle that reaches down to a cane; the cane is then drawn to wherever the hand ended up. */
 const CANE_ARM = -0.30;
+/**
+ * The hand a phone is held in, and the arm that holds it.
+ *
+ * The upper arm hangs almost straight down so the elbow stays tucked at the ribs, and only the
+ * forearm comes up and forward -- which is how someone actually walks along reading a phone. Raising
+ * the whole arm instead puts the hand over the face and reads as a call rather than as reading.
+ * The roll is a slight *inward* one, the opposite of a swinging arm's, enough to bring the hand in
+ * front of the chest but not so far that it crosses the face.
+ *
+ * A phone is a one-handed pose, not a held one: the other arm keeps swinging. It takes the left
+ * hand so that a cane, which takes the right, can be used at the same time.
+ */
+const PHONE_HAND = 0;
+const PHONE_ARM = -0.15, PHONE_FOREARM = -1.95, PHONE_ROLL = 0.12;
+/**
+ * Tip of the phone in the hand: back from vertical, not down from horizontal.
+ *
+ * Aiming the screen squarely at the eyes lays the phone almost flat, and a flat phone is seen
+ * end-on from the front and reads as a sliver. The phone carries no screen, so pointing it at the
+ * face buys nothing; what has to read is the silhouette, and that wants a portrait rectangle held
+ * upright with just enough tip to look held rather than propped.
+ */
+const PHONE_TILT = 0.4;
+/**
+ * Where the phone sits relative to the hand holding it.
+ *
+ * Raised until its base is inside the fist and the rest of it stands clear above: a phone centred on
+ * the hand is skewered through its middle, and one pushed out in front of the hand floats there,
+ * because the hand is five times its thickness and no offset hides that. Keeping it barely forward
+ * of the hand's centre instead puts the fingers *in front of* its base, which is where fingers
+ * actually are, and everything above the fist is then unobstructed phone.
+ */
+const PHONE_RISE = 0.105, PHONE_OUT = 0.03;
+/** Which hip a shoulder bag hangs at. Its strap crosses the opposite shoulder. */
+const BAG_SIDE = 1;
+/** Width of that strap, and how far it is meant to stand proud of the body it crosses. */
+const STRAP_W = 0.055, STRAP_PROUD = 0.032;
+/**
+ * How far *above* the shoulder the strap's taper is carried, as a fraction of the shoulder-to-bag
+ * run, and where along that run the torso is deepest. Both feed the taper; see the strap block.
+ */
+const STRAP_RISE = 0.12, STRAP_FAT = 0.5;
 
 /**
  * Body heights in world units, for anything outside the renderer that needs to know how tall a
@@ -120,6 +163,12 @@ function rod(pools: PartPools, idx: number, x: number, y0: number, z0: number, y
  * pump the cane through the pavement twice a stride.
  */
 let _handX = 0, _handY = 0, _handZ = 0, _handRestY = 0;
+/**
+ * The other hand, for the one thing that hangs off it: a phone. Unlike `_handX` and friends, which
+ * are the wrist -- the right place to hang a cane or a stroller handle from -- this is the centre of
+ * the hand itself, because a phone is held *by* the hand rather than swinging from the end of it.
+ */
+let _offX = 0, _offY = 0, _offZ = 0;
 /** Underside and reach of the front foot, so a footplate or a deck lands where the sole is. */
 let _soleY = 0, _footZ = 0;
 
@@ -133,9 +182,9 @@ let _soleY = 0, _footZ = 0;
  *   head 0 head
  *   nub  0-1 shoulder caps   2-3 hands   4-5 feet
  *   cyl  0-1 thighs    2-3 shins   4-5 upper arms   6-7 forearms
- *        8 neck        9 jacket    10-11 hat        12-16 gear
+ *        8 neck        9 jacket    10-11 hat        12-16 gear      17 bag strap
  *   ball 0 hair or beanie    1 ponytail   2 beard   3 balloon
- *   box  0 glasses     1-2 bag     3-5 accessory    6-9 mobility frame
+ *   box  0 glasses     1-2 bag body and flap        3-5 accessory    6-9 mobility frame
  *   cone 0 party hat
  *
  * "gear" is shared between the stroller's wheels and the mobility aids, which the recipe never
@@ -153,7 +202,9 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
     const r = who.recipe, { phase, mv, lean } = pose, fidget = who.fidget;
     pools.setBase(slot, pose.x, 0, pose.z, pose.yaw, r.h);
     const put = pools.put.bind(pools), hide = pools.hide.bind(pools), hideRange = pools.hideRange.bind(pools);
-    const g = r.gait, c = slot * 17, b = slot * 10, k = slot * 4, n = slot * 6, d = slot * 2;
+    // Bases derived from the budget rather than repeated from it: a pool that grows must not
+    // leave one of these behind, or every person would write over the next one's parts.
+    const g = r.gait, c = slot * PER.cyl, b = slot * PER.box, k = slot * PER.ball, n = slot * PER.nub, d = slot * PER.body;
     const seat = r.seated;
     // A seated rider's body drops onto the seat; the equipment underneath stays on the ground.
     const drop = seat ? SEAT_DROP : 0;
@@ -208,8 +259,8 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
     const sleeveColor = r.jacket ? r.jacketColor : r.shirt;
     const armColor = r.jacket ? r.jacketColor : r.skin;
     const upper = UPPER_ARM * limb, fore = FOREARM * limb;
-    // A *held* pose -- both hands on a rim, a tiller, a stroller handle, a phone -- puts both arms
-    // at the same angle with its own elbow bend and a fixed splay. A walking swing puts them in
+    // A *held* pose -- both hands on a rim, a tiller, a stroller handle -- puts both arms at the
+    // same angle with its own elbow bend and a fixed splay. A walking swing puts them in
     // opposition instead. The distinction matters: mirroring a held pose the way a swing is
     // mirrored sends one hand forward and the other back, and only one of them finds the handle.
     // The equipment below is then placed from wherever these hands actually landed.
@@ -220,17 +271,23 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
     if (seat && r.mobility === 'scooter') { holdA = -0.95; holdFA = -0.60; }
     else if (seat) { holdA = -0.10; holdFA = -0.02; }
     else if (r.acc === 'stroller') { holdA = -0.75; holdFA = -0.40; }
-    else if (r.acc === 'phone') { holdA = -0.30; holdFA = -1.50; }
     else holding = false;
+    // A cane and a phone are *one-handed*: they pose their own arm and leave the other swinging,
+    // so they are decided per side below rather than for both arms at once. A rider whose hands
+    // are already on a rim has no hand free for either.
+    const caneHand = !holding && r.mobility === 'cane' ? 1 : -1;
+    const phoneHand = !holding && r.acc === 'phone' ? PHONE_HAND : -1;
     const swingA = -sw * g.arm;
     for (let i = 0; i < 2; i++) {
         const side = i === 0 ? -1 : 1;
         const x = side * armX;
-        // The right arm of a cane user reaches down to the grip and stays there.
-        const a = holding ? holdA : r.mobility === 'cane' && i === 1 ? CANE_ARM : i === 0 ? swingA : -swingA;
+        // A cane user's arm reaches down to the grip and stays there; a phone user's comes up.
+        const a = holding ? holdA : i === phoneHand ? PHONE_ARM : i === caneHand ? CANE_ARM
+            : i === 0 ? swingA : -swingA;
         // Held poses take a fixed splay: letting it breathe with mv would widen and narrow the
         // hands on a handle that cannot move with them.
-        const roll = side * (holding ? SPLAY * (seat ? 1.6 : 0.7) : SPLAY * (1 - SPLAY_WALK * mv));
+        const roll = i === phoneHand ? -side * PHONE_ROLL
+            : side * (holding ? SPLAY * (seat ? 1.6 : 0.7) : SPLAY * (1 - SPLAY_WALK * mv));
         // A ball at the shoulder pivot, wider than the arm below it: the shoulder slopes down into
         // the arm instead of overhanging it the way the old straight yoke did. Because the arm's
         // top cap is a circle centred on this ball, it stays buried at every swing angle.
@@ -240,13 +297,14 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
         start(x, shoulderY, stoopZ * 1.2);
         segment(a, roll, upper, 0);
         put('cyl', c + 4 + i, chain.midX, chain.midY, chain.midZ, a, 0, roll, upperW, chain.len, upperW, sleeveColor);
-        const fa = holding ? holdFA : a + ELBOW_BEND;
+        const fa = holding ? holdFA : i === phoneHand ? PHONE_FOREARM : a + ELBOW_BEND;
         segment(fa, roll, fore, ELBOW_OVER);
         put('cyl', c + 6 + i, chain.midX, chain.midY, chain.midZ, fa, 0, roll, foreW, chain.len, foreW, armColor);
         const hx = chain.x + Math.sin(roll) * HAND_OFF, hy = chain.y - Math.cos(roll) * Math.cos(fa) * HAND_OFF;
         const hz = chain.z - Math.cos(roll) * Math.sin(fa) * HAND_OFF;
         put('nub', n + 2 + i, hx, hy, hz, fa, 0, roll, 0.155 * r.w, 0.185, 0.14 * r.w, r.skin);
         if (i === 1) { _handX = chain.x; _handY = chain.y; _handZ = chain.z; _handRestY = chain.y - bob; }
+        else { _offX = hx; _offY = hy; _offZ = hz; }
     }
 
     // ---- jacket band, neck ----
@@ -312,24 +370,75 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
     const backY = chestY - bob;                  // where a backrest reaches to
     const gripY = _handRestY, gripZ = _handZ, gripX = _handX;
 
-    // ---- shoulder bag: strap across the chest, body swinging at the hip ----
+    // ---- shoulder bag: the bag at one hip, its strap over the opposite shoulder ----
     if (r.bag) {
-        // A sash spanning shoulder to opposite hip, so it lengthens with the torso rather than
-        // sitting at a fixed height on it. It has to be a shade deeper than the chest or it would
-        // be swallowed by it, which means its ends read as a slab from the side -- so it is kept
-        // no longer than the chest it lies on.
-        put('box', b + 1, 0, shoulderY * 0.55 + hipY * 0.45, stoopZ, 0, 0, 0.6, 0.05, (shoulderY - hipY) * 0.98, chestD * 1.06, r.bagColor);
-        put('box', b + 2, pelvisW / 2 + 0.08, hipY - 0.02, 0.02, 0, 0, 0.15, 0.17, 0.22, 0.12, r.bagColor);
-    } else { hide('box', b + 1); hide('box', b + 2); }
+        const side = BAG_SIDE;
+        // The bag rests against the hip rather than floating beside it -- its inner face is sunk
+        // into the pelvis -- and rides *forward* of it, in front of the arm.
+        //
+        // Forward rather than back, because a hanging arm is not where it looks. The elbow bend
+        // that keeps a relaxed forearm from being a stick carries the hand behind the hip, to about
+        // z -0.03, which is precisely where a bag tucked behind the hip would be: the arm does not
+        // swing past such a bag, it hangs through it. Ahead of the hand there is nothing to clip.
+        const bagW = 0.2, bagH = 0.24, bagD = 0.15;
+        // Inboard far enough that a hanging arm passes *outside* it, which is where an arm goes:
+        // a bag is squeezed between the hip and the arm, not perched beyond the arm on the hip's
+        // outer edge. Its own front still stands clear of the pelvis at this width, so sinking it
+        // this far does not bury it.
+        const bagX = side * (pelvisW / 2 + bagW / 2 - 0.135);
+        const bagY = hipY + bob + span * 0.13;
+        const bagZ = 0.085;
+        put('box', b + 1, bagX, bagY, bagZ, 0, 0, side * 0.1, bagW, bagH, bagD, r.bagColor);
+        // A flap folded over its top. Bag-coloured and barely proud of the bag, so what shows is
+        // the ink line round its lower edge rather than a band of a second colour: the flap is the
+        // same leather as the bag, and INK is for the things that are not dyed at all.
+        put('box', b + 2, bagX, bagY + bagH * 0.24, bagZ, 0, 0, side * 0.1, bagW * 1.02, bagH * 0.34, bagD * 1.02, r.bagColor);
+
+        // The strap spans two real points -- the far shoulder and the top of the bag -- so its
+        // length and its angle both come from wherever those actually ended up, and it cannot come
+        // adrift of either when the proportions move.
+        const topX = -side * armX * 0.85, topY = shoulderY - capW * 0.1;
+        const tieX = bagX - side * bagW * 0.2, tieY = bagY + bagH * 0.42;
+        const runX = tieX - topX, runY = tieY - topY;
+        const run = Math.hypot(runX, runY) || 1e-4;
+        const ux = runX / run, uy = runY / run;
+        // The strap is an elliptic cylinder lying along its own length: deepest at the middle and
+        // tapering to nothing at both tips. That profile is chosen to match the torso's, which
+        // swells from the shoulder to mid-chest and falls away again at the waist. The far tip is
+        // put at the bag, where the strap should fade out because the bag takes over; the near one
+        // is carried a little *above* the shoulder, so the strap still has depth crossing it
+        // rather than thinning to a knife edge exactly where it is most visible.
+        const rise = run * STRAP_RISE;
+        const len = run + rise;
+        const midX = topX + ux * (run - rise) / 2, midY = topY + uy * (run - rise) / 2;
+        // Depth is fitted where the torso is deepest beneath the strap, and the taper does the
+        // rest. This is the whole of the fix. The sash this replaces was one box of constant chest
+        // depth, so it was about right across the middle and stood out as a slab at the shoulder,
+        // where the chest ellipsoid has narrowed to nothing -- a plank driven through the torso.
+        // An ellipse along the strap has the same profile the torso has.
+        const fitX = topX + ux * run * STRAP_FAT, fitY = topY + uy * run * STRAP_FAT;
+        const ey = (fitY - chestY) / (chestH / 2), ex = fitX / (chestW / 2);
+        const solid = 1 - ey * ey - ex * ex;
+        const want = (solid > 0 ? chestD * Math.sqrt(solid) : 0) + STRAP_PROUD;
+        // Undo the taper at that point, so `want` is the depth the strap really has there.
+        const ft = (run * STRAP_FAT - (run - rise) / 2) / (len / 2);
+        put('cyl', c + 17, midX, midY, stoopZ, 0, 0, Math.atan2(runY, runX),
+            len, STRAP_W, want / Math.sqrt(Math.max(0.25, 1 - ft * ft)), r.bagColor);
+    } else { hide('box', b + 1); hide('box', b + 2); hide('cyl', c + 17); }
 
     // ---- accessories and mobility aids share the gear range; the recipe never gives both ----
     hideRange('box', b + 3, 7);
     hideRange('cyl', c + 12, 5);
     hide('ball', k + 3);
     if (r.acc === 'phone') {
-        // Held in the hands the pose above put in front of the chest, which is what Kyle's
-        // headPitch has always been looking down at.
-        put('box', b + 3, 0, _handY + 0.03, _handZ + 0.03, -0.7, 0, 0, 0.1, 0.16, 0.02, 0x1e1e22);
+        // In the hand the arm chain actually ended at, rather than floating at the body's midline
+        // between two hands that were nowhere near it. Tipped back so its face turns toward the
+        // eyes: Kyle's headPitch has always been looking down, and now there is something at the
+        // end of that look.
+        // Sized against the hand rather than against life: these hands are 0.155 across, and a
+        // phone at its true scale beside one of them disappears. A shade narrower than the fist and
+        // a little taller, which is what reads as held in it rather than as a slab behind it.
+        put('box', b + 3, _offX, _offY + PHONE_RISE, _offZ + PHONE_OUT, PHONE_TILT, 0, 0, 0.115, 0.185, 0.028, 0x1e1e22);
     } else if (r.acc === 'camera') {
         // Body just clear of the chest, on a strap round the neck: without the strap it reads as a
         // brick floating in front of the ribs however close it is pushed.

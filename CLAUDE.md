@@ -76,7 +76,7 @@ looking different. Their odds rise steeply with the age axis.
 Parts are drawn from the shared instanced pools and the budget per person is **fixed**: a person
 wearing everything costs exactly what a person wearing nothing costs, because hidden parts write a
 zero-scale matrix. That also means the budget *is* the cost -- raising `PER` charges every person
-whether they wear the part or not. `PER` in `render/pools.ts` is that budget (41 parts across seven
+whether they wear the part or not. `PER` in `render/pools.ts` is that budget (42 parts across seven
 pools) and `drawPerson` documents the index layout within a slot. Adding a part means either
 finding a free index or raising `PER`; never add a mesh per person.
 
