@@ -96,6 +96,8 @@ function startRun(nextSeed: number): void {
     seed = nextSeed >>> 0;
     sim = new Simulation(seed);
     sim.onBump = () => ui.flash();
+    // Scenery, not a person: its own quiet cue, and never the bump count.
+    sim.onScrape = () => ui.scrape();
     rig.setBody(sim.player.recipe);
     sim.prime(targetCount);
     recorder = new Recorder(seed, targetCount);
@@ -120,8 +122,8 @@ function setCount(n: number): void {
     // starts has to re-prime; changing it mid-run just moves the target populate() tops up to.
     if (!running) startRun(seed);
 }
-// The ground carries the same line the people do, so both switch together.
-function setInk(on: boolean): void { pools.setInk(on); world.ground.setInk(on); ui.setInk(on); }
+// The world carries the same line the people do, so both switch together.
+function setInk(on: boolean): void { pools.setInk(on); world.setInk(on); ui.setInk(on); }
 function applyTier(t: Tier): void {
     tier = t;
     const s = TIER_SETTINGS[t];
@@ -145,8 +147,8 @@ let lookAfter: (() => void) | null = null;
  * the game's own camera under the game's own lights -- and that is where it has to hold up. This
  * costs nothing to find out: the treatments already restyle a `PartPools` from outside the render
  * path, so the same surgery runs on the game's single set of pools with no change to `pools.ts`,
- * `materials.ts` or `person.ts`. `world.scene` holds no other `InstancedMesh`, so `poolMeshes`
- * finds exactly the parts and nothing else.
+ * `materials.ts` or `person.ts`. `poolMeshes` picks the pools out by the tag they carry, so the
+ * edge layer's own instanced meshes are left alone.
  *
  * Dynamically imported, so a run without the flag never downloads the tool -- and applied after
  * `applyTier`, or a treatment that turns the ink off would be overruled a line later by the tier's
@@ -161,9 +163,9 @@ async function applyLook(name: string): Promise<void> {
     }
     const meshes = poolMeshes(world.scene);
     treatment.dress(pools, meshes);
-    // dress() may have turned the shells off behind setInk()'s back; the ground's line and the
+    // dress() may have turned the shells off behind setInk()'s back; the world's line and the
     // button both have to agree with what is actually drawn, and toggling afterwards works from there.
-    world.ground.setInk(pools.inkOn);
+    world.setInk(pools.inkOn);
     ui.setInk(pools.inkOn);
     const after = treatment.after;
     if (after !== undefined) lookAfter = () => after(meshes);

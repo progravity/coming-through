@@ -306,3 +306,34 @@ const index = (len: number, roll: number): number => {
     const i = Math.floor(roll * len);
     return i < 0 ? 0 : i >= len ? len - 1 : i;
 };
+
+/**
+ * The things standing along the path's edge: railings, benches, lamp posts, bins.
+ *
+ * Like the ground, these are made of palette entries rather than picked beside them -- street
+ * furniture is the backdrop the crowd is read against, so it has to belong to the same world
+ * without ever competing with a person. Every one of them is a heavy dilution toward a dark
+ * neutral, which is what keeps the edge quiet by construction: the loudest thing here is a lamp
+ * globe, and it is off-white with a little mustard in it.
+ */
+export const EDGE = {
+    /**
+     * Railings, lamp columns, bench frames and bin rims: charcoal with a third of navy in it.
+     *
+     * One colour for all of the ironwork on purpose. Painted street furniture in a real place is
+     * one colour too, and here it also means the posts, the rails and the bench legs are a single
+     * instanced mesh rather than three.
+     */
+    iron: mix(PALETTE[5], PALETTE[6], 0.35),
+    /** Bench slats: brown warmed with sand, so the one thing people sit on is not more ironwork. */
+    timber: mix(PALETTE[23], PALETTE[15], 0.35),
+    /**
+     * A lamp globe. Off-white with a trace of mustard in it, and the trace is deliberately small:
+     * the globe is shaded by the same three-step ramp as everything else, so its lower half drops
+     * to the darkest band whatever colour it starts from. Mixed half and half it comes out a tan
+     * pebble on a stick rather than a lamp.
+     */
+    globe: mix(PALETTE[16], PALETTE[0], 0.82),
+    /** Bins: teal taken most of the way down to charcoal, a shade off the ironwork rather than on it. */
+    bin: mix(PALETTE[10], PALETTE[5], 0.5),
+} as const;

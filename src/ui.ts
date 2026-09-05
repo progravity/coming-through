@@ -30,6 +30,8 @@ export class UI {
     readonly randomSeed = el<HTMLButtonElement>('randomSeed');
     readonly seedInput = el<HTMLInputElement>('seedInput');
     private readonly flashEl = el<HTMLElement>('flash');
+    private readonly scrapeEl = el<HTMLElement>('scrape');
+    private scrapeTimer = 0;
     private readonly title = el<HTMLElement>('overlayTitle');
     private readonly result = el<HTMLElement>('result');
 
@@ -79,4 +81,18 @@ export class UI {
     /** Label the start button for whether pressing it replays the same seed or plays a new one. */
     setStartLabel(replaying: boolean): void { this.start.textContent = replaying ? 'Same seed again' : 'Start'; }
     flash(): void { this.flashEl.style.opacity = '1'; setTimeout(() => { this.flashEl.style.opacity = '0'; }, 120); }
+
+    /**
+     * The scenery cue: the player has walked into something solid that is not a person.
+     *
+     * Held rather than pulsed. A scrape is reported on every step the player is pressed against a
+     * bench, so a flash would strobe at sixty hertz; instead each report re-arms the same timeout,
+     * which leaves a steady dim edge while you lean on the thing and fades a fifth of a second
+     * after you step off it. Nothing about it resembles `flash` -- that one is reserved for bumps.
+     */
+    scrape(): void {
+        this.scrapeEl.style.opacity = '1';
+        clearTimeout(this.scrapeTimer);
+        this.scrapeTimer = setTimeout(() => { this.scrapeEl.style.opacity = '0'; }, 90) as unknown as number;
+    }
 }

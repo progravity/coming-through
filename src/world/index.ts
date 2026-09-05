@@ -1,11 +1,27 @@
 import * as THREE from 'three';
+import { buildEdge } from './kit.ts';
+import type { EdgeLayer } from './kit.ts';
+import { furniturePlan } from './furniture.ts';
 import { buildGround } from './ground.ts';
 import type { Ground } from './ground.ts';
 import { buildProps } from './props.ts';
 import type { Props } from './props.ts';
-import { buildRailings } from './railings.ts';
+import { railingPlan } from './railings.ts';
 
-export interface World { scene: THREE.Scene; ground: Ground; props: Props; }
+export interface World {
+    scene: THREE.Scene;
+    ground: Ground;
+    props: Props;
+    edge: EdgeLayer;
+    /**
+     * Show or hide every drawn outline in the world at once.
+     *
+     * The ground draws its line as a strip and the edge layer grows a shell off each prop, but they
+     * are one line and have to switch together with the crowd's -- so the game has one call to make
+     * rather than a list to keep up to date.
+     */
+    setInk(on: boolean): void;
+}
 
 /**
  * Even hemisphere fill plus the key light every person is lit by. Shared with the character
@@ -25,7 +41,12 @@ export function buildWorld(): World {
     scene.fog = new THREE.Fog(0x9ed0e6, 40, 110);
     addLights(scene);
     const ground = buildGround(scene);
-    buildRailings(scene);
+    // The two edge plans go into one kit, so the ironwork in the railings and the ironwork in the
+    // benches are the same instanced mesh rather than two.
+    const edge = buildEdge(scene, [railingPlan(), furniturePlan()]);
     const props = buildProps(scene);
-    return { scene, ground, props };
+    return {
+        scene, ground, props, edge,
+        setInk: (on: boolean): void => { ground.setInk(on); edge.setInk(on); },
+    };
 }

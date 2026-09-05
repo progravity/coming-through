@@ -9,10 +9,12 @@ import { EXIT_S } from '../world/layout.ts';
 import { PATH, newPathFrame, newPathPoint, newWorldPoint, pathDir } from '../world/path.ts';
 import type { PathFrame, PathPoint } from '../world/path.ts';
 import type { GridItem, SpatialGrid } from './grid.ts';
+import { pushOutOf } from './obstacles.ts';
+import type { Obstacle, Push } from './obstacles.ts';
 import type { Player } from './player.ts';
 import { copyPose, newPose } from './pose.ts';
 import type { Pose } from './pose.ts';
-import { avoidPlayer, separation, steerToward, wallRepulsion } from './steering.ts';
+import { avoidPlayer, obstacleRepulsion, separation, steerToward, wallRepulsion } from './steering.ts';
 import type { Steer } from './steering.ts';
 
 /** Anything drawPerson needs to pose a body. Shared by agents and the player. */
@@ -39,6 +41,7 @@ const TAU = Math.PI * 2;
 // two hold whatever a conversion is writing out.
 const _here = newPathPoint(), _moved = newPathPoint(), _other = newPathPoint();
 const _frame = newPathFrame(), _world = newWorldPoint();
+const _push: Push = { nx: 0, nz: 0, depth: 0 };
 
 export class Agent implements GridItem, Poseable {
     /** Position in spawn order across the whole run; also names this agent's RNG forks. */
@@ -169,8 +172,31 @@ export class Agent implements GridItem, Poseable {
         return true;
     }
 
+    /**
+     * Push out of any furniture this body has ended up inside, and stop moving into it.
+     *
+     * The backstop under `obstacleRepulsion`, which is what normally keeps a body clear: at crowd
+     * density someone gets shoved into a bench by the press behind them, and a soft force cannot
+     * refuse that. Velocity into the surface is projected out rather than reflected, so a body
+     * pinned against a bench slides along it and walks off the end instead of bouncing.
+     *
+     * Runs **before** the lateral clamp, so the railing stays the authority on how far across the
+     * walkway anyone may be. The slot between a bench's back and the railing is narrower than a
+     * person, so being pushed outward into it cannot leave anyone stranded there: the clamp pulls
+     * them back the same step, every step, to the same place -- which is a body flush against the
+     * railing rather than a body vibrating between two rules.
+     */
+    private clearFurniture(grid: SpatialGrid<Agent, Obstacle>): void {
+        grid.forFixed(this.cx, this.cz, o => {
+            if (!pushOutOf(o, this.cx, this.cz, this.r, _push)) return;
+            this.x += _push.nx * _push.depth; this.z += _push.nz * _push.depth;
+            const into = this.vx * _push.nx + this.vz * _push.nz;
+            if (into < 0) { this.vx -= _push.nx * into; this.vz -= _push.nz * into; }
+        });
+    }
+
     /** Advance one fixed step. */
-    update(player: Player, grid: SpatialGrid<Agent>): void {
+    update(player: Player, grid: SpatialGrid<Agent, Obstacle>): void {
         const dt = SIM_DT;
         this.t += dt; this.bumpCd -= dt;
         const A = this.A;
@@ -183,8 +209,10 @@ export class Agent implements GridItem, Poseable {
         separation(this, A, grid, desired);
         avoidPlayer(this, A, player, desired);
         wallRepulsion(here.n, this.r, frame, desired);
+        obstacleRepulsion(this, grid, desired);
         steerToward(this, desired);
         this.x += this.vx * dt; this.z += this.vz * dt;
+        this.clearFurniture(grid);
         // Nobody walks through a railing: the hard limit is on the offset from the centreline,
         // taken from the path's own width where the body has ended up.
         const now = PATH.toPath(this.x, this.z, _moved);

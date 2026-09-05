@@ -12,12 +12,18 @@ check and the determinism test. `npm run lint` is the first two on their own.
 - `src/archetypes.ts` — who exists: behaviour numbers and look constraints per archetype.
 - `src/recipe.ts` — the appearance and gait roll for one person, and the age/mobility profiles.
 - `src/sim/` — pure simulation, no DOM or three.js: `simulation.ts` is the whole game state and its
-  fixed step; `crowd.ts`, `agent.ts`, `spawner.ts`, `steering.ts`, `player.ts`, `pose.ts`.
+  fixed step; `crowd.ts`, `agent.ts`, `spawner.ts`, `steering.ts`, `player.ts`, `pose.ts`,
+  `grid.ts` (the spatial index, moving layer and fixed), `obstacles.ts` (the furniture's colliders).
+  That "no three.js" is checked rather than hoped for: `world/edge.ts` holds the edge layer's data
+  and `world/kit.ts` its meshes precisely so the simulation can read the furniture's placement
+  without pulling a renderer in behind it.
 - `src/input/` — adapters, per-step sampling, and `recorder.ts` (the input log).
 - `src/world/` — the path and everything standing on it: `layout.ts` (dimensions and landmarks, in
   path coordinates), `path.ts` (the centreline curve, the width and height profiles over it, and
   the conversion to world space; pure, no three.js, so the simulation can import it), `ground.ts` (the surface, swept along that curve),
-  `railings.ts`, `props.ts`, `box.ts`.
+  `edge.ts` (what a piece of the path's edge *is*; pure, so the simulation can read it),
+  `kit.ts` (how one lands and gets drawn), `railings.ts` and `furniture.ts` (where the pieces go),
+  `props.ts`, `box.ts`, `material.ts` (the one shading model the whole world takes).
 - `src/render/`, `src/camera.ts`, `src/ui.ts`, `src/debug.ts` — presentation only.
 - `src/main.ts` — the entry point and nothing else: it dynamic-imports the game, the character
   inspector when `?inspect=` is present, or the render comparator when `?compare=` is, so a normal
@@ -40,6 +46,12 @@ check and the determinism test. `npm run lint` is the first two on their own.
 - `test/ground.test.ts` — sweeps the ground's cross-section along curves the game never draws (a
   right-angled bend, and one that also widens and rises) and checks every vertex and normal came
   out of the frame rather than out of world x, a world y, or a remembered width.
+- `test/edge.test.ts` — the same treatment for the railings and the furniture: plans them along a
+  bending, widening, climbing stub and measures every post, rail, bench, lamp and bin back off the
+  frame there, then checks the gaps are read off where the buildings are.
+- `test/obstacles.test.ts` — that the furniture is solid and that being solid never touches the
+  score: colliders match the drawn objects, the crowd goes round them, the player is stopped by
+  them, and a bump is still player-versus-person contact and nothing else.
 
 ## Seeds and restarting
 
@@ -72,9 +84,10 @@ constant 6, and 0 -- but they are read as profiles everywhere, so bending, widen
 walkway is a change to that data and to nothing that reads it. `W` in `layout.ts` is the *nominal*
 width the profile is anchored to, not a width anything places from.
 
-- **`halfWidth(s)`** is what "the edge of the path" means. The railings, the shopfronts, the lamps,
-  the kerb and grass in the ground's section, the crowd's lateral clamp, the wall repulsion and the
-  player's fence all read it at their own `s`. Nothing may use `+-W` for an edge.
+- **`halfWidth(s)`** is what "the edge of the path" means. The railings and everything standing
+  between them, the shopfronts, the kerb and grass in the ground's section, the crowd's lateral
+  clamp, the wall repulsion and the player's fence all read it at their own `s`. Nothing may use
+  `+-W` for an edge.
 - **`height(s)`** is the centreline's world y, and `slope(s)` is read off it by central difference,
   so a hill and its gradient cannot disagree. A *height* anywhere in `world/` -- a slab's `y`, a
   band's `y`, a camera's eye -- is a height **above the path's surface**, never a world y.
@@ -162,14 +175,16 @@ Four things about the shape are worth knowing before changing it:
   slightly deeper concrete over the outer three metres, which reads as shading rather than as a
   painted lane, and the grain below.
 
-There are two boundaries because the railings hide the outer one. A walker sees the trim strip at
-the railings' feet; the kerb, its lip and the grass are only visible through a doorway, from the
-top camera, or in the distance. Both get an **ink line** -- a thin dark strip laid along the edge,
-in `INK_LINE` from `render/materials.ts`, the same colour the people's outline shells are. It has
-to be drawn rather than inflated: a back-face shell works for a part because a part has a centre to
-grow away from, and a ribbon has none. It is a second mesh purely so `Ground.setInk` can switch it
-with `pools.setInk`, which `game.ts` does in one place so the ground and the crowd always carry the
-same line -- including under a `?look=` treatment that turns the shells off.
+There are two boundaries: the trim strip at the railings' feet, and the kerb and its lip outside
+them. Both used to be a walker's near view and a distant one, because the railings were a solid
+wall; now that they are see-through, the kerb, the lip and the grass are in plain sight from the
+walkway and the outer boundary carries as much weight as the inner. Both get an **ink line** -- a
+thin dark strip laid along the edge, in `INK_LINE` from `render/materials.ts`, the same colour the
+people's outline shells are. It has to be drawn rather than inflated: a back-face shell works for a
+part because a part has a centre to grow away from, and a ribbon has none. It is a second mesh
+purely so `Ground.setInk` can switch it with `pools.setInk` and the edge layer's shells, which
+`game.ts` does through `World.setInk` in one place so the whole world and the crowd always carry
+the same line -- including under a `?look=` treatment that turns the shells off.
 
 A `Zone` recolours the walking surface over a range of `s`, which is the mechanism for varying the
 ground by place. It works by resolving the two *roles* the surface bands name (`centre` and `edge`)
@@ -219,6 +234,155 @@ as it goes and carries a hill over it -- and measuring every vertex back off the
 straight-line, fixed-width or flat-ground shortcut in here would look perfect on today's walkway and
 fail against those. Each of the three has been checked to fail it: pin the section to a constant
 width, or write a world y in `ribbon`, and the profiled test goes red while the rest stay green.
+
+## The path edge
+
+Everything standing along the walkway's edge -- the railings, and the benches, lamp posts and bins
+between them -- is one layer, built the way the ground is: described in the path's own cross-section
+and placed through `frameAt`. `edge.ts` says what a piece *is*, `kit.ts` how one lands and gets
+drawn, and `railings.ts` and `furniture.ts` where the pieces go -- the last three of those pure
+functions of the curve that return placements and touch no three.js. That split is what lets
+`test/edge.test.ts` plan the whole edge along a walkway the game has never drawn and measure it,
+and it is also what lets `sim/obstacles.ts` read the same placements without a renderer coming with
+them; see "Solid furniture" below. A `furniturePlan` returns a third list beside the parts and the
+bars -- the `Solid` footprints -- and every part carries the `piece` id of the object it belongs to,
+which is what ties a collider to the thing it is a collider for.
+
+**The railings are see-through, and that is a scenery decision rather than a styling one.** They
+used to be a solid metre-high slab, which occluded everything beside the path -- so every layer
+built outward from here would have been hidden behind the one thing standing in front of it. Posts
+at 1.8 m with a top rail and a mid rail leave the off-path world visible, which is what makes
+building it worth doing. Do not put the wall back.
+
+Three rules hold the placement together, and each of them is the difference between working on
+today's path and working on any path:
+
+- **Along-path spacing is an interval of `s`; lateral offset is a clearance from `halfWidth(s)`.**
+  A post is at `side * halfWidth(s)`, a bench seat at `halfWidth(s) - 0.92`, a lamp at
+  `halfWidth(s) + 0.7`. Nothing holds `+-W`, a world x or a world y, so a stretch that widens
+  carries its whole edge out with it. The test's sharpest assertion is exactly this: the *set* of
+  clearances from the edge is identical on a widening walkway and a uniform one, while the raw
+  offsets from the centreline are not.
+- **A rail is a `Bar` between two posts, not a slab laid down the tangent.** The two posts it joins
+  are at `halfWidth` of their *own* `s` and at `height` of their own `s`, so on a widening stretch
+  they are further apart than the interval and on a hill one is above the other. A bar is built
+  from both frame-placed ends and leans to meet them; a `Standing` piece with a length cannot.
+- **A rigid object is placed once and slides along its own tangent.** A bench is manufactured
+  before it is put down, so its legs sit under its seat rather than at their own clearance from an
+  edge that may be somewhere else half a metre away. That is what `Standing.ahead` is for: every
+  part of one bench names the bench's `s` and offsets along the frame's tangent there. Placing the
+  legs at places of their own fans the bench open on a curve, and the test catches it.
+
+**Interruptions are `EdgeSpan`s, and both layers route around the same list.** The gaps in the
+railings are not written down: `SHOP_SPANS` in `layout.ts` is derived from `DOORS` and the `SHOP`
+footprint, so a building that moves takes its gap with it, and `freeRuns` ends a railing run square
+against the footprint rather than at whichever grid point fell nearest. Furniture takes the same
+list plus `PAD_SPANS`, and is tested against the *room a prop takes up* rather than the point it is
+centred on -- a bench with one end in a doorway is the failure that rule exists to prevent. The
+debug overlay draws the doorways off the same spans, so it cannot claim a gap that is not there. A
+plaza, a crossing or a bus stop is one more entry.
+
+**The edge is instanced, batched by shape and colour.** Some five hundred posts, rails, slats,
+lamps and bins are ten meshes, which is why the ironwork is all one colour: the posts, the rails,
+the bench legs and the bin rims arrive in a single draw call, and a new prop in the same paint
+costs nothing. Adding a prop is an entry in a plan and never a mesh. Colours come from `EDGE` in
+`palette.ts`, made of palette entries the same way the ground's are.
+
+Each batch gets a back-face ink shell, switched by `World.setInk` together with the ground's drawn
+line and the crowd's own shells. The clearance is capped at a fraction of each axis rather than
+being the flat constant a person's shell uses: a railing post is 90 mm through, and a fixed 20 mm
+of shell on each side would draw a solid black stick instead of a line around one.
+
+The layer is pure presentation, draws no random numbers and is not reachable from the simulation,
+so **neither hash moves when it changes**.
+
+**Everything in `world/` is toon-shaded**, through `worldToon` in `material.ts` -- one shared
+gradient and one material per colour. The props used to be `MeshLambertMaterial` while the ground
+and the crowd were `MeshToonMaterial`, and two shading models on screen is one too many: a Lambert
+box beside a toon figure does not read as a different material, it reads as a different game. There
+is nothing left for a new prop to be shaded by, which is the point.
+
+## Solid furniture
+
+Benches, bins and lamp posts are things you walk into, for the crowd as well as for the player.
+`sim/obstacles.ts` owns that, and three rules hold it together.
+
+**A collider is derived from the drawn object, never authored beside it.** `furniturePlan` already
+computes where every piece stands in path coordinates, and it emits a `Solid` per object alongside
+the parts it draws, sharing a `piece` id with them; `buildObstacles` turns those through the same
+`frameAt` the visuals go through. So the thing that stops you and the thing you can see are two
+readings of one number -- move a bench, lengthen it, widen the path under it, and both move
+together. `test/obstacles.test.ts` measures the capsule against the bounding box of the parts
+carrying its `piece` id, so a collider that outgrew its object fails.
+
+The shape is a **capsule**: a segment `2 * half` long swollen by `r`. A bin and a lamp are `half = 0`,
+which is a circle; a bench is a long thin one lying along the path. One primitive covers both, the
+nearest-point query is four lines with no branch, and the rounded ends put the collider *inside* the
+drawn box at the corners rather than outside it -- so you are never stopped by a bench you can see
+you have walked past. Colliders are horizontal, like the rest of the simulation: the crowd walks in
+the x/z plane and is draped onto the surface at render time, so a hill changes nothing about what
+you can walk into. A lamp post is solid too although nothing can reach it -- it stands outside the
+railings and both the crowd and the player are fenced inside `halfWidth` -- because "furniture is
+solid" with no exception to remember is worth more than twenty-two grid entries.
+
+**They live in the crowd's own grid, as a second layer.** `SpatialGrid` now holds a moving layer,
+cleared and refilled every step, and a fixed one set once from the furniture; both are keyed the
+same way, so an agent meets the bench beside it through a lookup it was already doing and there is
+no pass over every obstacle. Two things about the fixed layer are deliberate and were measured:
+
+- **A fixed item is indexed into every cell within one cell's width of its own footprint**, which
+  lets `forFixed` read a single cell rather than the 3x3 block `forNeighbors` needs. That is a trade
+  only a static layer can make, and it is worth making: nearly every agent is nowhere near a bench,
+  there are two of these queries per agent per step, and the nine-lookup version measured at a fifth
+  of the whole simulation. One lookup put it back inside the noise.
+- **`grid.reach` is the promise that comes with it** -- how far from an item's footprint a query is
+  guaranteed to find it, which is one cell. Every interaction radius has to stay under it or a bench
+  would push harder or softer depending on where the cell boundaries happened to fall under it. The
+  test pins `biggest obstacle + widest body + OBSTACLE_ROOM < grid.reach`.
+
+**The crowd avoids them with the machinery it already had.** `obstacleRepulsion` is `separation`
+with a capsule in place of a body: the same falloff, found through the same grid, so people drift
+round a bench well before they reach it and the walkway visibly narrows beside one. Its weight is a
+constant rather than the archetype's `sepW`, because a bench has no opinion about who is walking
+into it and does not step aside for anyone -- Kyle still ignores people and still walks round a bin.
+Under it, `Agent.clearFurniture` is the backstop for someone shoved in by the press behind them: it
+pushes out and projects velocity along the surface rather than reflecting it, so a body pinned
+against a bench slides along and walks off the end instead of bouncing. It runs **before** the
+lateral clamp, so the railing keeps the last word on how far across the walkway anyone may be.
+
+That ordering has a consequence worth knowing. The strip between a bench's back and the railing is
+narrower than a person, so a body pushed outward into it is pulled back by the clamp the same step,
+every step, to the same place -- flush against the railing, its *collision circle* still a little
+inside the bench's. It is stable rather than jittering, it is rare (0.13% of agent-steps at a full
+crowd, never deeper than 0.14 m), and it does not read as clipping, because a body's collision
+circle is about a third wider than the body you can see. The measured cost of the narrowing is
+around 5% fewer people reaching the end of the path in a minute, which is the bunching the furniture
+is there to create.
+
+**Hitting furniture is never a bump.** The score has exactly one definition -- player-versus-person
+contact -- and the cause is not part of it: a person shoved into the player by a crowd bunched
+behind a bench is the same bump as one the player walked into. Furniture reports a *scrape* through
+`Simulation.onScrape`, which is counted nowhere. The player is **blocked** rather than pushed: the
+candidate position is pushed out of whatever it landed inside, re-fenced by the path, and if that
+still leaves it inside something the move is refused and the player stays where they were. Refusing
+is what makes it a wall; a push-out alone could shunt them past a bench or wedge them behind one.
+The previous position is always free, so standing still is always a legal answer.
+
+Its cue is `UI.scrape`, and it is deliberately nothing like `UI.flash`: no red, half the strength,
+hugging the very edge of the screen, and *held* rather than pulsed -- a scrape is reported on every
+step you lean on something, so each report re-arms one timeout instead of starting a flash. The red
+flash stays exclusive to bumps.
+
+**Known gap: a person's collision circle is wider than the person.** Measured across four seeds at a
+full crowd, a plain walker's drawn half width averages 0.24 m against a collision radius of 0.30 to
+0.32 -- so player-versus-person contact fires about a third early, which in first person reads as a
+phantom bump. Tightening it is *not* the small change it looks like, which is why it is still here:
+a wheelchair, a scooter and a stroller are all much wider than the torso inside them, their drawn
+widths live as inline constants inside `drawPerson` rather than as data, and shrinking the shared
+`Agent.r` would change crowd density everywhere. Doing it properly means factoring a
+`bodyHalfWidth(recipe)` out of `render/person.ts` alongside `standingHeight`, covering every aid and
+accessory, and re-tuning the crowd against it. The furniture's colliders already follow the
+"collision matches what you see" rule; people are the half that is still owed it.
 
 ## Character recipes
 

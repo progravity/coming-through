@@ -43,6 +43,10 @@ export class PartPools {
             const mesh = new THREE.InstancedMesh(geo, makeToonMaterial(toonMap), n);
             const out = new THREE.InstancedMesh(geo, makeInkMaterial(), n);
             mesh.frustumCulled = out.frustumCulled = false;
+            // Tagged so the comparator's treatments can find the character pools by what they are
+            // rather than by being the only instanced meshes in the scene -- the edge layer is
+            // instanced too, and a restyled railing is a bug nothing would report.
+            mesh.userData.part = out.userData.part = true;
             const white = new THREE.Color(0xffffff);
             for (let i = 0; i < n; i++) { mesh.setMatrixAt(i, ZERO); out.setMatrixAt(i, ZERO); mesh.setColorAt(i, white); }
             scene.add(mesh); scene.add(out);

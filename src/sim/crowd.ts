@@ -3,6 +3,8 @@ import { stepsFor } from '../core/time.ts';
 import { MAX } from '../world/layout.ts';
 import { Agent } from './agent.ts';
 import { SpatialGrid } from './grid.ts';
+import { buildObstacles, reachOf } from './obstacles.ts';
+import type { Obstacle } from './obstacles.ts';
 import type { Player } from './player.ts';
 import { copyPose } from './pose.ts';
 import { spawn } from './spawner.ts';
@@ -15,7 +17,14 @@ const SPAWN_INTERVAL = stepsFor(0.15);
 /** Owns the agent list, render-slot allocation and the per-step simulation. Agents are kept in spawn order. */
 export class Crowd {
     readonly agents: Agent[] = [];
-    readonly grid = new SpatialGrid<Agent>(2);
+    /**
+     * One grid, two layers: the crowd, rebuilt every step, and the walkway's furniture, set once
+     * below. An agent's separation query and its furniture query are the same 3x3 lookup over the
+     * same cells, so a bench costs nothing to notice and there is no pass over every obstacle.
+     */
+    readonly grid = new SpatialGrid<Agent, Obstacle>(2);
+    /** The static colliders, derived from the furniture layout. Never rebuilt: the walkway is fixed. */
+    readonly obstacles: readonly Obstacle[] = buildObstacles();
     private readonly freeSlots: number[] = [];
     private spawnCooldown = 0;
     private spawnEvents = 0;
@@ -28,6 +37,7 @@ export class Crowd {
 
     constructor(streams: Streams) {
         this.streams = streams;
+        this.grid.setFixed(this.obstacles, reachOf);
         // Slot 0 belongs to the player; the crowd fills upward from 1 (see PLAYER_SLOT).
         for (let i = MAX; i >= 1; i--) this.freeSlots.push(i);
     }

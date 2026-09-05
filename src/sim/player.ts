@@ -7,10 +7,13 @@ import { clamp, wrapAngle } from '../util.ts';
 import { GOAL_LINE_S, ROAM_S, START_S } from '../world/layout.ts';
 import { PATH, newPathPoint, newWorldPoint } from '../world/path.ts';
 import type { Poseable } from './agent.ts';
+import { insideFurniture, pushOutOf } from './obstacles.ts';
+import type { FixedQuery, Push } from './obstacles.ts';
 import { copyPose, newPose } from './pose.ts';
 import type { Pose } from './pose.ts';
 
 const _here = newPathPoint(), _world = newWorldPoint();
+const _push: Push = { nx: 0, nz: 0, depth: 0 };
 
 export type CameraMode = 'shoulder' | 'first' | 'top';
 export const CAMERA_MODES: readonly CameraMode[] = ['shoulder', 'first', 'top'];
@@ -73,8 +76,24 @@ export interface MoveInput {
     hurry: boolean;
 }
 
-/** Advance the player one fixed step. In first person, left/right turns the body rather than strafing. */
-export function updatePlayer(p: Player, input: MoveInput, mode: CameraMode): void {
+/**
+ * Advance the player one fixed step, and say whether they walked into the scenery.
+ *
+ * In first person, left/right turns the body rather than strafing.
+ *
+ * Furniture **blocks** rather than pushing: the candidate position is pushed out of anything it
+ * landed inside, re-fenced by the path, and if that still leaves it inside something the move is
+ * refused outright and the player stays where they were. Refusing is what makes it a wall -- a
+ * push-out alone could shunt the player past a bench or wedge them into the strip between a bench
+ * and the railing, which is narrower than they are. The previous position is always free, so
+ * standing still is always a legal answer.
+ *
+ * Velocity into a surface is projected out rather than reflected, so walking into a bench at an
+ * angle slides you along it and walking into it square stops you dead. Neither is a bump: the
+ * return value is a *scrape*, and the caller gives it its own quiet cue. Bumps stay what they have
+ * always been, which is hitting a person.
+ */
+export function updatePlayer(p: Player, input: MoveInput, mode: CameraMode, grid: FixedQuery): boolean {
     const dt = SIM_DT;
     const firstPerson = mode === 'first';
     let mx = 0, mz = 0;
@@ -92,11 +111,30 @@ export function updatePlayer(p: Player, input: MoveInput, mode: CameraMode): voi
     // Movement is camera-relative and therefore world-space; only the limits are path-space -- how
     // far across the walkway, and how far past either end -- so the player is fenced in by the path.
     // How far across is the path's own half width where they have got to, not a remembered number.
-    const q = PATH.toPath(p.x + p.vx * dt, p.z + p.vz * dt, _here);
-    const s = clamp(q.s, -ROAM_S, ROAM_S);
-    const lim = PATH.halfWidth(s) - p.r;
-    const w = PATH.toWorld(s, clamp(q.n, -lim, lim), _world);
-    p.x = w.x; p.z = w.z;
+    const fence = (x: number, z: number): { x: number; z: number } => {
+        const q = PATH.toPath(x, z, _here);
+        const at = clamp(q.s, -ROAM_S, ROAM_S);
+        const lim = PATH.halfWidth(at) - p.r;
+        const w = PATH.toWorld(at, clamp(q.n, -lim, lim), _world);
+        return { x: w.x, z: w.z };
+    };
+    const fromX = p.x, fromZ = p.z;
+    let { x: nx, z: nz } = fence(p.x + p.vx * dt, p.z + p.vz * dt);
+    let scraped = false;
+    grid.forFixed(nx, nz, o => {
+        if (!pushOutOf(o, nx, nz, p.r, _push)) return;
+        scraped = true;
+        nx += _push.nx * _push.depth; nz += _push.nz * _push.depth;
+        const into = p.vx * _push.nx + p.vz * _push.nz;
+        if (into < 0) { p.vx -= _push.nx * into; p.vz -= _push.nz * into; }
+    });
+    if (scraped) {
+        ({ x: nx, z: nz } = fence(nx, nz));
+        // Pushed out and then fenced back in: if that put the player back inside the furniture --
+        // a wedge, or the strip behind a bench -- there is nowhere legal to go but where they were.
+        if (insideFurniture(grid, nx, nz, p.r)) { nx = fromX; nz = fromZ; p.vx = 0; p.vz = 0; }
+    }
+    p.x = nx; p.z = nz;
     const ps = Math.hypot(p.vx, p.vz);
     if (ps > 0.2 && !firstPerson) {
         const d = wrapAngle(Math.atan2(p.vx, p.vz) - p.yaw);
@@ -104,6 +142,7 @@ export function updatePlayer(p: Player, input: MoveInput, mode: CameraMode): voi
     } else p.lean *= 0.9;
     p.mv += (clamp(ps / WALK, 0, 1) - p.mv) * Math.min(1, dt * 10);
     p.phase += ps * dt * p.recipe.gait.cadence;
+    return scraped;
 }
 
 /** Settle the camera yaw for the next step: smoothed behind the shoulder, locked in first person, fixed from above. */

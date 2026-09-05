@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { slab } from './ground.ts';
-import { DOORS, L } from './layout.ts';
+import { DOORS, L, SHOP } from './layout.ts';
+import { worldToon } from './material.ts';
 import { PATH, newPathFrame, newWorldPoint, pathPlace } from './path.ts';
 
 const SHOPC = [0xe37f3c, 0x3fb5a8, 0xd9534f, 0x8a6fd1];
@@ -12,32 +13,29 @@ export interface Props {
 }
 
 /**
- * Shops behind the doorways, lamp posts, and a distant skyline.
+ * The shops behind the doorways and a distant skyline: the landmarks, as opposed to the edge layer.
  *
  * Everything here is placed in path coordinates, the landmarks past the ends included: `s` beyond
  * the path extrapolates along the end run, so the skyline stays behind the goal however the
  * walkway is shaped. Anything standing just off the walkway is offset from `halfWidth` at its own
- * `s` rather than from a fixed width, so the shopfronts and the lamps keep their clearance from a
- * path that widens, and their heights are heights above the surface rather than world y.
+ * `s` rather than from a fixed width, so the shopfronts keep their clearance from a path that
+ * widens, and their heights are heights above the surface rather than world y.
+ *
+ * The shop blocks take their size from `SHOP` in `layout.ts` rather than from numbers written here,
+ * because the railings and the furniture route around the same figures: a building that moves or
+ * grows takes its gap in the edge with it. They are still nondescript cubes -- their own layer
+ * comes later -- and the lamp posts that used to live here are now part of that edge layer, placed
+ * on the same width-aware interval rule as the benches and the bins.
  */
 export function buildProps(scene: THREE.Scene): Props {
     DOORS.forEach((d, i) => {
         const edge = PATH.halfWidth(d.s);
-        slab(scene, d.s, d.side * (edge + 3.2), 6, 3.2, 7, 0xf2ead8, 1.6);
-        slab(scene, d.s, d.side * (edge + 0.9), 6.4, 0.5, 2, SHOPC[i], 2.6);
+        slab(scene, d.s, d.side * (edge + SHOP.inset + SHOP.across / 2), SHOP.across, SHOP.height, SHOP.along, 0xf2ead8, SHOP.height / 2);
+        slab(scene, d.s, d.side * (edge + 0.9), SHOP.across + 0.4, 0.5, 2, SHOPC[i], SHOP.height - 0.6);
     });
-    for (let s = -L; s <= L; s += 12) {
-        for (const side of [-1, 1]) {
-            const n = side * (PATH.halfWidth(s) + 0.7);
-            slab(scene, s, n, 0.12, 3.2, 0.12, 0x3b3a36, 1.6);
-            const p = pathPlace(PATH.frameAt(s, _f), n, 3.3, _w);
-            const g = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), new THREE.MeshLambertMaterial({ color: 0xfff2c4 }));
-            g.position.set(p.x, p.y, p.z); scene.add(g);
-        }
-    }
     const WHEEL_S = -(L + 40), WHEEL_N = -24;
     const p = pathPlace(PATH.frameAt(WHEEL_S, _f), WHEEL_N, 11, _w);
-    const wheel = new THREE.Mesh(new THREE.TorusGeometry(9, 0.5, 8, 24), new THREE.MeshLambertMaterial({ color: 0xd9534f }));
+    const wheel = new THREE.Mesh(new THREE.TorusGeometry(9, 0.5, 8, 24), worldToon(0xd9534f));
     // Turned to face the path; the main loop spins it about its own z, which stays in its plane.
     wheel.position.set(p.x, p.y, p.z); wheel.rotation.y = PATH.yawAt(WHEEL_S); scene.add(wheel);
     slab(scene, WHEEL_S, WHEEL_N, 0.8, 11, 0.8, 0x5d5a52, 5.5);

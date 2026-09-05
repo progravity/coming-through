@@ -50,6 +50,12 @@ export class Simulation {
     /** Set by the step in which the player reached the goal. */
     finished = false;
     onBump: ((e: BumpEvent) => void) | null = null;
+    /**
+     * Fired when the player walks into the scenery. Deliberately *not* a bump and deliberately not
+     * counted: the score is player-versus-person contact and nothing else, whoever caused it. A
+     * bench stopping you is feedback, not a mistake.
+     */
+    onScrape: (() => void) | null = null;
 
     constructor(seed: number) {
         this.seed = seed >>> 0;
@@ -77,7 +83,9 @@ export class Simulation {
         crowd.populate(clampCrowd(cmd.crowd));
         if (cmd.running) {
             this.elapsed += SIM_DT;
-            updatePlayer(player, cmd, cmd.cam);
+            // The furniture is in the crowd's grid, so the player is blocked by it through the same
+            // lookup the crowd steers by. A scrape is reported, never scored.
+            if (updatePlayer(player, cmd, cmd.cam, crowd.grid)) this.onScrape?.();
             if (reachedGoal(player)) this.finished = true;
         }
         crowd.step(player, e => { this.bumps++; this.onBump?.(e); }, cmd.running);

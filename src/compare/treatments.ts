@@ -33,10 +33,17 @@ export interface PoolMeshes {
     ink: THREE.InstancedMesh[];
 }
 
+/**
+ * The character pools in a scene, found by the tag `PartPools` writes on its meshes.
+ *
+ * By the tag rather than by being instanced: the world's edge layer is instanced too, and a
+ * treatment that restyled the railings alongside the crowd would be a quiet wrong answer about how
+ * the crowd looks.
+ */
 export function poolMeshes(scene: THREE.Scene): PoolMeshes {
     const bodies: THREE.InstancedMesh[] = [], ink: THREE.InstancedMesh[] = [];
     for (const child of scene.children) {
-        if (!(child instanceof THREE.InstancedMesh)) continue;
+        if (!(child instanceof THREE.InstancedMesh) || child.userData.part !== true) continue;
         const mat = child.material as THREE.Material;
         (mat.side === THREE.BackSide ? ink : bodies).push(child);
     }

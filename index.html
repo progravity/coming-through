@@ -20,6 +20,9 @@
   #stick{position:fixed;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);display:none;pointer-events:none}
   #knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.35)}
   #flash{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,rgba(230,70,60,.55));opacity:0;transition:opacity .12s}
+  /* Walking into the scenery. Deliberately nothing like the bump: no red, half the strength, and
+     hugging the very edge of the screen, so it reads as "that is solid" rather than "that counted". */
+  #scrape{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 74%,rgba(120,112,96,.4));opacity:0;transition:opacity .18s}
   #overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,22,28,.8);text-align:center;padding:24px}
   #overlay h1{font-weight:500;font-size:26px;margin:0 0 12px}
   #overlay p{margin:6px auto;font-size:15px;color:#c9c6bd;max-width:420px}
@@ -48,6 +51,7 @@
 <canvas id="debugCanvas" hidden></canvas>
 <div id="stick"><div id="knob"></div></div>
 <div id="flash"></div>
+<div id="scrape"></div>
 <div id="fps" class="chip"></div>
 <div id="overlay"><div>
   <h1 id="overlayTitle">Coming Through!</h1>

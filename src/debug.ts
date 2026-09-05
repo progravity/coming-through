@@ -1,7 +1,7 @@
 import { ARCH } from './archetypes.ts';
 import type { Crowd } from './sim/crowd.ts';
 import type { Player } from './sim/player.ts';
-import { DOORS, EXIT_S, GOAL_S, L, PAD_LENGTH, START_S } from './world/layout.ts';
+import { EXIT_S, GOAL_S, L, PAD_LENGTH, SHOP_SPANS, START_S } from './world/layout.ts';
 import { PATH, newWorldPoint } from './world/path.ts';
 
 export interface DebugStats { fps: number; drawCalls: number; }
@@ -82,10 +82,15 @@ export class DebugOverlay {
         ctx.beginPath();
         for (const side of [-1, 1]) edge(side, -EXIT_S, EXIT_S, false, true);
         ctx.stroke();
+        // The doorways, drawn as the stretch of edge the railings actually leave open -- the same
+        // spans the edge layer routes around, so the overlay cannot claim a gap that is not there.
         ctx.strokeStyle = 'rgba(255,220,120,.9)'; ctx.lineWidth = 2;
-        for (const d of DOORS) {
-            const n = d.side * PATH.halfWidth(d.s);
-            ctx.beginPath(); ctx.moveTo(...at(d.s - 1.6, n)); ctx.lineTo(...at(d.s + 1.6, n)); ctx.stroke();
+        for (const sp of SHOP_SPANS) {
+            const side = sp.side ?? 1;
+            ctx.beginPath();
+            ctx.moveTo(...at(sp.sMin, side * PATH.halfWidth(sp.sMin)));
+            ctx.lineTo(...at(sp.sMax, side * PATH.halfWidth(sp.sMax)));
+            ctx.stroke();
         }
 
         // agents
