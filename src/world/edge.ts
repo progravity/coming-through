@@ -21,8 +21,32 @@
  */
 import type { EdgeSpan } from './layout.ts';
 
-/** The unit geometries a piece can be an instance of. All are one unit across in every axis. */
-export type Shape = 'box' | 'cyl' | 'ball';
+/**
+ * The unit geometries a piece can be an instance of. All are one unit across in every axis, so a
+ * piece's `across`/`up`/`along` are its real size in metres and nothing has a scale factor to
+ * remember.
+ *
+ * Five primitives is the whole vocabulary, and it is deliberately short: every structure standing
+ * on the path -- a railing post, a bench, a cotton-candy cart, and the buildings that come next --
+ * is an assembly of these, which is what lets the entire layer batch into a handful of draw calls.
+ * `cone` and `taper` were added for the kiosks (a wafer, a paper cup) and are the two shapes a box,
+ * a cylinder and a ball genuinely cannot fake.
+ */
+export type Shape = 'box' | 'cyl' | 'ball' | 'cone' | 'taper';
+
+/**
+ * A piece that moves after it has been placed: a balloon bobbing on its string, a pinwheel turning.
+ *
+ * Purely cosmetic and deliberately shallow. It is a function of elapsed time and a phase written
+ * down at build time -- it reads no clock of its own, feeds nothing back, and is not reachable from
+ * the simulation, so nothing here can move either determinism hash. `rate` is radians a second in
+ * both cases; `amp` is how far a bob travels either way, in metres, and is ignored by a spin.
+ *
+ * A spin turns the piece about **its own** axis -- after `lean` and `tilt`, not before -- which is
+ * what lets a pinwheel be laid flat against the walkway by `lean` and then turned in the plane it
+ * now occupies.
+ */
+export interface Motion { kind: 'spin' | 'bob'; rate: number; phase: number; amp?: number; }
 
 /**
  * One piece standing at a place on the path: where its centre sits in the walkway's cross-section,
@@ -40,6 +64,20 @@ export interface Standing {
     across: number; up: number; along: number;
     /** Offset along the frame's tangent from `s`, for one part of a rigid object placed at `s`. */
     ahead?: number;
+    /**
+     * How the piece is turned inside the frame, in radians. Both default to zero, which is the
+     * square-to-the-path box every railing post and bench slat is.
+     *
+     * `lean` turns it about the frame's **tangent**, tipping it across the path: an awning sloping
+     * down toward the walkway, a cart wheel whose axle runs across it, an ice-cream cone stood on
+     * its point. `tilt` turns it about the frame's **normal**, tipping it along the path: a sausage
+     * lying lengthways. They are angles in the frame rather than in the world, so a piece leaning
+     * over the walkway leans over it on a bend too.
+     */
+    lean?: number;
+    tilt?: number;
+    /** Cosmetic movement after placement. See `Motion`; never read by the simulation. */
+    motion?: Motion;
     /**
      * Which object this part belongs to, for the layers that build objects out of several parts.
      *
@@ -111,4 +149,35 @@ export function freeRuns(spans: readonly EdgeSpan[], side: number, from: number,
     }
     if (s0 < to) out.push({ s0, s1: to });
     return out.filter(r => r.s1 > r.s0);
+}
+
+// ---------- putting the layers together ----------
+
+/**
+ * Several layers' plans as one, with the `piece` ids renumbered so they stay unique across it.
+ *
+ * The renumbering is the whole reason this exists. A `piece` id ties a collider to the parts it is
+ * a collider *for*, and each layer numbers its own objects from one -- so concatenating two plans
+ * naively would leave a bench and a kiosk both claiming piece 3, and the check that a collider is
+ * no bigger than the thing you can see would be measuring one object against another's parts. Each
+ * plan is offset past the highest id used so far instead, which costs one pass and makes the
+ * merged plan answer that question correctly for every layer at once.
+ */
+export function mergePlans(plans: readonly EdgePlan[]): EdgePlan {
+    const out: EdgePlan = { standing: [], bars: [], solids: [] };
+    let base = 0;
+    for (const plan of plans) {
+        let top = base;
+        for (const st of plan.standing) {
+            out.standing.push(st.piece === undefined ? st : { ...st, piece: st.piece + base });
+            if (st.piece !== undefined) top = Math.max(top, st.piece + base);
+        }
+        for (const b of plan.bars) out.bars.push(b);
+        for (const so of plan.solids) {
+            out.solids.push({ ...so, piece: so.piece + base });
+            top = Math.max(top, so.piece + base);
+        }
+        base = top;
+    }
+    return out;
 }

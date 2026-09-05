@@ -1,12 +1,15 @@
 /**
- * The static things on the walkway that a body cannot walk through: benches, bins, lamp posts, and
- * whatever furniture comes next.
+ * The static things on the walkway that a body cannot walk through: benches, bins, lamp posts, the
+ * kiosks, and whatever stands there next.
  *
- * They are **derived, never authored**. `furniturePlan` already computes where every piece stands
- * in path coordinates, and it hands out a `Solid` per object alongside the parts it draws; this
- * turns those through the same `frameAt` the visuals go through. So a collider and its picture are
- * two readings of one number: move a bench, lengthen it, widen the path under it, and the thing you
- * walk into moves with the thing you see. There is no second list to keep in step.
+ * They are **derived, never authored**. Each layer's plan already computes where every piece stands
+ * in path coordinates, and hands out a `Solid` per object alongside the parts it draws; this turns
+ * those through the same `frameAt` the visuals go through. So a collider and its picture are two
+ * readings of one number: move a bench, lengthen it, widen the path under it, and the thing you walk
+ * into moves with the thing you see. There is no second list to keep in step.
+ *
+ * It reads `edgePlans`, which is the same list `world/index.ts` draws, so a layer cannot end up
+ * drawn without being solid or solid without being drawn.
  *
  * The shape is a **capsule** -- a segment `2 * half` long with radius `r` -- which covers both
  * cases the furniture needs. A bin and a lamp are `half = 0`, which is a circle; a bench is a long
@@ -19,7 +22,7 @@
  * you can walk into. And they draw no random numbers -- the furniture layout is a function of the
  * path, identical in every run.
  */
-import { furniturePlan } from '../world/furniture.ts';
+import { edgePlans } from '../world/plan.ts';
 import { PATH, newPathFrame, newWorldPoint, pathPlace } from '../world/path.ts';
 import type { PathCurve } from '../world/path.ts';
 import type { GridItem } from './grid.ts';
@@ -49,12 +52,12 @@ export const reachOf = (o: Obstacle): number => o.half + o.r;
  * The furniture's colliders, in world space.
  *
  * Read once when a `Crowd` is built and never rebuilt: the walkway does not move. Taking `curve`
- * rather than reaching for `PATH` is what lets the test place furniture on a walkway that bends,
- * widens and climbs and check the colliders followed it.
+ * rather than reaching for `PATH` is what lets the test place the furniture and the carts on a
+ * walkway that bends, widens and climbs and check the colliders followed them.
  */
 export function buildObstacles(curve: PathCurve = PATH): Obstacle[] {
     const frame = newPathFrame(), at = newWorldPoint();
-    return furniturePlan(curve).solids.map(s => {
+    return edgePlans(curve).solids.map(s => {
         const f = curve.frameAt(s.s, frame);
         pathPlace(f, s.n, 0, at);
         // The axis is the tangent flattened into the walking plane, because the simulation is

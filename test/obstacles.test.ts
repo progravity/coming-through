@@ -22,6 +22,7 @@ import { OBSTACLE_ROOM } from '../src/sim/steering.ts';
 import { IDLE_COMMAND, Simulation } from '../src/sim/simulation.ts';
 import type { StepCommand } from '../src/sim/simulation.ts';
 import { furniturePlan } from '../src/world/furniture.ts';
+import { edgePlans } from '../src/world/plan.ts';
 import { W } from '../src/world/layout.ts';
 import { PATH, PathCurve, newPathFrame, newPathPoint, newWorldPoint, pathPlace } from '../src/world/path.ts';
 import type { Along, PathRun } from '../src/world/path.ts';
@@ -56,8 +57,10 @@ function penetration(obstacles: readonly Obstacle[], x: number, z: number, r: nu
 
 // ---------- the colliders themselves ----------
 
-test('a collider is the furniture it is derived from, placed through the same frame', () => {
-    const solids = furniturePlan().solids, obstacles = buildObstacles();
+test('a collider is the thing it is derived from, placed through the same frame', () => {
+    // Every layer that has footprints, not just the furniture: the kiosks are solid through the
+    // same path and a collider that only the drawing side knew about would be invisible here.
+    const solids = edgePlans().solids, obstacles = buildObstacles();
     assert.equal(obstacles.length, solids.length, 'one collider per solid, in order');
     assert.ok(solids.length > 20, 'there is furniture to collide with');
     for (let i = 0; i < solids.length; i++) {
@@ -75,6 +78,11 @@ test('a collider is the furniture it is derived from, placed through the same fr
 test('a collider is no bigger than the thing you can see', () => {
     // The fairness promise: you are never stopped by a bench you can see you have walked past. Both
     // extents are measured off the drawn parts, so a bench that changes shape moves them together.
+    //
+    // The furniture only. The kiosks make the same promise and are held to it in `kiosks.test.ts`,
+    // but they cannot be measured by the rule below: it reads `across`/`along` as lateral and
+    // along-path extents, which stops being true the moment a part is turned inside the frame -- and
+    // a cart's wheels are, so its bounding box here would be a fiction.
     const plan = furniturePlan();
     let benches = 0;
     for (const sol of plan.solids) {
@@ -115,7 +123,7 @@ test('colliders follow a walkway that bends, widens and climbs', () => {
     const WIDENING: Along = (s: number) => W + s * 0.04;
     const HILL: Along = (s: number) => s * s * 0.004;
     const varied = new PathCurve(BEND, WIDENING, HILL);
-    const solids = furniturePlan(varied).solids, obstacles = buildObstacles(varied);
+    const solids = edgePlans(varied).solids, obstacles = buildObstacles(varied);
     assert.ok(obstacles.length > 20, 'the stub walkway is furnished');
     let turned = 0;
     for (let i = 0; i < solids.length; i++) {

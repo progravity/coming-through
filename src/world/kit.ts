@@ -5,9 +5,10 @@
  * here holds a world x, a world y or a remembered width, and a bend, a widening or a hill moves the
  * whole edge with the walkway.
  *
- * The pieces are drawn from instanced meshes keyed by shape and colour, so the whole edge -- some
- * five hundred posts, rails, slats, lamps and bins -- costs a handful of draw calls rather than
- * hundreds. Adding a prop is an entry in a plan, never a mesh.
+ * The pieces are drawn from one instanced mesh per **shape**, with colour carried per instance, so
+ * the whole edge -- some five hundred posts, rails, slats, lamps, bins and kiosk parts -- costs two
+ * draw calls per primitive rather than hundreds. Adding a prop is an entry in a plan, never a mesh,
+ * and a prop in a colour nothing else uses is now free rather than a draw call.
  */
 import * as THREE from 'three';
 import { INK_LINE } from '../render/materials.ts';
@@ -25,15 +26,50 @@ const _w = newWorldPoint(), _f0 = newPathFrame(), _f1 = newPathFrame(), _fm = ne
  * across, up for up, tangent for along -- which is a right-handed frame because `up` is defined as
  * tangent x normal. That is the whole of what makes a lamp post stand square to a hill and a bench
  * face across a bend: there is no yaw here, and no world axis either.
+ *
+ * A piece may also be *turned inside* that frame, and `t` -- elapsed seconds -- is what lets it be
+ * turned differently on every frame. `lean`, `tilt` and a spinning `motion` compose as
+ * `Rz(lean) . Rx(tilt) . Ry(spin)` in the frame's own axes, which puts the spin **innermost**: a
+ * pinwheel is laid flat against the walkway by `lean` and then turns in the plane it now occupies,
+ * rather than being spun about the path's up and then tipped over. A bobbing `motion` moves the
+ * piece along the frame's up instead, so a balloon rises square to the surface under it.
+ *
+ * The square, still case is branched out rather than falling through the general one. Every railing
+ * post and bench slat in the game takes it, it is the arithmetic this function has always done, and
+ * it means adding the vocabulary cost the existing layer nothing.
  */
-export function standingMatrix(f: PathFrame, st: Standing, out: THREE.Matrix4): THREE.Matrix4 {
-    pathPlace(f, st.n, st.y, _w);
+export function standingMatrix(f: PathFrame, st: Standing, out: THREE.Matrix4, t = 0): THREE.Matrix4 {
+    const mo = st.motion;
+    const bob = mo !== undefined && mo.kind === 'bob' ? (mo.amp ?? 0) * Math.sin(mo.rate * t + mo.phase) : 0;
+    pathPlace(f, st.n, st.y + bob, _w);
     const ahead = st.ahead ?? 0;
     if (ahead !== 0) { _w.x += f.tx * ahead; _w.y += f.ty * ahead; _w.z += f.tz * ahead; }
     const e = out.elements;
-    e[0] = f.nx * st.across; e[1] = f.ny * st.across; e[2] = f.nz * st.across; e[3] = 0;
-    e[4] = f.ux * st.up;     e[5] = f.uy * st.up;     e[6] = f.uz * st.up;     e[7] = 0;
-    e[8] = f.tx * st.along;  e[9] = f.ty * st.along;  e[10] = f.tz * st.along; e[11] = 0;
+    const lean = st.lean ?? 0, tilt = st.tilt ?? 0;
+    const spin = mo !== undefined && mo.kind === 'spin' ? mo.rate * t + mo.phase : 0;
+    if (lean === 0 && tilt === 0 && spin === 0) {
+        e[0] = f.nx * st.across; e[1] = f.ny * st.across; e[2] = f.nz * st.across; e[3] = 0;
+        e[4] = f.ux * st.up;     e[5] = f.uy * st.up;     e[6] = f.uz * st.up;     e[7] = 0;
+        e[8] = f.tx * st.along;  e[9] = f.ty * st.along;  e[10] = f.tz * st.along; e[11] = 0;
+    } else {
+        // Each column of the rotation, as how much of the frame's normal, up and tangent it is.
+        const cl = Math.cos(lean), sl = Math.sin(lean);
+        const ct = Math.cos(tilt), stl = Math.sin(tilt);
+        const cp = Math.cos(spin), sp = Math.sin(spin);
+        const an = cl * cp - sl * stl * sp, au = sl * cp + cl * stl * sp, at = -ct * sp;
+        const bn = -sl * ct,                bu = cl * ct,                 bt = stl;
+        const cn = cl * sp + sl * stl * cp, cu = sl * sp - cl * stl * cp, cta = ct * cp;
+        const x = st.across, y = st.up, z = st.along;
+        e[0] = (f.nx * an + f.ux * au + f.tx * at) * x;
+        e[1] = (f.ny * an + f.uy * au + f.ty * at) * x;
+        e[2] = (f.nz * an + f.uz * au + f.tz * at) * x; e[3] = 0;
+        e[4] = (f.nx * bn + f.ux * bu + f.tx * bt) * y;
+        e[5] = (f.ny * bn + f.uy * bu + f.ty * bt) * y;
+        e[6] = (f.nz * bn + f.uz * bu + f.tz * bt) * y; e[7] = 0;
+        e[8] = (f.nx * cn + f.ux * cu + f.tx * cta) * z;
+        e[9] = (f.ny * cn + f.uy * cu + f.ty * cta) * z;
+        e[10] = (f.nz * cn + f.uz * cu + f.tz * cta) * z; e[11] = 0;
+    }
     e[12] = _w.x; e[13] = _w.y; e[14] = _w.z; e[15] = 1;
     return out;
 }
@@ -83,63 +119,104 @@ export function barMatrix(curve: PathCurve, b: Bar, out: THREE.Matrix4): THREE.M
 const INK_OVER = 0.02, INK_MOST = 0.3;
 const grow = (size: number): number => (size + 2 * Math.min(INK_OVER, INK_MOST * size)) / size;
 
-/** One instanced mesh's worth of pieces: everything sharing a geometry and a colour. */
-interface Batch { shape: Shape; colour: number; mats: THREE.Matrix4[]; ink: THREE.Matrix4[]; }
+/**
+ * The shell for a piece whose matrix is already composed: the same box grown outward along its own
+ * three axes. A matrix column is an axis times that axis's scale, so growing it is three multiplies
+ * rather than a second composition -- which is what makes re-shelling a spinning pinwheel every
+ * frame cost nothing worth measuring.
+ */
+function shellOf(m: THREE.Matrix4, sx: number, sy: number, sz: number, out: THREE.Matrix4): THREE.Matrix4 {
+    out.copy(m);
+    const e = out.elements, gx = grow(sx), gy = grow(sy), gz = grow(sz);
+    e[0] *= gx; e[1] *= gx; e[2] *= gx;
+    e[4] *= gy; e[5] *= gy; e[6] *= gy;
+    e[8] *= gz; e[9] *= gz; e[10] *= gz;
+    return out;
+}
+
+/** One instanced mesh's worth of pieces: everything sharing a geometry, whatever colour it is in. */
+interface Batch {
+    shape: Shape;
+    mats: THREE.Matrix4[]; cols: number[]; ink: THREE.Matrix4[];
+    mesh?: THREE.InstancedMesh; inkMesh?: THREE.InstancedMesh;
+}
 
 function unit(shape: Shape): THREE.BufferGeometry {
     if (shape === 'cyl') return new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
     if (shape === 'ball') return new THREE.SphereGeometry(0.5, 10, 8);
+    // Point up, base down, so a cone stood on its point -- an ice-cream wafer -- is `lean: PI`.
+    if (shape === 'cone') return new THREE.ConeGeometry(0.5, 1, 12);
+    // A paper cup: wide at the top, narrower at the foot. The taper is part of the primitive rather
+    // than a parameter, because a shape a caller can reprofile is a shape that stops batching.
+    if (shape === 'taper') return new THREE.CylinderGeometry(0.5, 0.34, 1, 12);
     return new THREE.BoxGeometry(1, 1, 1);
 }
 
 /**
- * Collects placed pieces and turns them into one instanced mesh per shape and colour.
+ * Collects placed pieces and turns them into one instanced mesh per shape, coloured per instance.
  *
- * Batching by colour rather than by role is why the ironwork is one colour: the posts, the rails,
- * the bench legs and the bin rims then arrive in a single draw call, and a new prop in the same
- * paint costs nothing to add. Each batch gets a second mesh for its ink shell, switched together
- * with the crowd's and the ground's.
+ * Batching by shape alone and carrying colour on the instance is what lets the kiosks vary their
+ * paint at all. The edge used to batch by shape *and* colour, which was free while the whole layer
+ * was four colours of ironwork and timber -- but a cart that rolls three colours of its own would
+ * have added a draw call per cart per shape, and the pattern is meant to carry buildings next. So
+ * the colour moved onto the instance: `instanceColor` multiplies a white toon material, which
+ * leaves the three-step ramp doing exactly what it did and makes a new colour cost nothing.
+ *
+ * Each batch still gets a second mesh for its ink shell, switched together with the crowd's and the
+ * ground's. The shells need no colour of their own -- the line is one colour everywhere.
  */
 class Kit {
-    private readonly batches = new Map<string, Batch>();
+    private readonly batches = new Map<Shape, Batch>();
 
-    add(shape: Shape, colour: number, m: THREE.Matrix4, sx: number, sy: number, sz: number): void {
-        const key = `${shape}:${colour}`;
-        let b = this.batches.get(key);
-        if (b === undefined) { b = { shape, colour, mats: [], ink: [] }; this.batches.set(key, b); }
+    /** Records one piece and hands back where it landed, so an animated one can be found again. */
+    add(shape: Shape, colour: number, m: THREE.Matrix4, sx: number, sy: number, sz: number): { batch: Batch; index: number } {
+        let b = this.batches.get(shape);
+        if (b === undefined) { b = { shape, mats: [], cols: [], ink: [] }; this.batches.set(shape, b); }
         b.mats.push(m.clone());
-        // The shell is the same box grown outward: a matrix column is an axis times that axis's
-        // scale, so growing it is three multiplies on the matrix already composed.
-        const shell = m.clone(), e = shell.elements;
-        const gx = grow(sx), gy = grow(sy), gz = grow(sz);
-        e[0] *= gx; e[1] *= gx; e[2] *= gx;
-        e[4] *= gy; e[5] *= gy; e[6] *= gy;
-        e[8] *= gz; e[9] *= gz; e[10] *= gz;
-        b.ink.push(shell);
+        b.cols.push(colour);
+        b.ink.push(shellOf(m, sx, sy, sz, new THREE.Matrix4()));
+        return { batch: b, index: b.mats.length - 1 };
     }
 
     /** Every batch as a pair of meshes under one group, and the switch that hides the shells. */
     build(): { group: THREE.Group; setInk: (on: boolean) => void } {
         const group = new THREE.Group();
         const shells: THREE.InstancedMesh[] = [];
+        const tint = new THREE.Color();
         for (const b of this.batches.values()) {
             const geo = unit(b.shape);
-            const mesh = new THREE.InstancedMesh(geo, worldToon(b.colour), b.mats.length);
+            const mesh = new THREE.InstancedMesh(geo, worldToon(0xffffff), b.mats.length);
             const ink = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: INK_LINE, side: THREE.BackSide }), b.ink.length);
-            for (let i = 0; i < b.mats.length; i++) { mesh.setMatrixAt(i, b.mats[i]); ink.setMatrixAt(i, b.ink[i]); }
+            for (let i = 0; i < b.mats.length; i++) {
+                mesh.setMatrixAt(i, b.mats[i]);
+                mesh.setColorAt(i, tint.setHex(b.cols[i]));
+                ink.setMatrixAt(i, b.ink[i]);
+            }
             mesh.computeBoundingSphere(); ink.computeBoundingSphere();
             group.add(ink); group.add(mesh);
             shells.push(ink);
+            b.mesh = mesh; b.inkMesh = ink;
         }
         return { group, setInk: (on: boolean): void => { for (const s of shells) s.visible = on; } };
     }
 }
 
-/** What the edge layer gives back to the game: the one thing about it that can be switched. */
+/** What the edge layer gives back to the game: the two things about it that can change. */
 export interface EdgeLayer {
     /** Show or hide the drawn outline, so the edge carries whatever line the crowd is carrying. */
     setInk(on: boolean): void;
+    /**
+     * Advance the pieces that move -- balloons bobbing, pinwheels turning -- to `t` seconds.
+     *
+     * Purely cosmetic, and deliberately a function of `t` rather than of a delta: it holds no state
+     * of its own, so a dropped frame or a paused run leaves nothing to catch up and the world looks
+     * the same at the same `t` whatever happened in between.
+     */
+    animate(t: number): void;
 }
+
+/** One piece that has to be re-placed every frame, and where its matrices live. */
+interface Mover { batch: Batch; index: number; st: Standing; }
 
 /**
  * Place every plan's pieces through the curve and hand the scene one group holding all of it.
@@ -151,10 +228,12 @@ export interface EdgeLayer {
 export function buildEdge(scene: THREE.Scene, plans: readonly EdgePlan[], curve: PathCurve = PATH): EdgeLayer {
     const kit = new Kit();
     const m = new THREE.Matrix4(), frame = newPathFrame();
+    const movers: Mover[] = [];
     for (const plan of plans) {
         for (const st of plan.standing) {
             standingMatrix(curve.frameAt(st.s, frame), st, m);
-            kit.add(st.shape, st.colour, m, st.across, st.up, st.along);
+            const at = kit.add(st.shape, st.colour, m, st.across, st.up, st.along);
+            if (st.motion !== undefined) movers.push({ ...at, st });
         }
         for (const b of plan.bars) {
             barMatrix(curve, b, m);
@@ -165,5 +244,21 @@ export function buildEdge(scene: THREE.Scene, plans: readonly EdgePlan[], curve:
     }
     const built = kit.build();
     scene.add(built.group);
-    return { setInk: built.setInk };
+
+    // Only the batches something actually moves in are re-uploaded, and only when there is one.
+    const touched = [...new Set(movers.map(mv => mv.batch))];
+    const shell = new THREE.Matrix4();
+    const animate = movers.length === 0 ? (): void => {} : (t: number): void => {
+        for (const mv of movers) {
+            const { st } = mv;
+            standingMatrix(curve.frameAt(st.s, frame), st, m, t);
+            mv.batch.mesh?.setMatrixAt(mv.index, m);
+            mv.batch.inkMesh?.setMatrixAt(mv.index, shellOf(m, st.across, st.up, st.along, shell));
+        }
+        for (const b of touched) {
+            if (b.mesh !== undefined) b.mesh.instanceMatrix.needsUpdate = true;
+            if (b.inkMesh !== undefined) b.inkMesh.instanceMatrix.needsUpdate = true;
+        }
+    };
+    return { setInk: built.setInk, animate };
 }

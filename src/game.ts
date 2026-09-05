@@ -289,7 +289,7 @@ function frame(now: number): void {
     // so a treatment that costs something should say so rather than hide in the gap before the GL.
     lookAfter?.();
     const poseMs = performance.now() - renderStart;
-    world.props.wheel.rotation.z = t * 0.15;
+    world.animate(t);
     renderer.render(world.scene, rig.update(frameDt, playerView));
     const renderMs = performance.now() - renderStart;
 

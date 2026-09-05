@@ -337,3 +337,123 @@ export const EDGE = {
     /** Bins: teal taken most of the way down to charcoal, a shade off the ironwork rather than on it. */
     bin: mix(PALETTE[10], PALETTE[5], 0.5),
 } as const;
+
+/**
+ * The kiosks: the food and goods carts standing on the walkway.
+ *
+ * Two things make these different from the rest of the edge, and both are deliberate. They are
+ * **louder** -- the railings and the benches are backdrop and are diluted almost to neutral, while a
+ * cart is a landmark you are meant to spot from down the path and walk toward. And they are
+ * **curated per product** rather than per role: the sets below are the whole of the promise that a
+ * roll cannot break recognition, because there is no rule anywhere that could enforce "candy floss
+ * is never brown" -- there is only a candy-floss set with no brown in it.
+ *
+ * They are still made of palette entries, like the ground and the edge, so a cart belongs to the
+ * same world as the coat of the person standing at it. What has changed is the dilution: a topper
+ * is one or two steps off a palette entry rather than most of the way to a neutral.
+ */
+export const KIOSK = {
+    /** Cart bodies: painted enamel, dark enough that the topper above is the thing you read. */
+    body: [
+        mix(PALETTE[10], PALETTE[5], 0.35),
+        mix(PALETTE[19], PALETTE[23], 0.4),
+        mix(PALETTE[6], PALETTE[5], 0.2),
+        mix(PALETTE[12], PALETTE[4], 0.3),
+        mix(PALETTE[0], PALETTE[3], 0.35),
+    ],
+    /** Awnings, counter tops and fascia stripes: the light half of a cart. */
+    trim: [
+        mix(PALETTE[0], PALETTE[1], 0.45),
+        mix(PALETTE[16], PALETTE[0], 0.4),
+        mix(PALETTE[18], PALETTE[0], 0.35),
+        mix(PALETTE[11], PALETTE[0], 0.4),
+        mix(PALETTE[21], PALETTE[0], 0.4),
+    ],
+    /**
+     * Candy floss: pinks, magentas and lilacs. **No blue and no green**, and that is a finding
+     * rather than a preference.
+     *
+     * A cluster of spheres on a vertical stalk is a tree, and a cool colour confirms it: the first
+     * set here had a pale blue in it and the cart read as a raincloud on a trunk, and resaturating
+     * that to turquoise turned it into a hedge instead. Nothing in a park is magenta, so the pink
+     * half of the range is the half that cannot be mistaken -- which leaves the paper cone under
+     * the blob doing the rest of the work rather than all of it.
+     */
+    candy: [
+        mix(PALETTE[21], PALETTE[0], 0.2),
+        mix(mix(PALETTE[20], PALETTE[21], 0.75), PALETTE[0], 0.2),
+        mix(mix(PALETTE[22], PALETTE[21], 0.55), PALETTE[0], 0.25),
+        mix(PALETTE[21], PALETTE[16], 0.25),
+    ],
+    /** The second half of a candy-floss blob: the same idea, a shade lighter, so it reads as fluff. */
+    candySoft: [
+        mix(PALETTE[21], PALETTE[0], 0.5),
+        mix(PALETTE[20], PALETTE[0], 0.55),
+        mix(PALETTE[22], PALETTE[0], 0.5),
+        mix(PALETTE[21], PALETTE[16], 0.5),
+    ],
+    /** A sausage. Reds and ambers only -- the one topper where the colour *is* the product. */
+    sausage: [
+        mix(PALETTE[18], PALETTE[19], 0.35),
+        mix(PALETTE[19], PALETTE[18], 0.3),
+        mix(PALETTE[17], PALETTE[18], 0.45),
+    ],
+    /** And its bun: sand and oat, warmed. */
+    bun: [
+        mix(PALETTE[15], PALETTE[1], 0.35),
+        mix(PALETTE[15], PALETTE[17], 0.25),
+        mix(PALETTE[1], PALETTE[15], 0.45),
+    ],
+    /** A paper cup. */
+    cup: [
+        mix(PALETTE[0], PALETTE[9], 0.2),
+        mix(PALETTE[19], PALETTE[0], 0.25),
+        mix(PALETTE[16], PALETTE[0], 0.3),
+        mix(PALETTE[10], PALETTE[0], 0.3),
+    ],
+    /** Balloons, and the only place in the world a palette entry is used barely diluted at all. */
+    balloon: [
+        mix(PALETTE[19], PALETTE[18], 0.25),
+        mix(PALETTE[16], PALETTE[17], 0.3),
+        mix(PALETTE[8], PALETTE[9], 0.3),
+        mix(PALETTE[13], PALETTE[14], 0.35),
+        mix(PALETTE[21], PALETTE[20], 0.25),
+        mix(PALETTE[22], PALETTE[9], 0.25),
+    ],
+    /** Ice cream: pastels, and pastels only. A scoop the colour of a coat stops being a scoop. */
+    scoop: [
+        mix(PALETTE[21], PALETTE[0], 0.5),
+        mix(PALETTE[15], PALETTE[0], 0.45),
+        mix(PALETTE[13], PALETTE[0], 0.5),
+        mix(PALETTE[11], PALETTE[0], 0.55),
+        mix(PALETTE[22], PALETTE[0], 0.55),
+    ],
+    /** The wafer, the cherry on it, and the mustard on a hot dog: not painted, so not sets. */
+    wafer: mix(PALETTE[15], PALETTE[23], 0.3),
+    cherry: mix(PALETTE[19], PALETTE[18], 0.2),
+    paper: mix(PALETTE[0], PALETTE[9], 0.12),
+    mustard: mix(PALETTE[16], PALETTE[17], 0.35),
+    /** A popcorn box, and the stripes down it. Pale box, hot stripe: the striped-box read. */
+    box: [
+        mix(PALETTE[0], PALETTE[1], 0.25),
+        mix(PALETTE[0], PALETTE[9], 0.2),
+    ],
+    stripe: [
+        mix(PALETTE[19], PALETTE[18], 0.3),
+        mix(PALETTE[8], PALETTE[6], 0.3),
+        mix(PALETTE[17], PALETTE[18], 0.35),
+    ],
+    /** Popped corn: barely coloured at all, which is what makes it read as popcorn and not as balls. */
+    popped: [
+        mix(PALETTE[0], PALETTE[15], 0.25),
+        mix(PALETTE[0], PALETTE[16], 0.18),
+    ],
+    /** Pinwheel blades: two colours to a wheel, so it reads as turning rather than as a disc. */
+    pinwheel: [
+        mix(PALETTE[19], PALETTE[0], 0.15),
+        mix(PALETTE[8], PALETTE[0], 0.15),
+        mix(PALETTE[16], PALETTE[0], 0.1),
+        mix(PALETTE[11], PALETTE[0], 0.2),
+        mix(PALETTE[22], PALETTE[0], 0.2),
+    ],
+} as const;

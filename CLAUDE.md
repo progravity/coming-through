@@ -13,7 +13,8 @@ check and the determinism test. `npm run lint` is the first two on their own.
 - `src/recipe.ts` — the appearance and gait roll for one person, and the age/mobility profiles.
 - `src/sim/` — pure simulation, no DOM or three.js: `simulation.ts` is the whole game state and its
   fixed step; `crowd.ts`, `agent.ts`, `spawner.ts`, `steering.ts`, `player.ts`, `pose.ts`,
-  `grid.ts` (the spatial index, moving layer and fixed), `obstacles.ts` (the furniture's colliders).
+  `grid.ts` (the spatial index, moving layer and fixed), `obstacles.ts` (the colliders of everything
+  standing on the walkway).
   That "no three.js" is checked rather than hoped for: `world/edge.ts` holds the edge layer's data
   and `world/kit.ts` its meshes precisely so the simulation can read the furniture's placement
   without pulling a renderer in behind it.
@@ -23,6 +24,9 @@ check and the determinism test. `npm run lint` is the first two on their own.
   the conversion to world space; pure, no three.js, so the simulation can import it), `ground.ts` (the surface, swept along that curve),
   `edge.ts` (what a piece of the path's edge *is*; pure, so the simulation can read it),
   `kit.ts` (how one lands and gets drawn), `railings.ts` and `furniture.ts` (where the pieces go),
+  `structure.ts` (the structure-archetype pattern: fixed form, rolled colour, derived footprint) and
+  `kiosks.ts` (the seven carts built with it), `plan.ts` (every edge layer as one list, which the
+  renderer draws and the simulation takes footprints out of),
   `props.ts`, `box.ts`, `material.ts` (the one shading model the whole world takes).
 - `src/render/`, `src/camera.ts`, `src/ui.ts`, `src/debug.ts` — presentation only.
 - `src/main.ts` — the entry point and nothing else: it dynamic-imports the game, the character
@@ -49,6 +53,10 @@ check and the determinism test. `npm run lint` is the first two on their own.
 - `test/edge.test.ts` — the same treatment for the railings and the furniture: plans them along a
   bending, widening, climbing stub and measures every post, rail, bench, lamp and bin back off the
   frame there, then checks the gaps are read off where the buildings are.
+- `test/kiosks.test.ts` — that an archetype fixes a cart's form completely and only colour rolls,
+  that a roll cannot leave the curated set, that a collider is the cart and never the topper, that
+  the service and attendant points land on the right sides of it, and that a cart is solid without
+  ever being a bump.
 - `test/obstacles.test.ts` — that the furniture is solid and that being solid never touches the
   score: colliders match the drawn objects, the crowd goes round them, the player is stopped by
   them, and a bump is still player-versus-person contact and nothing else.
@@ -282,11 +290,30 @@ centred on -- a bench with one end in a doorway is the failure that rule exists 
 debug overlay draws the doorways off the same spans, so it cannot claim a gap that is not there. A
 plaza, a crossing or a bus stop is one more entry.
 
-**The edge is instanced, batched by shape and colour.** Some five hundred posts, rails, slats,
-lamps and bins are ten meshes, which is why the ironwork is all one colour: the posts, the rails,
-the bench legs and the bin rims arrive in a single draw call, and a new prop in the same paint
-costs nothing. Adding a prop is an entry in a plan and never a mesh. Colours come from `EDGE` in
-`palette.ts`, made of palette entries the same way the ground's are.
+**The edge is instanced, batched by shape alone, with colour carried per instance.** A thousand-odd
+posts, rails, slats, lamps, bins and kiosk parts are ten meshes -- two per primitive, one shaded and
+one ink -- and **a new colour costs nothing**. It used to batch by shape *and* colour, which was free
+while the whole layer was four paints of ironwork and timber; the kiosks broke that, because nine
+carts each rolling three colours of their own would have taken the layer from 10 draw calls to 82.
+So the colour moved onto the instance: `instanceColor` multiplies a white toon material, which
+leaves the three-step ramp doing exactly what it did. Adding a prop is an entry in a plan and never
+a mesh, and adding one in a colour nothing else uses is now free too. Colours come from `EDGE` and
+`KIOSK` in `palette.ts`, made of palette entries the same way the ground's are.
+
+**Every layer's plan is one list, in `plan.ts`.** `edgePlans` merges the railings, the furniture and
+the kiosks and renumbers their `piece` ids unique across the lot; `world/index.ts` draws that list
+and `sim/obstacles.ts` takes the footprints out of it. One list because there are two readers and
+they must not be able to disagree -- a layer that were drawn but not solid, or solid but not drawn,
+is exactly the bug two call sites would eventually produce. The next layer of props is one entry.
+
+**A piece may be turned inside the frame.** `Standing.lean` rotates it about the tangent (an awning
+sloping over the walkway, a cart wheel's axle across it, an ice-cream cone stood on its point) and
+`tilt` about the normal (a sausage lying lengthways). Both default to zero, which is the square box
+every railing post is, and `standingMatrix` branches that case out so the existing layer pays
+nothing. `Standing.motion` is cosmetic movement after placement -- a `spin` about the piece's *own*
+axis, applied innermost so a pinwheel laid flat by `lean` turns in the plane it now occupies, or a
+`bob` along the frame's up. `EdgeLayer.animate(t)` re-places just those instances, and `World.animate`
+is the one call the loop makes for every moving thing in the world.
 
 Each batch gets a back-face ink shell, switched by `World.setInk` together with the ground's drawn
 line and the crowd's own shells. The clearance is capped at a fraction of each axis rather than
@@ -304,13 +331,13 @@ is nothing left for a new prop to be shaded by, which is the point.
 
 ## Solid furniture
 
-Benches, bins and lamp posts are things you walk into, for the crowd as well as for the player.
-`sim/obstacles.ts` owns that, and three rules hold it together.
+Benches, bins, lamp posts and the kiosks are things you walk into, for the crowd as well as for the
+player. `sim/obstacles.ts` owns that, and three rules hold it together.
 
-**A collider is derived from the drawn object, never authored beside it.** `furniturePlan` already
-computes where every piece stands in path coordinates, and it emits a `Solid` per object alongside
-the parts it draws, sharing a `piece` id with them; `buildObstacles` turns those through the same
-`frameAt` the visuals go through. So the thing that stops you and the thing you can see are two
+**A collider is derived from the drawn object, never authored beside it.** Each layer's plan already
+computes where every piece stands in path coordinates, and emits a `Solid` per object alongside the
+parts it draws, sharing a `piece` id with them; `buildObstacles` reads `edgePlans` -- the same list
+the renderer draws -- and turns those through the same `frameAt` the visuals go through. So the thing that stops you and the thing you can see are two
 readings of one number -- move a bench, lengthen it, widen the path under it, and both move
 together. `test/obstacles.test.ts` measures the capsule against the bounding box of the parts
 carrying its `piece` id, so a collider that outgrew its object fails.
@@ -383,6 +410,95 @@ widths live as inline constants inside `drawPerson` rather than as data, and shr
 `bodyHalfWidth(recipe)` out of `render/person.ts` alongside `standingHeight`, covering every aid and
 accessory, and re-tuning the crowd against it. The furniture's colliders already follow the
 "collision matches what you see" rule; people are the half that is still owed it.
+
+## Structures and kiosks
+
+`world/structure.ts` is the pattern every *built* thing on the walkway is made by, and `kiosks.ts`
+is its first user. Buildings come next and are the same problem at a different size; they reuse
+this file and add an archetype table of their own.
+
+The whole of the pattern is one split:
+
+- **A structure archetype fixes FORM completely.** Which primitives, what size, where they sit
+  relative to each other, which way they lean. No roll anywhere can change the shape of anything: a
+  cotton-candy cart is always the cotton-candy shape, so a player learns a silhouette once.
+- **The recipe rolls only COLOUR**, one draw per slot, unconditionally, in `SLOTS` order --
+  the same discipline `makeRecipe` keeps for people. Four slots (`base`, `trim`, `topper`,
+  `accent`); a part that has no business varying names a literal instead. An archetype whose slots
+  draw from one set on purpose -- two scoops of pastel, three balloons of the same six -- lists them
+  in `distinct`, and the second walks its own set forward to a colour the first has not taken.
+
+**Every option in a set must still read as the product**, and that constraint lives in the *data*
+because it is a judgement about a thing, not a rule code could enforce: `KIOSK.candy` has no brown
+in it, so no roll can produce brown candy floss. Colour carries no meaning; it is variety only.
+
+**The footprint is derived, not authored.** A `Prim` marked `solid` is part of what a body walks
+into; `footprintOf` turns the bounding box of those into the same capsule a bench uses -- radius
+half the width across the path, segment what is left of the length. So a cart that gets longer takes
+its collider with it, and a topper cannot move it at all. `placeStructure` then slides every part
+along the frame's tangent from the structure's own `s`, which is the rigid-object rule the benches
+are placed by. **Facing the other way is a yaw of half a turn, not a mirror**: `dn`, `da`, `lean` and
+`tilt` all reverse, `spin` does not. Get that wrong and a symmetric cart looks perfect while a
+drinks cart's straw comes out of the wrong side of the cup.
+
+### The seven carts
+
+Each is a fixed form identified by an **oversized topper**, because of where they are actually seen
+from: the walkway, at walking pace, at an angle, with a crowd in front. Nothing legible survives
+that, so identity is a silhouette a metre or more across held above head height, and it is
+exaggerated on purpose.
+
+Cotton candy (a seven-ball blob on a paper cone), hot dog (a sausage sitting on a bun, lengthways),
+drinks (a tapered cup, banded, domed lid, angled straw), balloons (six on strings, bobbing), ice
+cream (a cone stood on its point under two scoops and a cherry), popcorn (a striped box heaped
+over), pinwheels (a rack of three two-colour spinners). Three of the seven wear an awning.
+
+Three of them were rebuilt after looking at them from the path, and the reasons are worth keeping:
+
+- **A blob of spheres on a vertical stalk is a tree.** Cotton candy in pale blue read as a raincloud
+  and in turquoise as a hedge. `KIOSK.candy` is therefore pinks, magentas and lilacs only -- nothing
+  in a park is magenta -- and there is a paper cone under the floss that no tree has. Saturation is
+  the axis that matters, not lightness: the toon ramp halves a shaded face, and half a *desaturated*
+  colour is grey.
+- **A hot dog's bun goes under the sausage, not either side of it.** Two halves at the sausage's own
+  height is what one looks like in section and not from the side; they met in front of it and the
+  topper read as a log.
+- **A striped box has to be striped on every face**, and its overflow has to overflow. Stripes on
+  the serving face alone read as a plain carton from most of the walkway, and eight small kernels on
+  the rim read as lumps on a lid. It carries no awning either: a canopy under a tall box stacks into
+  one rectangular mass and the pair read as a billboard on a post.
+
+### Where they stand, and what they cost
+
+`KIOSK_PLACEMENTS` is authored, not stepped out on an interval -- a bench is a rhythm, a kiosk is a
+landmark. Two types appear twice, which is the only way "colour varies within a type" is visible
+from inside the game. The placements sit **in the gaps in the bench rhythm**: a cart takes a stretch
+of its own side out of the layer inside the railings through `KIOSK_SPANS`, so nine carts placed
+without regard for the interval halved the seating before the list was chosen. `test/kiosks.test.ts`
+pins that the carts cost no benches. The spans name one side, and the *lamp posts are exempt* --
+they stand outside the railings where a cart can never reach them.
+
+**`KIOSK_N`, the clearance from the path's edge, is really setting the corridor behind the cart.** A
+kiosk does not back onto the railings, because an attendant stands there; so there is always a gap,
+and a gap the crowd can enter and not leave is a trap. At 1.5 m the corridor was 1.01 m -- wider than
+most bodies and narrower than a stroller's 1.24 m circle -- and strollers walked in, could not get
+past and were held there: 1.45% of agent-steps inside the furniture against a 1% bar. At 2.3 m the
+corridor is 1.81 m, the serving face is 2.79 m out from the edge, and the walkway narrows from 12 m
+to 9.21 m beside a cart. Measured across three seeds at a full crowd: 0.42-0.51% of agent-steps, and
+5% of the throughput. **If this ever moves, `KIOSK_N - r` is the corridor and it has to stay
+comfortably over the widest collision circle the crowd produces.**
+
+Each cart also carries two points nothing reads yet: a **service point** just outside the serving
+face, where a customer would stand, and an **attendant point** behind the counter. Both are derived
+from the placement and the facing through the frame, so they turn with the cart -- captured now
+precisely so the mechanics that want them later are not a third list to keep in step. There is no
+visiting, no queueing and no attendant agent, and the attendant waits on the people-collider
+fairness fix (see "Known gap" above).
+
+The layer draws no random numbers into the simulation: the paint comes from a stream seeded by a
+**constant**, so the promenade is painted identically in every run, exactly as the ground is grained
+identically in every run. Adding the kiosks moved `hash()` -- the crowd steers around them, as it
+does around benches -- and left `identityHash()` byte-identical.
 
 ## Character recipes
 

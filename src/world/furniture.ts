@@ -8,8 +8,11 @@
  * world x, a world y or a width: a stretch that widens carries its benches out with it, a hill
  * tilts its lamp posts, and a bend turns the lot.
  *
- * Interruptions come from the same `EdgeSpan` list the railings route around, with the pads added:
- * nothing stands in a shop's footprint, and nothing stands on the ground a run starts or ends on.
+ * Interruptions come from the same `EdgeSpan` list the railings route around, with the pads added,
+ * and the kiosks added for the two layers that stand inside the railings: nothing stands in a shop's
+ * footprint, nothing stands on the ground a run starts or ends on, and no bench or bin crowds a
+ * cart. All three lists are *derived* from where those things are, so a shop, a pad or a kiosk that
+ * moves takes the clearance around it along.
  *
  * The two sides are deliberately out of phase. Benches facing each other in pairs down a straight
  * walkway reads as a corridor of furniture; half an interval of offset is the whole fix.
@@ -17,6 +20,7 @@
 import { EDGE } from '../palette.ts';
 import { clearOf } from './edge.ts';
 import type { EdgePlan, Solid, Standing } from './edge.ts';
+import { KIOSK_SPANS } from './kiosks.ts';
 import { L, PAD_SPANS, SHOP_SPANS } from './layout.ts';
 import type { EdgeSpan } from './layout.ts';
 import { PATH } from './path.ts';
@@ -87,6 +91,11 @@ function everyAlong(spans: readonly EdgeSpan[], side: number, step: number, phas
  */
 export function furniturePlan(curve: PathCurve = PATH, spans: readonly EdgeSpan[] = [...SHOP_SPANS, ...PAD_SPANS]): EdgePlan {
     const standing: Standing[] = [], solids: Solid[] = [];
+    // The carts interrupt what stands *inside* the railings and nothing else. A lamp post is on the
+    // far side of them, where a cart can never reach it, so charging the lamps for the kiosks would
+    // punch six holes in a rhythm that has nothing to do with them. This is the one interruption
+    // the two loops do not share, and it is a fact about where the things stand rather than a tweak.
+    const inside = [...spans, ...KIOSK_SPANS];
     // Every part of one bench, one bin or one lamp carries the same id, so the collider derived
     // from it can be checked against exactly the parts it is meant to match.
     let piece = 0;
@@ -99,7 +108,7 @@ export function furniturePlan(curve: PathCurve = PATH, spans: readonly EdgeSpan[
 
     for (const side of [-1, 1] as const) {
         // ---- benches: seat, back and two end legs, all measured in from the path's own edge ----
-        const benches = everyAlong(spans, side, BENCH_STEP, side === 1 ? 0 : BENCH_STEP / 2, BENCH_LEN);
+        const benches = everyAlong(inside, side, BENCH_STEP, side === 1 ? 0 : BENCH_STEP / 2, BENCH_LEN);
         benches.forEach((s, i) => {
             piece++;
             const edge = curve.halfWidth(s);
@@ -117,7 +126,7 @@ export function furniturePlan(curve: PathCurve = PATH, spans: readonly EdgeSpan[
             // Its own stretch has to be clear too: the bench is inside the spans by construction and
             // the bin is a metre and a bit further on, which is enough to reach into the next one.
             const bs = s + BIN_OFF;
-            if (i % BIN_EVERY !== 0 || !clearOf(spans, side, bs - RIM_D / 2, bs + RIM_D / 2)) return;
+            if (i % BIN_EVERY !== 0 || !clearOf(inside, side, bs - RIM_D / 2, bs + RIM_D / 2)) return;
             piece++;
             const bn = side * (curve.halfWidth(bs) - BIN_N);
             round('cyl', EDGE.bin, bs, bn, BIN_H / 2, BIN_D, BIN_H);

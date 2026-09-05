@@ -1,12 +1,11 @@
 import * as THREE from 'three';
 import { buildEdge } from './kit.ts';
 import type { EdgeLayer } from './kit.ts';
-import { furniturePlan } from './furniture.ts';
 import { buildGround } from './ground.ts';
 import type { Ground } from './ground.ts';
+import { edgePlans } from './plan.ts';
 import { buildProps } from './props.ts';
 import type { Props } from './props.ts';
-import { railingPlan } from './railings.ts';
 
 export interface World {
     scene: THREE.Scene;
@@ -21,6 +20,15 @@ export interface World {
      * rather than a list to keep up to date.
      */
     setInk(on: boolean): void;
+    /**
+     * Move the world's cosmetic parts on to `t` seconds: the wheel turning on the skyline, the
+     * balloons bobbing over a cart, the pinwheels spinning on their rack.
+     *
+     * One call for the same reason `setInk` is one call -- the loop should not have to keep a list
+     * of which layers happen to move this week. It reads the clock and nothing else, and nothing it
+     * touches is reachable from the simulation.
+     */
+    animate(t: number): void;
 }
 
 /**
@@ -41,12 +49,13 @@ export function buildWorld(): World {
     scene.fog = new THREE.Fog(0x9ed0e6, 40, 110);
     addLights(scene);
     const ground = buildGround(scene);
-    // The two edge plans go into one kit, so the ironwork in the railings and the ironwork in the
-    // benches are the same instanced mesh rather than two.
-    const edge = buildEdge(scene, [railingPlan(), furniturePlan()]);
+    // Every edge layer goes into one kit, so the ironwork in the railings, in the benches and under
+    // a kiosk's counter all arrive in a single instanced mesh rather than three.
+    const edge = buildEdge(scene, [edgePlans()]);
     const props = buildProps(scene);
     return {
         scene, ground, props, edge,
         setInk: (on: boolean): void => { ground.setInk(on); edge.setInk(on); },
+        animate: (t: number): void => { props.wheel.rotation.z = t * 0.15; edge.animate(t); },
     };
 }
