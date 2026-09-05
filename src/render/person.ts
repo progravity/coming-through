@@ -22,12 +22,43 @@ const UPPER_ARM = 0.27, FOREARM = 0.26;
 /** Base of the head; the head sits its own radius above this, and the neck rises to meet it. */
 const HEAD_Y = 1.52;
 /**
- * Where the chest and pelvis sit within the torso span (hips to shoulders), as fractions of it.
- * Fractions rather than absolute heights because a child's legs are proportionally shorter, which
- * lengthens that span -- a child has a long torso on short legs, not a scaled-down adult.
+ * Where the pelvis sits within the torso span (hips to shoulders), as fractions of it. Fractions
+ * rather than absolute heights because a child's legs are proportionally shorter, which lengthens
+ * that span -- a child has a long torso on short legs, not a scaled-down adult.
  */
 const PELVIS_AT = 0.145, PELVIS_H = 0.56;
-const CHEST_AT = 0.654, CHEST_H = 0.82;
+/**
+ * The chest is given as its two edges rather than as a centre and a height, because those edges
+ * are two different landmarks and each is set by the thing it actually decides.
+ *
+ * Its bottom is the waist -- where the chest and pelvis silhouettes cross -- so it belongs in
+ * torso-span space alongside the pelvis, and moves with a child's longer torso.
+ */
+const CHEST_BOT = 0.2435;
+/**
+ * Its top is the neck, and this is the one number that sets how long a neck reads. There is no
+ * neck length anywhere else to change: the neck cylinder is buried in the chest below it and the
+ * skull above it, so its own length is never seen.
+ *
+ * What is seen is a skin-coloured band, and only part of that band is this number. The band runs
+ * from where the chest's dome narrows to neck width up to where the skull does, so it is three
+ * things added together -- for an adult, in unit-height space:
+ *
+ *     0.021  the chest dome's taper, since an ellipsoid arrives at neck width below its own top
+ *     0.028  the underside of the skull, which is a plain sphere with no jaw to end it, so its
+ *            bottom quarter is skin running smoothly into skin and the eye counts it as neck
+ *     0.959 * NECK
+ *
+ * The middle term is the biggest and none of it is neck. That is why `NECK = 0` is not a chinless
+ * figure but a floor of about 0.049, and why NECK is **signed**: to shorten the band past that
+ * floor the chest has to crest above `HEAD_Y` and tuck its collar under the chin, which is where a
+ * collar sits anyway. Negative is the normal working range, not an abuse of it. The hard limit is
+ * -0.09, where the neck cylinder's two burials meet and it inverts.
+ *
+ * It scales with `limb`, the age axis, for the reason a child's arms are short: a child is not an
+ * adult scaled down, and a long neck is one of the first things that gives a small adult away.
+ */
+const NECK = -0.015;
 /** A relaxed arm is not a stick; the forearm hangs a little behind the upper arm. */
 const ELBOW_BEND = 0.12;
 /**
@@ -221,7 +252,10 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
     const shoulderY = SHOULDER_Y + drop + bob;
     const span = SHOULDER_Y + drop - hipY;
     const torsoPitch = 0.06 * mv + stoop;
-    const chestY = hipY + CHEST_AT * span + bob, chestH = CHEST_H * span;
+    // Bottom off the span, top off the head: see CHEST_BOT and NECK. `drop` reaches the top through
+    // HEAD_Y and the bottom through hipY, so a seated rider's chest travels down whole.
+    const chestBot = hipY + CHEST_BOT * span, chestTop = HEAD_Y + drop - NECK * limb;
+    const chestY = (chestTop + chestBot) / 2 + bob, chestH = chestTop - chestBot;
     const pelvisY = hipY + PELVIS_AT * span + bob, pelvisH = PELVIS_H * span;
     const chestW = 0.47 * r.w, chestD = 0.33 * r.w;
     put('body', d, 0, chestY, stoopZ, torsoPitch, 0, lean, chestW, chestH, chestD, r.shirt);
