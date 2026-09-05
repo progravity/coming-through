@@ -41,6 +41,9 @@ import { PATH, PathCurve, newPathFrame, newWorldPoint, pathPlace } from '../src/
 import type { Along, PathRun } from '../src/world/path.ts';
 import { SLOTS, footprintOf, placeStructure, structurePaint } from '../src/world/structure.ts';
 import type { Paint, Slot, StructureArchetype } from '../src/world/structure.ts';
+// `KIOSK` is already taken in this file -- it is the palette's kiosk colours.
+import { KIOSK as KIOSK_ENTITY } from '../src/inspect/entities/kiosk.ts';
+import { defaultControls } from '../src/inspect/inspectable.ts';
 
 /** A walkway the game has never drawn: a right-angled bend that also widens and carries a hill. */
 const BEND: readonly PathRun[] = [
@@ -521,4 +524,37 @@ test('the curated sets stay the colour of their product under the toon ramp', ()
     for (const [name, set] of [['popped', KIOSK.popped], ['box', KIOSK.box]] as const) {
         assert.ok(Math.min(...set.map(lum)) > body, `a cart body is as pale as the ${name} above it`);
     }
+});
+
+// ---------- the inspector ----------
+
+test('the inspector shows the cart the promenade is built from', () => {
+    const cast = KIOSK_ENTITY.mount(new THREE.Scene());
+    const c = defaultControls(KIOSK_ENTITY);
+    cast.rebuild(11, KIOSK_ENTITY.row, c);
+    cast.draw(0, KIOSK_TYPES.map((_, i) => i * 4), 0);
+    // Row mode is one of each, and each is its archetype with nothing altered: an archetype fixes
+    // form completely, and the inspector must not be the one place that is untrue.
+    for (let i = 0; i < KIOSK_ENTITY.row; i++) {
+        const arch = KIOSK_ARCHETYPES[KIOSK_TYPES[i]];
+        assert.equal(cast.parts(i).length, arch.parts.length, `${KIOSK_TYPES[i]} drew the wrong parts`);
+        assert.equal(cast.readout(i, 4).title, arch.name);
+    }
+});
+
+test('only the paint moves when the inspector re-rolls a cart', () => {
+    const cast = KIOSK_ENTITY.mount(new THREE.Scene());
+    const c = { ...defaultControls(KIOSK_ENTITY), type: 'ice-cream' };
+    cast.rebuild(1, 1, c);
+    const parts = cast.parts(0).length;
+    const painted = new Set<string>();
+    for (const seed of [1, 2, 3, 4, 5]) {
+        cast.rebuild(seed, 1, c);
+        assert.equal(cast.parts(0).length, parts, `seed ${seed} changed the form`);
+        painted.add((cast.readout(0, 4).swatches ?? []).map(([, colour]) => colour).join(','));
+    }
+    assert.ok(painted.size > 1, 'five seeds painted the same cart identically');
+    // Every colour still comes out of the archetype's own curated sets, so no roll can break the read.
+    const arch = KIOSK_ARCHETYPES['ice-cream'];
+    for (const slot of SLOTS) assert.ok(arch.colours[slot].length > 0, `${slot} has no set`);
 });

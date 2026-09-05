@@ -7,10 +7,11 @@
  *
  * Adding an entity is a file in `entities/` and a line in `ENTITIES`. There is no step three.
  */
+import { KIOSK } from './entities/kiosk.ts';
 import { PERSON } from './entities/person.ts';
 import type { Controls, Inspectable } from './inspectable.ts';
 
-export const ENTITIES: readonly Inspectable[] = [PERSON];
+export const ENTITIES: readonly Inspectable[] = [PERSON, KIOSK];
 
 /** What `?inspect=1` means with no `entity` named. Every URL written before this existed. */
 export const DEFAULT_ENTITY = 'person';
