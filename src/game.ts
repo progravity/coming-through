@@ -20,6 +20,7 @@ import { UI } from './ui.ts';
 import { wrapAngle } from './util.ts';
 import { buildWorld } from './world/index.ts';
 import { PLAYER_SLOT } from './world/layout.ts';
+import { PATH } from './world/path.ts';
 
 // ---------- seed and mode ----------
 const params = new URLSearchParams(location.search);
@@ -272,12 +273,15 @@ function frame(now: number): void {
 
     // draw people at the interpolated pose
     const renderStart = performance.now();
-    for (const a of sim.crowd.agents) { lerpPose(view, a.prev, a, alpha); drawPerson(pools, a.slot, a, view, t); }
+    // The crowd walks in the horizontal plane and is *draped* onto the walkway at the last
+    // moment: the height under a body is a question about the path, asked of the interpolated
+    // position rather than interpolated itself, so nobody floats over a crest between two steps.
+    for (const a of sim.crowd.agents) { lerpPose(view, a.prev, a, alpha); drawPerson(pools, a.slot, a, view, t, PATH.surfaceY(view.x, view.z)); }
     const p = sim.player;
     lerpPose(playerView, p.prev, p, alpha);
     playerView.camYaw = p.prevCamYaw + wrapAngle(p.camYaw - p.prevCamYaw) * alpha;
     if (rig.mode === 'first') pools.freeSlot(PLAYER_SLOT);
-    else drawPerson(pools, PLAYER_SLOT, p, playerView, t);
+    else drawPerson(pools, PLAYER_SLOT, p, playerView, t, PATH.surfaceY(playerView.x, playerView.z));
     pools.commit();
     // Counted inside poseMs on purpose: it edits the same instance buffers the pose just filled,
     // so a treatment that costs something should say so rather than hide in the gap before the GL.

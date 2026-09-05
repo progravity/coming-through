@@ -1,7 +1,7 @@
 import { ARCH } from './archetypes.ts';
 import type { Crowd } from './sim/crowd.ts';
 import type { Player } from './sim/player.ts';
-import { DOORS, EXIT_S, GOAL_S, L, PAD_LENGTH, START_S, W } from './world/layout.ts';
+import { DOORS, EXIT_S, GOAL_S, L, PAD_LENGTH, START_S } from './world/layout.ts';
 import { PATH, newWorldPoint } from './world/path.ts';
 
 export interface DebugStats { fps: number; drawCalls: number; }
@@ -42,7 +42,11 @@ export class DebugOverlay {
         ctx.clearRect(0, 0, cssW, cssH);
 
         // World -> canvas: z runs down the long axis of the panel; +z (start) at the bottom.
-        const pad = 10, worldLen = 2 * L + 8, worldWid = 2 * W + 4;
+        // The panel is scaled to the widest the walkway gets rather than to a fixed width, so a
+        // stretch that opens out still fits inside it.
+        let widest = 0;
+        for (let k = 0; k <= SAMPLES; k++) widest = Math.max(widest, PATH.halfWidth(-EXIT_S + 2 * EXIT_S * (k / SAMPLES)));
+        const pad = 10, worldLen = 2 * L + 8, worldWid = 2 * widest + 4;
         const s = Math.min((cssH - 2 * pad) / worldLen, (cssW - 2 * pad) / worldWid);
         const ox = cssW / 2, oy = cssH / 2;
         const X = (x: number) => ox + x * s, Y = (z: number) => oy + z * s;
@@ -50,19 +54,24 @@ export class DebugOverlay {
         // path, pads, railings and doors, all traced along the centreline rather than assumed
         // straight, so this overlay keeps telling the truth when the path bends.
         const at = (ps: number, pn: number): [number, number] => { const p = PATH.toWorld(ps, pn, _w); return [X(p.x), Y(p.z)]; };
-        /** Walk one edge of the walkway from `from` to `to`, opening a subpath or continuing one. */
-        const edge = (pn: number, from: number, to: number, back: boolean, open: boolean): void => {
+        /**
+         * Walk one edge of the walkway from `from` to `to`, opening a subpath or continuing one.
+         * `side` is which railing, and the offset is the path's own half width at each sample, so
+         * the overlay draws where the edge really is rather than where it once was.
+         */
+        const edge = (side: number, from: number, to: number, back: boolean, open: boolean): void => {
             for (let k = 0; k <= SAMPLES; k++) {
                 const i = back ? SAMPLES - k : k;
-                const [px, py] = at(from + (to - from) * (i / SAMPLES), pn);
+                const ps = from + (to - from) * (i / SAMPLES);
+                const [px, py] = at(ps, side * PATH.halfWidth(ps));
                 if (open && k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
             }
         };
-        /** The strip of walkway between two lateral offsets, as one closed polygon. */
+        /** The strip of walkway between the two railings, as one closed polygon. */
         const band = (from: number, to: number): void => {
             ctx.beginPath();
-            edge(-W, from, to, false, true);
-            edge(W, from, to, true, false);
+            edge(-1, from, to, false, true);
+            edge(1, from, to, true, false);
             ctx.closePath();
         };
         ctx.fillStyle = 'rgba(207,196,173,.35)'; band(-EXIT_S, EXIT_S); ctx.fill();
@@ -71,11 +80,11 @@ export class DebugOverlay {
         ctx.fillStyle = 'rgba(89,178,95,.6)';  band(GOAL_S - HALF, GOAL_S + HALF); ctx.fill();
         ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1;
         ctx.beginPath();
-        for (const side of [-1, 1]) edge(side * W, -EXIT_S, EXIT_S, false, true);
+        for (const side of [-1, 1]) edge(side, -EXIT_S, EXIT_S, false, true);
         ctx.stroke();
         ctx.strokeStyle = 'rgba(255,220,120,.9)'; ctx.lineWidth = 2;
         for (const d of DOORS) {
-            const n = d.side * W;
+            const n = d.side * PATH.halfWidth(d.s);
             ctx.beginPath(); ctx.moveTo(...at(d.s - 1.6, n)); ctx.lineTo(...at(d.s + 1.6, n)); ctx.stroke();
         }
 

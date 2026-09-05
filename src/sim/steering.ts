@@ -1,6 +1,5 @@
 import type { Archetype } from '../archetypes.ts';
 import { SIM_DT } from '../core/time.ts';
-import { W } from '../world/layout.ts';
 import type { PathFrame } from '../world/path.ts';
 import type { SpatialGrid } from './grid.ts';
 import type { Agent } from './agent.ts';
@@ -40,10 +39,11 @@ export function avoidPlayer(self: Agent, A: Archetype, player: Player, out: Stee
 /**
  * Soft repulsion from the railings on either side of the path. Takes the offset from the
  * centreline and pushes back along the curve's normal there, so a bend does not slide anyone into
- * the railing it turns toward.
+ * the railing it turns toward -- and reads how far away the railings are off the same frame, so a
+ * stretch where the walkway narrows pushes back sooner rather than at some remembered width.
  */
 export function wallRepulsion(n: number, r: number, frame: PathFrame, out: Steer): void {
-    const lim = W - r - 0.6;
+    const lim = frame.w - r - 0.6;
     const push = n > lim ? -((n - lim) * 4) : n < -lim ? (-lim - n) * 4 : 0;
     if (push === 0) return;
     out.dx += frame.nx * push; out.dz += frame.nz * push;

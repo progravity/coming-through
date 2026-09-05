@@ -313,13 +313,19 @@ let _soleY = 0, _footZ = 0;
  * rounded part at that joint -- shoulder cap over the upper arm, hand over the forearm, pelvis
  * over the thigh tops, chest over the neck -- so a flat cylinder cap is never the silhouette.
  *
- * @param who   Identity: recipe and cosmetic fidget offset.
- * @param pose  Where the body is this frame, already interpolated between simulation steps.
- * @param t     Render clock in seconds; only used for purely visual idle motion.
+ * The body is laid out from its own feet upward, so the one thing it has to be told about the
+ * world is where its feet are. That is `groundY`: the height of the surface under it, which the
+ * caller owns because the renderer does not know what this person is standing on -- the walkway
+ * (whose height the path decides), or a turntable stage at zero.
+ *
+ * @param who      Identity: recipe and cosmetic fidget offset.
+ * @param pose     Where the body is this frame, already interpolated between simulation steps.
+ * @param t        Render clock in seconds; only used for purely visual idle motion.
+ * @param groundY  World height of the surface under the body. Zero for a stage.
  */
-export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: Pose, t: number): void {
+export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: Pose, t: number, groundY = 0): void {
     const r = who.recipe, { phase, mv, lean } = pose, fidget = who.fidget;
-    pools.setBase(slot, pose.x, 0, pose.z, pose.yaw, r.h);
+    pools.setBase(slot, pose.x, groundY, pose.z, pose.yaw, r.h);
     const put = pools.put.bind(pools), hide = pools.hide.bind(pools), hideRange = pools.hideRange.bind(pools);
     // Parts an ink shell would swallow rather than outline; see PartPools.putBare.
     const bare = pools.putBare.bind(pools);

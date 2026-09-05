@@ -4,7 +4,7 @@ import { SIM_DT } from '../core/time.ts';
 import { makeRecipe } from '../recipe.ts';
 import type { Recipe } from '../recipe.ts';
 import { clamp, wrapAngle } from '../util.ts';
-import { GOAL_LINE_S, ROAM_S, START_S, W } from '../world/layout.ts';
+import { GOAL_LINE_S, ROAM_S, START_S } from '../world/layout.ts';
 import { PATH, newPathPoint, newWorldPoint } from '../world/path.ts';
 import type { Poseable } from './agent.ts';
 import { copyPose, newPose } from './pose.ts';
@@ -91,8 +91,11 @@ export function updatePlayer(p: Player, input: MoveInput, mode: CameraMode): voi
     p.vx += (tvx - p.vx) * Math.min(1, dt * 9); p.vz += (tvz - p.vz) * Math.min(1, dt * 9);
     // Movement is camera-relative and therefore world-space; only the limits are path-space -- how
     // far across the walkway, and how far past either end -- so the player is fenced in by the path.
+    // How far across is the path's own half width where they have got to, not a remembered number.
     const q = PATH.toPath(p.x + p.vx * dt, p.z + p.vz * dt, _here);
-    const w = PATH.toWorld(clamp(q.s, -ROAM_S, ROAM_S), clamp(q.n, -(W - p.r), W - p.r), _world);
+    const s = clamp(q.s, -ROAM_S, ROAM_S);
+    const lim = PATH.halfWidth(s) - p.r;
+    const w = PATH.toWorld(s, clamp(q.n, -lim, lim), _world);
     p.x = w.x; p.z = w.z;
     const ps = Math.hypot(p.vx, p.vz);
     if (ps > 0.2 && !firstPerson) {

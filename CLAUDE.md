@@ -15,8 +15,8 @@ check and the determinism test. `npm run lint` is the first two on their own.
   fixed step; `crowd.ts`, `agent.ts`, `spawner.ts`, `steering.ts`, `player.ts`, `pose.ts`.
 - `src/input/` — adapters, per-step sampling, and `recorder.ts` (the input log).
 - `src/world/` — the path and everything standing on it: `layout.ts` (dimensions and landmarks, in
-  path coordinates), `path.ts` (the centreline curve and the conversion to world space; pure, no
-  three.js, so the simulation can import it), `ground.ts` (the surface, swept along that curve),
+  path coordinates), `path.ts` (the centreline curve, the width and height profiles over it, and
+  the conversion to world space; pure, no three.js, so the simulation can import it), `ground.ts` (the surface, swept along that curve),
   `railings.ts`, `props.ts`, `box.ts`.
 - `src/render/`, `src/camera.ts`, `src/ui.ts`, `src/debug.ts` — presentation only.
 - `src/main.ts` — the entry point and nothing else: it dynamic-imports the game, the character
@@ -33,10 +33,13 @@ check and the determinism test. `npm run lint` is the first two on their own.
   `test/determinism.expected.json`, which stores two values: `hash` (whole state) and `identity`
   (the crowd a seed produces). See "Two hashes" below.
 - `test/inspect.test.ts` — proves a turntable person is byte-identical to the crowd's agent.
-- `test/path.test.ts` — the path-coordinate convention, including the exactness today's straight
-  centreline gives and that a bent one still measures along and across itself correctly.
-- `test/ground.test.ts` — sweeps the ground's cross-section along a *bent* centreline and checks
-  every vertex and normal came out of the curve rather than out of world x.
+- `test/path.test.ts` — the path-coordinate convention, including the exactness today's straight,
+  level, uniform-width path gives; that a bent centreline still measures along and across itself;
+  and that a test-only curve which bends, widens and climbs puts edge elements and world heights
+  where its own profiles say.
+- `test/ground.test.ts` — sweeps the ground's cross-section along curves the game never draws (a
+  right-angled bend, and one that also widens and rises) and checks every vertex and normal came
+  out of the frame rather than out of world x, a world y, or a remembered width.
 
 ## Seeds and restarting
 
@@ -61,8 +64,27 @@ Two rules make repeat runs comparable, and both must be preserved:
 Nothing on the walkway is placed in world x/z. A position is `(s, n)`: `s` is signed distance along
 the centreline from the path's midpoint, `n` is lateral offset from it. `PATH` in `world/path.ts`
 converts between that and world space, and the crowd, the spawner, the player's limits, the ground,
-the railings, the lamps and the debug overlay all go through it. Bending or forking the walkway is
-a change to the run list in that file; the code that reads `PATH` does not change with it.
+the railings, the lamps and the debug overlay all go through it.
+
+The path is **three profiles, not one**: where the centreline goes (`RUNS`), how wide the walkway is
+there (`halfWidth(s)`), and how high it is (`height(s)`). Today those are one straight run, a
+constant 6, and 0 -- but they are read as profiles everywhere, so bending, widening or lifting the
+walkway is a change to that data and to nothing that reads it. `W` in `layout.ts` is the *nominal*
+width the profile is anchored to, not a width anything places from.
+
+- **`halfWidth(s)`** is what "the edge of the path" means. The railings, the shopfronts, the lamps,
+  the kerb and grass in the ground's section, the crowd's lateral clamp, the wall repulsion and the
+  player's fence all read it at their own `s`. Nothing may use `+-W` for an edge.
+- **`height(s)`** is the centreline's world y, and `slope(s)` is read off it by central difference,
+  so a hill and its gradient cannot disagree. A *height* anywhere in `world/` -- a slab's `y`, a
+  band's `y`, a camera's eye -- is a height **above the path's surface**, never a world y.
+
+**The frame is the single authority on world position.** `frameAt(s)` returns the centreline point
+with its height, the tangent (pitched by the slope), the normal across the path, the up direction
+square to both, and the half width there; `toWorld(s, n)` is a point on the surface and
+`pathPlace(frame, n, y)` is one standing `y` above it, measured along up. Nothing places itself from
+world x, world y, or a remembered width -- which is what makes a non-zero `height` or a varying
+`halfWidth` a data change rather than a rewrite.
 
 Three conventions hold the scheme together:
 
@@ -84,26 +106,52 @@ Three conventions hold the scheme together:
 `pathDir(frame, along, side, out)` rotates a path-space direction into world. Use it rather than
 `frame.tx * along` alone: summing both terms is what stops a purely forward direction coming out
 with a negative zero across the path, which is invisible on screen and not invisible to `Hasher.f64`.
+On a level stretch `frameAt` writes the tangent and up out as exact zeros and ones rather than
+renormalising, for the same reason: the frame reaches the state hash through `pathDir`.
+
+Two things follow from the frame that are worth stating before they are needed:
+
+- **The crowd will drape onto the surface when `height` varies.** The simulation is horizontal and
+  stays that way -- separation, avoidance, overlap and the spatial grid are Euclidean in the x/z
+  plane, and none of them should ever gain a y. The *rendered* y is the drape: `game.ts` asks
+  `PATH.surfaceY(x, z)` for the height under each interpolated body and hands it to `drawPerson` as
+  `groundY`, and the camera adds its eye, look and rig heights to the surface under their own
+  points. Today that is 0 everywhere and costs one `toPath` per body per frame. A hill needs no
+  change here; a multi-run centreline makes `surfaceY` scan the runs, which is when an agent should
+  start carrying the `s` it already computes each step rather than having it projected back.
+- **The path's surface and the ground around it stay separable.** The section in `ground.ts` runs
+  from the centreline out through the kerb to the grass, but the walkway bands and the verge bands
+  are separate strips that never share a vertex, and the sweep resolves both per sample. A bridge is
+  therefore a `height` profile that lifts the walkway plus a section that stops at the kerb over that
+  stretch -- not a rewrite. Do not weld the surface to the surrounding ground.
 
 The ground is a ribbon swept along the centreline rather than a slab laid beside it, so it is
-already the right shape for a bend; see "The ground" below. Everything else in `world/` is placed
-and turned through the curve too, so nothing there changes when the centreline does.
+already the right shape for a bend, a widening or a climb; see "The ground" below. Everything else
+in `world/` is placed and turned through the curve too, so nothing there changes when the path does.
 
 ## The ground
 
-The ground is one **cross-section swept along the centreline**, not a slab: `HALF` in
+The ground is one **cross-section swept along the path**, not a slab: `half(w)` in
 `world/ground.ts` is the walkway in profile from the middle outward -- surface, edge fade, trim
 strip, kerb, grass -- and `buildGround` steps along `s`, takes the path's frame at each step, and
-places that profile through it. Nothing in the mesh assumes a straight run: the section's offsets
-are `n`, its normals are rotated by the frame, and a bend needs no rework here. Only the sampling
-interval would: two units is smooth for any radius the walkway would plausibly take, and the grass
-reaching sixty units out is the part that pinches first if the curve ever gets tighter than that.
+places that profile through it. Nothing in the mesh assumes a straight, level, fixed-width run: the
+section is a **function of the half width**, resolved per sample from the frame's own `w`; offsets
+are `n` and heights are above the surface, both placed through the frame; and the normals are
+rotated by it, so a bend, a widening and a hill all need no rework here. Only the sampling interval
+would: two units is smooth for any radius the walkway would plausibly take, and the grass reaching
+sixty units past the kerb is the part that pinches first if the curve ever gets tighter than that.
 
-Three things about the shape are worth knowing before changing it:
+Four things about the shape are worth knowing before changing it:
 
 - **A band is a strip, and bands do not share vertices.** Two bands meeting at one offset make a
   crease -- a hard change of colour or of slope. A *gradient* is one band with two different
   colours, which is what the edge fade is. That is the whole vocabulary; there is no third case.
+  It is also what keeps the walkway separable from the ground beside it, which is what a bridge
+  will need.
+- **Everything but the centreline stop is written as an offset from `w`.** `w - TRIM`, `w`,
+  `w + LIP`, `w + GRASS`: the section is anchored to the path's edge, so a stretch that widens
+  carries its kerb and its grass out with it. A number measured from the centreline instead would
+  quietly put the kerb in the middle of a plaza.
 - **Bands are listed in order of increasing `n`, and that ordering is load-bearing.** One formula
   orients every band from its own two stops, so a riser's outward face and a flat's upward face are
   the same rule, and the triangle winding follows from the same pair. `section()` mirrors the half
@@ -166,8 +214,11 @@ included: it is a function of place, reads no stream and takes no seed, so the w
 identically in every run.
 
 `test/ground.test.ts` is what keeps the sweep honest, and it works the only way it can: by sweeping
-the section along a right-angled bend the game has never drawn, and measuring every vertex back off
-that curve. A straight-line shortcut in here would look perfect on today's walkway and fail there.
+the section along curves the game has never drawn -- a right-angled bend, and one that also widens
+as it goes and carries a hill over it -- and measuring every vertex back off the frame there. A
+straight-line, fixed-width or flat-ground shortcut in here would look perfect on today's walkway and
+fail against those. Each of the three has been checked to fail it: pin the section to a constant
+width, or write a world y in `ribbon`, and the profiled test goes red while the rest stay green.
 
 ## Character recipes
 

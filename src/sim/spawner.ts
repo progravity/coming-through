@@ -35,12 +35,17 @@ export function spawn(crowd: Crowd, streams: Streams, opts: SpawnOptions = {}): 
     const atDoor = where.chance(0.25);
     const door = where.pick(DOORS);
     const alongPath = where.range(-L, L);
+    // Drawn against the walkway's nominal width, and fitted to the actual width at `s` below. The
+    // draw cannot read the width itself: `s` is not decided until after it, and a draw whose range
+    // depends on a later decision is exactly the reordering the rules above forbid. Once the width
+    // really varies this wants to become a normalised offset scaled after selection -- which moves
+    // `identityHash`, so it is a deliberate change and not a tidy-up.
     const acrossPath = where.range(-W + 1, W - 1);
     // Placement is decided in path coordinates and only turned into a world position at the last
     // moment, so a spawn at "one end of the path" stays at the end of the path however it bends.
-    let s: number, n: number;
-    if (atDoor) { n = door.side > 0 ? W - 0.8 : -W + 0.8; s = door.s; }
-    else { n = acrossPath; s = opts.scatter ? alongPath : -dir * SPAWN_S; }
+    const s = atDoor ? door.s : opts.scatter ? alongPath : -dir * SPAWN_S;
+    const edge = PATH.halfWidth(s);
+    const n = atDoor ? (door.side > 0 ? edge - 0.8 : -edge + 0.8) : clamp(acrossPath, -edge + 1, edge - 1);
     const make = (t: typeof type, an: number, o: ConstructorParameters<typeof Agent>[7] = {}) => {
         const w = PATH.toWorld(s, an, _w);
         return new Agent(streams, crowd.nextAgentIndex(), t, w.x, w.z, dir, crowd.takeSlot(), o);
@@ -56,12 +61,12 @@ export function spawn(crowd: Crowd, streams: Streams, opts: SpawnOptions = {}): 
         crowd.add(leader);
         for (let i = 1; i < size; i++) {
             const off = (i % 2 ? 1 : -1) * Math.ceil(i / 2) * spacing;
-            crowd.add(make(type, clamp(n + off, -W + 0.6, W - 0.6), { leader, offset: off, group: gid, outfit, speed: leader.speed }));
+            crowd.add(make(type, clamp(n + off, -edge + 0.6, edge - 0.6), { leader, offset: off, group: gid, outfit, speed: leader.speed }));
         }
     } else if (A.parentType) {
         const parent = make(A.parentType, n);
         crowd.add(parent);
-        crowd.add(make(type, clamp(n + where.range(-1, 1), -W + 0.5, W - 0.5), { parent }));
+        crowd.add(make(type, clamp(n + where.range(-1, 1), -edge + 0.5, edge - 0.5), { parent }));
     } else crowd.add(make(type, n));
     return true;
 }

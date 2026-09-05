@@ -5,7 +5,7 @@ import { SIM_DT } from '../core/time.ts';
 import { makeRecipe } from '../recipe.ts';
 import type { Recipe } from '../recipe.ts';
 import { clamp, wrapAngle } from '../util.ts';
-import { EXIT_S, W } from '../world/layout.ts';
+import { EXIT_S } from '../world/layout.ts';
 import { PATH, newPathFrame, newPathPoint, newWorldPoint, pathDir } from '../world/path.ts';
 import type { PathFrame, PathPoint } from '../world/path.ts';
 import type { GridItem, SpatialGrid } from './grid.ts';
@@ -136,9 +136,12 @@ export class Agent implements GridItem, Poseable {
         const A = this.A, rng = this.rng;
         if (this.leader) {
             const Ld = this.leader; if (Ld.dead) { this.dead = true; return false; }
-            // Abreast of the leader, my own offset across the path from them.
+            // Abreast of the leader, my own offset across the path from them -- inside the
+            // railings as they stand *there*, which is a different width from mine if the path
+            // narrows between us.
             const lead = PATH.toPath(Ld.x, Ld.z, _other);
-            const t = PATH.toWorld(lead.s, clamp(lead.n + this.offset, -W + 0.6, W - 0.6), _world);
+            const lw = PATH.halfWidth(lead.s);
+            const t = PATH.toWorld(lead.s, clamp(lead.n + this.offset, -lw + 0.6, lw - 0.6), _world);
             let dx = (t.x - this.x) * 2.0 + Ld.vx, dz = (t.z - this.z) * 2.0 + Ld.vz;
             const m = Math.hypot(dx, dz), cap = this.speed * 1.5; if (m > cap) { dx *= cap / m; dz *= cap / m; }
             out.dx = dx; out.dz = dz;
@@ -146,11 +149,15 @@ export class Agent implements GridItem, Poseable {
             const P = this.parent; if (P.dead) { this.dead = true; return false; }
             if (this.t > this.nextWander) { this.wanderN = rng.range(-3, 3); this.wanderS = rng.range(-3, 3); this.nextWander = this.t + rng.sample(A.wanderEvery); }
             const par = PATH.toPath(P.x, P.z, _other);
-            const t = PATH.toWorld(par.s + this.wanderS, clamp(par.n + this.wanderN, -W + 0.5, W - 0.5), _world);
+            const pw = PATH.halfWidth(par.s + this.wanderS);
+            const t = PATH.toWorld(par.s + this.wanderS, clamp(par.n + this.wanderN, -pw + 0.5, pw - 0.5), _world);
             const ex = t.x - this.x, ez = t.z - this.z, d = Math.hypot(ex, ez);
             if (d > 0.4) { out.dx = ex / d * this.speed; out.dz = ez / d * this.speed; }
         } else {
-            if (this.t > this.nextWander) { this.wanderN = rng.range(-W + 0.7, W - 0.7); this.nextWander = this.t + rng.sample(A.wanderEvery); }
+            // A lane to aim for, picked between the railings where this body actually is. The
+            // draw still happens exactly once per wander whatever the width is: the path is the
+            // same walkway in every run, so a range read off it cannot shift the stream.
+            if (this.t > this.nextWander) { this.wanderN = rng.range(-frame.w + 0.7, frame.w - 0.7); this.nextWander = this.t + rng.sample(A.wanderEvery); }
             // Along the path in my direction of travel, drifting across toward the lane I picked.
             const lat = clamp((this.wanderN - here.n) * 0.8, -1, 1) * A.wander;
             const m = Math.hypot(lat, this.dir);
@@ -178,9 +185,10 @@ export class Agent implements GridItem, Poseable {
         wallRepulsion(here.n, this.r, frame, desired);
         steerToward(this, desired);
         this.x += this.vx * dt; this.z += this.vz * dt;
-        // Nobody walks through a railing: the hard limit is on the offset from the centreline.
+        // Nobody walks through a railing: the hard limit is on the offset from the centreline,
+        // taken from the path's own width where the body has ended up.
         const now = PATH.toPath(this.x, this.z, _moved);
-        const lim = W - this.r;
+        const lim = PATH.halfWidth(now.s) - this.r;
         if (now.n < -lim || now.n > lim) {
             const w = PATH.toWorld(now.s, clamp(now.n, -lim, lim), _world);
             this.x = w.x; this.z = w.z;

@@ -2,24 +2,25 @@ import * as THREE from 'three';
 import { GROUND } from '../palette.ts';
 import { INK_LINE, makeToonGradient } from '../render/materials.ts';
 import { box } from './box.ts';
-import { GOAL_S, L, PAD_LENGTH, START_S, W } from './layout.ts';
-import { PATH, newPathFrame, newWorldPoint } from './path.ts';
+import { GOAL_S, L, PAD_LENGTH, START_S } from './layout.ts';
+import { PATH, newPathFrame, newWorldPoint, pathPlace } from './path.ts';
 import type { PathFrame } from './path.ts';
 
-const _w = newWorldPoint();
+const _w = newWorldPoint(), _f = newPathFrame();
 
 /**
  * A flat box laid on the walkway at (s, n), turned to follow the centreline there. `width` is
- * measured across the path and `length` along it, so a slab is described the way the layout
- * describes everything else.
+ * measured across the path and `length` along it, and `y` is a height **above the path's surface**,
+ * not a world y -- so a slab is described the way the layout describes everything else, and rides
+ * up with the walkway if the walkway is ever lifted.
  *
- * A slab is only as straight as the stretch it covers, which is why the ground below is not one:
- * it is for the things standing *on* the ground, short enough that a chord across a bend is the
- * right shape for them anyway.
+ * A slab is only as straight and as level as the stretch it covers, which is why the ground below
+ * is not one: it is for the things standing *on* the ground, short enough that a chord across a
+ * bend is the right shape for them anyway.
  */
 export function slab(scene: THREE.Scene, s: number, n: number, width: number, height: number, length: number, color: number, y: number): THREE.Mesh {
-    const p = PATH.toWorld(s, n, _w);
-    return box(scene, width, height, length, color, p.x, y, p.z, PATH.yawAt(s));
+    const p = pathPlace(PATH.frameAt(s, _f), n, y, _w);
+    return box(scene, width, height, length, color, p.x, p.y, p.z, PATH.yawAt(s));
 }
 
 // ---------- the cross-section ----------
@@ -32,7 +33,7 @@ type Tone = number | 'centre' | 'edge';
 
 /**
  * One longitudinal band of the ground, given as the two stops of its cross-section: how far across
- * the path, how high, and what colour at each.
+ * the path, how high above its surface, and what colour at each.
  *
  * A band is swept along the centreline into a strip. Bands are listed in order of increasing `n`,
  * which is what lets a single formula orient every one of them: the outward face of a riser and
@@ -41,6 +42,16 @@ type Tone = number | 'centre' | 'edge';
  * gradient; a gradient is what you get by giving one band two different colours instead.
  */
 export interface Band { n0: number; y0: number; c0: Tone; n1: number; y1: number; c1: Tone; }
+
+/**
+ * A cross-section, as a function of the half width where it is taken.
+ *
+ * The width is a property of the path and is read per sample off the frame, so a walkway that
+ * narrows through a gate or opens into a plaza carries its kerb, its trim and its grass with it
+ * without the sweep knowing anything has changed. Everything anchored to the edge is written as an
+ * offset from `w`; only the centreline itself is at a fixed `n`.
+ */
+export type Section = (w: number) => readonly Band[];
 
 /**
  * A stretch of the walking surface in its own tone: everything between `sMin` and `sMax` takes
@@ -57,8 +68,8 @@ export interface Zone { sMin: number; sMax: number; centre: number; edge: number
 const KERB_H = 0.06, VERGE_Y = -0.02;
 /** Width of the trim strip inside the railings, and of the kerb top outside them. */
 const TRIM = 0.45, LIP = 0.45;
-/** How far in from the trim the surface starts to deepen, and how far the grass reaches out. */
-const FADE = 3, OUTER = W + 60;
+/** How far in from the trim the surface starts to deepen, and how far past the kerb the grass reaches. */
+const FADE = 3, GRASS = 60;
 /** The ink line's width, and how far it is lifted off the surface it draws the edge of. */
 const INK_W = 0.06, INK_LIFT = 0.012;
 
@@ -72,15 +83,15 @@ const INK_W = 0.06, INK_LIFT = 0.012;
  * sees the trim strip at the railings' feet, and the kerb and grass only through a doorway or in
  * the distance.
  */
-const HALF: readonly Band[] = [
-    { n0: 0,          y0: 0,       c0: 'centre',        n1: W - FADE, y1: 0,       c1: 'centre' },
-    { n0: W - FADE,   y0: 0,       c0: 'centre',        n1: W - TRIM, y1: 0,       c1: 'edge' },
-    { n0: W - TRIM,   y0: 0,       c0: GROUND.kerb,     n1: W,        y1: 0,       c1: GROUND.kerb },
-    { n0: W,          y0: 0,       c0: GROUND.kerbSide, n1: W,        y1: KERB_H,  c1: GROUND.kerbSide },
-    { n0: W,          y0: KERB_H,  c0: GROUND.kerb,     n1: W + LIP,  y1: KERB_H,  c1: GROUND.kerb },
-    { n0: W + LIP,    y0: KERB_H,  c0: GROUND.kerbSide, n1: W + LIP,  y1: VERGE_Y, c1: GROUND.kerbSide },
-    { n0: W + LIP,    y0: VERGE_Y, c0: GROUND.verge,    n1: W + 14,   y1: VERGE_Y, c1: GROUND.verge },
-    { n0: W + 14,     y0: VERGE_Y, c0: GROUND.verge,    n1: OUTER,    y1: VERGE_Y, c1: GROUND.vergeFar },
+const half = (w: number): Band[] => [
+    { n0: 0,          y0: 0,       c0: 'centre',        n1: w - FADE, y1: 0,       c1: 'centre' },
+    { n0: w - FADE,   y0: 0,       c0: 'centre',        n1: w - TRIM, y1: 0,       c1: 'edge' },
+    { n0: w - TRIM,   y0: 0,       c0: GROUND.kerb,     n1: w,        y1: 0,       c1: GROUND.kerb },
+    { n0: w,          y0: 0,       c0: GROUND.kerbSide, n1: w,        y1: KERB_H,  c1: GROUND.kerbSide },
+    { n0: w,          y0: KERB_H,  c0: GROUND.kerb,     n1: w + LIP,  y1: KERB_H,  c1: GROUND.kerb },
+    { n0: w + LIP,    y0: KERB_H,  c0: GROUND.kerbSide, n1: w + LIP,  y1: VERGE_Y, c1: GROUND.kerbSide },
+    { n0: w + LIP,    y0: VERGE_Y, c0: GROUND.verge,    n1: w + 14,   y1: VERGE_Y, c1: GROUND.verge },
+    { n0: w + 14,     y0: VERGE_Y, c0: GROUND.verge,    n1: w + GRASS, y1: VERGE_Y, c1: GROUND.vergeFar },
 ];
 
 /**
@@ -91,23 +102,23 @@ const HALF: readonly Band[] = [
  * the thing that makes it the same line is the colour, which comes from `materials.ts` alongside
  * the shells' own. It is a separate mesh purely so it can be switched with them.
  */
-const INK_HALF: readonly Band[] = [
-    { n0: W - TRIM - INK_W, y0: INK_LIFT,          c0: INK_LINE, n1: W - TRIM, y1: INK_LIFT,          c1: INK_LINE },
-    { n0: W + LIP - INK_W,  y0: KERB_H + INK_LIFT, c0: INK_LINE, n1: W + LIP,  y1: KERB_H + INK_LIFT, c1: INK_LINE },
+const inkHalf = (w: number): Band[] => [
+    { n0: w - TRIM - INK_W, y0: INK_LIFT,          c0: INK_LINE, n1: w - TRIM, y1: INK_LIFT,          c1: INK_LINE },
+    { n0: w + LIP - INK_W,  y0: KERB_H + INK_LIFT, c0: INK_LINE, n1: w + LIP,  y1: KERB_H + INK_LIFT, c1: INK_LINE },
 ];
 
 /** Mirrored across the centreline, keeping the offset at zero a positive zero rather than a -0. */
 const across = (n: number): number => (n === 0 ? 0 : -n);
 
 /** The full width, from a half written centre-outward: the mirror image, then the half itself. */
-function section(half: readonly Band[]): Band[] {
-    const left = half.map(b => ({ n0: across(b.n1), y0: b.y1, c0: b.c1, n1: across(b.n0), y1: b.y0, c1: b.c0 })).reverse();
-    return left.concat(half);
+function section(bands: readonly Band[]): Band[] {
+    const left = bands.map(b => ({ n0: across(b.n1), y0: b.y1, c0: b.c1, n1: across(b.n0), y1: b.y0, c1: b.c0 })).reverse();
+    return left.concat(bands);
 }
 
 /** The two cross-sections the ground is swept from, mirrored out of the halves above. */
-export const SECTION: readonly Band[] = section(HALF);
-export const INK_SECTION: readonly Band[] = section(INK_HALF);
+export const sectionAt: Section = (w: number) => section(half(w));
+export const inkSectionAt: Section = (w: number) => section(inkHalf(w));
 
 /** The two pads, as the only surface zones the game ships with. */
 const ZONES: readonly Zone[] = [
@@ -157,41 +168,55 @@ function colour(hex: number): THREE.Color {
 /**
  * Sweep a cross-section along the sampled centreline into one indexed mesh.
  *
+ * The section is resolved *per sample*, from the half width the frame carries, so the ribbon
+ * follows the path's width as well as its line: nothing in here knows how wide the walkway is, and
+ * nothing in here knows how high it is either -- both arrive through the frame.
+ *
  * Each band becomes its own strip of quads, so bands neither share vertices nor smooth their
- * normals into each other. The normal is worked out once per band in cross-section terms -- across
- * the path and up -- and then rotated into world space by the frame at each sample, which is the
- * whole of what makes a bend come out lit correctly. Winding follows from the same pair: the two
+ * normals into each other. The normal is worked out in cross-section terms -- across the path and
+ * up -- and then rotated into world space by the frame at each sample, which is the whole of what
+ * makes a bend or a slope come out lit correctly. Winding follows from the same pair: the two
  * triangles of a quad are wound so their face normal agrees with it.
  *
  * Vertices come out band-major: band, then sample, then the band's two stops, which is the order
  * `test/ground.test.ts` reads them back in.
  */
-export function ribbon(bands: readonly Band[], samples: readonly number[], frames: readonly PathFrame[]): THREE.BufferGeometry {
-    const cols = samples.length, quads = cols - 1, count = bands.length * cols * 2;
+export function ribbon(shape: Section, samples: readonly number[], frames: readonly PathFrame[]): THREE.BufferGeometry {
+    const sections = frames.map(f => shape(f.w));
+    const nbands = sections[0].length;
+    const cols = samples.length, quads = cols - 1, count = nbands * cols * 2;
     const pos = new Float32Array(count * 3), nrm = new Float32Array(count * 3), col = new Float32Array(count * 3);
     // Where each vertex sits on the walkway, handed to the fragment shader so the grain can be a
     // function of place rather than of screen or of world x. See `grainy` below.
     const pth = new Float32Array(count * 2);
-    const idx = new Uint32Array(bands.length * quads * 6);
+    const idx = new Uint32Array(nbands * quads * 6);
     let v = 0, i = 0;
-    const put = (f: PathFrame, s: number, n: number, y: number, hex: number, na: number, ny: number): void => {
+    // Both the position and the normal go through the frame: `n` across the path, `y` up out of
+    // it. On today's level walkway up is (0, 1, 0) and this is the arithmetic it always was.
+    const put = (f: PathFrame, s: number, n: number, y: number, hex: number, na: number, nu: number): void => {
         const c = colour(hex), p = v * 3;
-        pos[p] = f.x + f.nx * n; pos[p + 1] = y; pos[p + 2] = f.z + f.nz * n;
-        nrm[p] = f.nx * na; nrm[p + 1] = ny; nrm[p + 2] = f.nz * na;
+        pos[p] = f.x + f.nx * n + f.ux * y;
+        pos[p + 1] = f.y + f.ny * n + f.uy * y;
+        pos[p + 2] = f.z + f.nz * n + f.uz * y;
+        nrm[p] = f.nx * na + f.ux * nu;
+        nrm[p + 1] = f.ny * na + f.uy * nu;
+        nrm[p + 2] = f.nz * na + f.uz * nu;
         col[p] = c.r; col[p + 1] = c.g; col[p + 2] = c.b;
         pth[v * 2] = s; pth[v * 2 + 1] = n;
         v++;
     };
-    for (const b of bands) {
-        const dn = b.n1 - b.n0, dy = b.y1 - b.y0;
-        // Perpendicular to (dn, dy) in the (across, up) plane, turned to face up or outward. A flat
-        // band gives (0, 1); a riser gives the face on the side the section has not reached yet.
-        const len = Math.hypot(dn, dy), na = -dy / len, ny = dn / len;
+    for (let bi = 0; bi < nbands; bi++) {
         const first = v;
         for (let k = 0; k < cols; k++) {
-            const f = frames[k], s = samples[k];
-            put(f, s, b.n0, b.y0, toneAt(b.c0, s), na, ny);
-            put(f, s, b.n1, b.y1, toneAt(b.c1, s), na, ny);
+            const f = frames[k], s = samples[k], b = sections[k][bi];
+            const dn = b.n1 - b.n0, dy = b.y1 - b.y0;
+            // Perpendicular to (dn, dy) in the (across, up) plane, turned to face up or outward. A
+            // flat band gives (0, 1); a riser gives the face on the side the section has not
+            // reached yet. Per sample rather than per band, because a band that widens with the
+            // path is not the same band's worth of cross-section all the way along.
+            const len = Math.hypot(dn, dy), na = -dy / len, nu = dn / len;
+            put(f, s, b.n0, b.y0, toneAt(b.c0, s), na, nu);
+            put(f, s, b.n1, b.y1, toneAt(b.c1, s), na, nu);
         }
         for (let k = 0; k < quads; k++) {
             const a = first + k * 2;
@@ -305,11 +330,11 @@ export function buildGround(scene: THREE.Scene): Ground {
     const frames = samples.map(s => PATH.frameAt(s, newPathFrame()));
     const depth = { value: GRAIN };
     const surface = new THREE.Mesh(
-        ribbon(SECTION, samples, frames),
+        ribbon(sectionAt, samples, frames),
         grainy(makeToonGradient(), depth),
     );
     const ink = new THREE.Mesh(
-        ribbon(INK_SECTION, samples, frames),
+        ribbon(inkSectionAt, samples, frames),
         new THREE.MeshBasicMaterial({ color: INK_LINE }),
     );
     scene.add(surface); scene.add(ink);

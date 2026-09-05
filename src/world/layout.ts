@@ -5,7 +5,15 @@
  * know whether the path runs straight.
  */
 
-/** Half width of the path, as a lateral offset. */
+/**
+ * Nominal half width of the path, as a lateral offset.
+ *
+ * This is a *number the path is built from*, not the width anything reads: the walkway's width is a
+ * property of the path, so everything that means "the edge" asks `PATH.halfWidth(s)` and gets the
+ * width where it is standing. Widening the walkway somewhere is a change to the profile in
+ * `path.ts`, and this stays what that profile is anchored to -- and what the spawner's lateral
+ * draw is taken against, which is the one place the two cannot be the same thing (see `spawner.ts`).
+ */
 export const W = 6;
 /** Half length of the path, as a distance along it: the centreline runs from -L to L. */
 export const L = 45;
