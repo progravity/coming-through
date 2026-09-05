@@ -16,7 +16,7 @@ interface Pool {
  * what each index within a slot is. The budget is fixed per person, so a person with every part
  * turned on costs exactly as much as one with none: unused indices get a zero-scale matrix.
  */
-export const PER: Record<PoolName, number> = { body: 3, head: 1, ball: 4, nub: 6, cyl: 18, cone: 1, box: 10 };
+export const PER: Record<PoolName, number> = { body: 3, head: 1, ball: 4, nub: 6, cyl: 18, cone: 1, box: 12 };
 
 const ZERO = new THREE.Matrix4().makeScale(0, 0, 0);
 const _p = new THREE.Vector3(), _q = new THREE.Quaternion(), _s = new THREE.Vector3(), _e = new THREE.Euler();

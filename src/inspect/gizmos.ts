@@ -18,6 +18,8 @@ import type { PoolName } from '../render/pools.ts';
 export interface PartRecord {
     pool: PoolName;
     idx: number;
+    /** The colour the part was drawn in, which is what says whether a seam against it can show. */
+    color: number;
     /** Part-local to world, including the per-person root transform from setBase. */
     readonly matrix: THREE.Matrix4;
 }
@@ -53,8 +55,8 @@ export class RecordingPools extends PartPools {
     override put(pool: PoolName, idx: number, x: number, y: number, z: number, rx: number, ry: number, rz: number, sx: number, sy: number, sz: number, color: number): void {
         super.put(pool, idx, x, y, z, rx, ry, rz, sx, sy, sz, color);
         let rec = this.parts[this.count];
-        if (rec === undefined) { rec = { pool, idx, matrix: new THREE.Matrix4() }; this.parts[this.count] = rec; }
-        rec.pool = pool; rec.idx = idx;
+        if (rec === undefined) { rec = { pool, idx, color, matrix: new THREE.Matrix4() }; this.parts[this.count] = rec; }
+        rec.pool = pool; rec.idx = idx; rec.color = color;
         _p.set(x, y, z); _s.set(sx, sy, sz);
         if (rx === 0 && ry === 0 && rz === 0) _q.set(0, 0, 0, 1);
         else { _e.set(rx, ry, rz); _q.setFromEuler(_e); }

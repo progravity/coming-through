@@ -20,6 +20,7 @@ import { RecordingPools } from '../src/inspect/gizmos.ts';
 import { Subject } from '../src/inspect/subject.ts';
 import type { Overrides } from '../src/inspect/subject.ts';
 import type { ArchKey } from '../src/archetypes.ts';
+import { INK } from '../src/palette.ts';
 import { drawPerson } from '../src/render/person.ts';
 
 const SEED = 9;
@@ -100,6 +101,13 @@ test('ground equipment holds still while the body bobs through a stride', () => 
  * pieces here. Two overlapping boxes whose faces sit closer together than that get it twice over:
  * the faces themselves z-fight, and each part's shell surfaces through the other one and paints a
  * black band along the seam. Flush is the worst case of all, not the neatest.
+ *
+ * Both of those failures are failures of *contrast*, which is why a pair that is INK on both sides
+ * is exempt below. There is nothing to see when black z-fights black, and a shell surfacing
+ * through a part that is already ink paints it the colour it already was. The glasses are the
+ * reason this exemption is needed rather than merely true: the whole frame is about 0.03 across,
+ * so a lens and its bridge are closer together than FLUSH no matter how they are arranged, and any
+ * face detail built from more than one piece would be unbuildable under the flat rule.
  */
 const FLUSH = 0.03;
 
@@ -124,14 +132,16 @@ test('overlapping boxes are buried inside each other, never flush', () => {
             s.mv = 1;
             pools.beginRecord();
             drawPerson(pools, 0, s, s, 0);
-            const boxes: { id: string; lo: number[]; hi: number[] }[] = [];
+            const boxes: { id: string; ink: boolean; lo: number[]; hi: number[] }[] = [];
             for (let p = 0; p < pools.recorded; p++) {
                 const rec = pools.parts[p];
-                if (rec.pool === 'box') boxes.push({ id: `box ${rec.idx}`, ...bounds(rec.matrix) });
+                if (rec.pool === 'box') boxes.push({ id: `box ${rec.idx}`, ink: rec.color === INK, ...bounds(rec.matrix) });
             }
             for (let i = 0; i < boxes.length; i++) {
                 for (let j = i + 1; j < boxes.length; j++) {
                     const a = boxes[i], b = boxes[j];
+                    // Ink against ink has no seam to show: see the note on FLUSH.
+                    if (a.ink && b.ink) continue;
                     // Only parts that actually interpenetrate can fight; ones merely near each
                     // other are two separate objects and may line up however they like.
                     if ([0, 1, 2].some(k => Math.min(a.hi[k], b.hi[k]) - Math.max(a.lo[k], b.lo[k]) <= 0)) continue;

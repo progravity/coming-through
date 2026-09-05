@@ -298,11 +298,16 @@ let _soleY = 0, _footZ = 0;
  *   cyl  0-1 thighs    2-3 shins   4-5 upper arms   6-7 forearms
  *        8 neck        9 collar    10-11 hat        12-16 gear      17 bag strap
  *   ball 0 hair or beanie    1 ponytail   2 beard   3 balloon
- *   box  0 glasses     1-2 bag body and flap        3-5 accessory    6-9 mobility frame
+ *   box  0 glasses bridge         1-2 bag body and flap    3-9 accessory or mobility frame
+ *        10-11 glasses lenses
  *   cone 0 party hat
  *
  * "gear" is shared between the stroller's wheels and the mobility aids, which the recipe never
- * gives to the same person; likewise boxes 3-5 and 6-9 are one shared accessory/mobility range.
+ * gives to the same person; boxes 3-9 are shared the same way. An accessory fills that range from
+ * the bottom and a frame from the top, which leaves box 5 to whichever of the two is the bulkier
+ * -- the stroller, which needs three, and the scooter, which needs five. They cannot collide:
+ * pushing a stroller is the one accessory that forces `mobility` to none (see `makeRecipe`),
+ * because someone pushing a pram has no hand free for an aid.
  *
  * Joints read as joints rather than collisions because every cylinder end is buried inside the
  * rounded part at that joint -- shoulder cap over the upper arm, hand over the forearm, pelvis
@@ -472,8 +477,44 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
     else if (r.beard === 'stubble') put('ball', k + 2, 0, faceY(-0.5 * hr, 0.36 * hr), faceZ(-0.5 * hr, 0.36 * hr), hp, 0, tilt, hr * 1.52, hr * 0.85, hr * 1.42, r.hairColor);
     else hide('ball', k + 2);
 
-    if (r.glasses) put('box', b, 0, faceY(0.1 * hr, 0.95 * hr), faceZ(0.1 * hr, 0.95 * hr), hp, 0, tilt, hr * 1.75, hr * 0.3, hr * 0.12, INK);
-    else hide('box', b);
+    // ---- glasses: a lens either side, a bridge over the nose ----
+    //
+    // Both halves of the old single bar were wrong. It was planted on a plane 0.95 head-radii out
+    // and made 1.75 wide, but a sphere at that depth is only 0.62 across, so it hung in the air
+    // past both cheeks; and one solid slab has no bridge, which is the thing the eye actually
+    // reads as glasses rather than as a visor.
+    //
+    // Scale first, because it is the trap here. The ink shell stands 0.0125 proud of *every* face
+    // whatever the part's size, and these are the smallest parts on the figure: at a typical head
+    // the old bar was specified 1.75 x 0.30 and drawn 1.99 x 0.46 -- the full width of the skull,
+    // and half again as tall as asked for. Nothing below is the size it looks: every piece renders
+    // about 0.025 fatter each way, and the gap between the lenses closes by the same amount, so
+    // the gap is written far wider than it wants to end up. Being INK already, the shell costs
+    // nothing but that growth -- it is the same colour as the part it wraps.
+    if (r.glasses) {
+        // Each lens is laid along the sphere's own tangent at the eye. That yaw is the whole
+        // difference between a pair of glasses and a slab: flat against the face, a lens is buried
+        // at its inner edge and floating at its outer one, because the head falls away by a third
+        // of a radius across the width of one lens. Tangent, it stands the same distance proud
+        // from the nose to the temple, and only the two ends lift -- by w^2/2r, a fifteenth of a
+        // radius, which is about what a real frame's corners do anyway.
+        const ex = 0.38 * hr, ey = 0.10 * hr;
+        const er = Math.sqrt(Math.max(hr * hr - ex * ex - ey * ey, 1e-6));
+        const swing = Math.atan2(ex, er);
+        for (let i = 0; i < 2; i++) {
+            const side = i === 0 ? -1 : 1;
+            put('box', b + 10 + i, side * ex, faceY(ey, er), faceZ(ey, er), hp, side * swing, tilt,
+                0.34 * hr, 0.17 * hr, 0.05 * hr, INK);
+        }
+        // The bridge rides the top of the gap, not the middle of it: what has to survive is the
+        // open notch *under* it, showing the nose, because that hole is the only thing separating
+        // a pair of glasses from the bar this replaces. Its own ends are buried in the two lenses,
+        // so the frame stays one piece from every angle. Placed at the head's most forward point
+        // at that height, which is further out than the lenses -- the frame curves, as it should.
+        const by = ey + 0.055 * hr;
+        const bz = Math.sqrt(Math.max(hr * hr - by * by, 1e-6));
+        put('box', b, 0, faceY(by, bz), faceZ(by, bz), hp, 0, tilt, 0.46 * hr, 0.04 * hr, 0.05 * hr, INK);
+    } else { hide('box', b); hide('box', b + 10); hide('box', b + 11); }
 
     // hats
     if (r.hat === 'cap') {
@@ -666,13 +707,60 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
         // Footplate top meets the sole of the folded-up foot.
         put('box', b + 8, 0, _soleY - 0.025, _footZ + 0.04, 0, 0, 0, 0.46, 0.05, 0.3, INK);
     } else if (r.mobility === 'scooter') {
-        // Deck top meets the sole; seat top meets the rider; the tiller is drawn from the deck to
-        // whatever height the reaching hands settled at.
-        // A thin deck, so its top can meet the sole exactly without its underside going through
-        // the pavement -- at these seated leg angles the sole sits only about 7cm up.
-        const DECK_T = 0.07, deckY = _soleY - DECK_T / 2, barY = gripY, barZ = gripZ + 0.04;
+        // Seat top meets the rider; the tiller is drawn from the deck to whatever height the
+        // reaching hands settled at; the deck is squeezed in between the sole and the road.
+        //
+        // That squeeze is the whole difficulty. At these seated leg angles the sole lands only
+        // about 7cm up -- `0.2864 * limb - 0.2125`, so barely 3cm for a child -- and a deck hung
+        // straight off it sat its own thickness lower and reached the ground, which put the
+        // footplate's underside level with the tyres' contact patch and made the thing read as a
+        // sledge with wheels painted on. The wheels have to be the only part touching the road.
+        //
+        // The clearance is bought with DECK_SINK, which is how far the plate's top rises *past* the
+        // sole, burying the bottom edge of the shoe in it. Paying for it out of DECK_T instead --
+        // a thinner plate, hung off the sole as before -- is the obvious move and it is wrong
+        // twice over: the ink shell adds about 0.0125 at each face whatever the part's size, so a
+        // thin plate is mostly outline, and the seat post is buried in this plate to its
+        // mid-plane, so thinning it brings the post's own foot up towards the plate's underside
+        // and the two start to fight (`test/attachment.test.ts` measures exactly that).
+        //
+        // Sinking the shoe instead costs nothing to look at, because the foot is a rounded nub:
+        // it meets a plane at a tangent point, so the bottom of it -- and DECK_SINK is about a
+        // third of the nub's 0.115 -- is the part that has already curved away from the silhouette.
+        // Standing exactly on the surface is the joint rule's butted case anyway; sunk into it is
+        // the sealed one.
+        //
+        // What comes out: 4.5cm of daylight under an adult's deck, 3.8 for an older rider, 3.0 for
+        // a teen, and 1.8 for a child, who is the one the clamp catches.
+        //
+        // The floor is a clamp rather than an equality because the sole's height belongs to the
+        // *rider*, through `limb`, and the clearance belongs to the *scooter*. A short enough
+        // rider cannot have both, and it is the clearance that has to win: a deck grounding itself
+        // is visible from across the street, and a shoe sunk further into the plate is not.
+        const DECK_T = 0.07, DECK_SINK = 0.042, DECK_CLEAR = 0.03;
+        const deckBot = Math.max(DECK_CLEAR, _soleY + DECK_SINK - DECK_T);
+        const deckY = deckBot + DECK_T / 2, barY = gripY, barZ = gripZ + 0.04;
+        // The pad's top is the rider's underside, so its thickness is given rather than its centre:
+        // the post below hangs off the same two numbers and cannot come adrift of it.
+        const PAD_T = 0.12, padY = seatY - PAD_T / 2, padZ = -0.06;
         put('box', b + 6, 0, deckY, 0.10, 0, 0, 0, 0.46, DECK_T, 0.92, r.frameColor);
-        put('box', b + 7, 0, seatY - 0.06, -0.06, 0, 0, 0, 0.42, 0.12, 0.38, r.frameColor);
+        put('box', b + 7, 0, padY, padZ, 0, 0, 0, 0.42, PAD_T, 0.38, r.frameColor);
+        // The column the seat stands on. The deck and the seat are set by two different landmarks
+        // -- the sole of a folded-up foot and the underside of the rider -- and the folded leg
+        // between them is most of a thigh long, so there is a third of a metre of daylight there
+        // that nothing was crossing: the seat and its backrest hung in the air over the deck.
+        //
+        // It spans the two *centres* rather than the two faces, so both of its own ends are buried
+        // inside the parts they meet and neither shows a cap. That is the joint rule from the body,
+        // and it is the reason for taking the ends off the deck's and the pad's thicknesses rather
+        // than off their surfaces: the ink shell stands about 3% of a part's length plus 0.0125
+        // proud of each end, so an end merely touching a surface surfaces its own outline through
+        // it. Half the deck and half the pad is more than that at every build.
+        //
+        // Narrow against the pad it carries -- a post as wide as the seat would be a plinth, and
+        // the deck would stop reading as something a foot rests on. In frame colour, not ink,
+        // because the deck and the seat are the frame and this is the piece that makes them one.
+        put('box', b + 5, 0, (deckY + padY) / 2, padZ, 0, 0, 0, 0.16, padY - deckY, 0.18, r.frameColor);
         put('box', b + 8, 0, (seatY + backY) / 2, -0.26, 0, 0, 0, 0.42, backY - seatY, 0.08, r.frameColor);
         put('box', b + 9, 0, barY, barZ, 0, 0, 0, gripX * 2 + 0.1, 0.06, 0.06, INK);
         rod(pools, c + 12, 0, deckY + DECK_T / 2, barZ + 0.06, barY, barZ, 0.08, INK);
