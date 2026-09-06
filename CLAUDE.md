@@ -38,9 +38,11 @@ check and the determinism test. `npm run lint` is the first two on their own.
   conforms to, `registry.ts` the only file that knows they exist, `entities/` the conformances,
   and `index.ts`/`panel.ts`/`state.ts` a shell that has never heard of any of them. A driver for
   the game's own assemblers, never a copy of them; see "Entity inspection" below.
-- `src/compare/` — the render-direction comparator. Its `treatments.ts` is not tool-only: `?look=`
-  plays an ordinary run under one of its six treatments, so `game.ts` depends on it and the
-  directory cannot be deleted without breaking the build. See "URL parameters" below.
+- `src/compare/` — the render-direction comparator. The six rendering directions it shows side by
+  side live as data in `src/render/look.ts`; `?look=` plays a normal run under one of them and
+  reaches every surface, not just the crowd. `main.ts` names this directory only to *open* it, so
+  nothing here is load-bearing and the game keeps compiling and playing without it. See "URL
+  parameters" and "Looks" below.
 - `test/determinism.test.ts` — headless run with a fixed seed and scripted input, hashed against
   `test/determinism.expected.json`, which stores two values: `hash` (whole state) and `identity`
   (the crowd a seed produces). See "Two hashes" below.
@@ -69,6 +71,11 @@ check and the determinism test. `npm run lint` is the first two on their own.
 - `test/obstacles.test.ts` — that the furniture is solid and that being solid never touches the
   score: colliders match the drawn objects, the crowd goes round them, the player is stopped by
   them, and a bump is still player-versus-person contact and nothing else.
+- `test/look.test.ts` — that the six looks are one list, named once, in panel order; that the
+  shipped look is the absence of one, so `current` restores rather than describes; that a look's
+  ink weight folds into a part's shell growth exactly as the per-frame sweep it replaced used to;
+  that every surface dresses and undresses without disposing a material it did not create; and
+  that nothing outside `src/compare/` reaches into it, which is what keeps the comparator optional.
 
 ## Seeds and restarting
 
@@ -201,7 +208,7 @@ people's outline shells are. It has to be drawn rather than inflated: a back-fac
 part because a part has a centre to grow away from, and a ribbon has none. It is a second mesh
 purely so `Ground.setInk` can switch it with `pools.setInk` and the edge layer's shells, which
 `game.ts` does through `World.setInk` in one place so the whole world and the crowd always carry
-the same line -- including under a `?look=` treatment that turns the shells off.
+the same line -- including under a look that turns the shells off.
 
 A `Zone` recolours the walking surface over a range of `s`, which is the mechanism for varying the
 ground by place. It works by resolving the two *roles* the surface bands name (`centre` and `edge`)
@@ -613,6 +620,52 @@ Anything outside the renderer that needs to know how tall a person is imports `s
 `eyeHeight` from `render/person.ts`; `camera.ts` derives all three of its heights that way, so a
 proportion change cannot leave the camera aimed where the chest used to be.
 
+## Looks
+
+A **look** is four values, in `render/look.ts`: a fresh body material for whatever a surface asks
+for, whether its ink shells are on, what colour they draw in, and how far their clearance moves
+from the shipped constant (`body`, `inkOn`, `inkColour`, `inkWeight`). All six rendering directions
+the comparator has ever shown -- `current`, `toon-bare`, `soft-ink`, `soft`, `soft-thin`, `matcap`
+-- fit inside that shape, from a plain toggle of the ink shell to a matcap sphere baked onto a
+canvas, which is what proves it is the right four values rather than a list that happened to cover
+today's six: a seventh look is still one function and three flags in the same shape.
+
+**An absent field means as shipped, never "as it currently is."** `current` declares nothing at
+all, and dressing with it has to put every material back exactly as it shipped and every shell back
+to its shipped clearance -- not leave whatever the previous look left behind. Read the other way,
+switching looks in the inspector would be a one-way door and `current` would be a no-op instead of
+a working button, which is the bug the difference exists to prevent.
+
+**Each layer dresses itself.** `PartPools.dress`, `EdgeLayer.dress`, `Props.dress` and
+`Ground.dress` are four implementations of one call, because only the surface that chose how it
+colours itself can put that choice back correctly -- the crowd knows it multiplies white by
+`instanceColor`, the ground knows its bands are per vertex, and nothing outside either one should
+have to know it too. `World.dress` calls the three it owns for the same reason `World.setInk` is
+already one call: a look that reached the ground but left the edge layer toon-shaded would put half
+the walkway back in two shading models, which is the bug this whole project exists to remove.
+
+**The ground keeps its grain under every look because the grain patch was never toon-specific.**
+`grainy()` reads and writes `onBeforeCompile`, which every `THREE.Material` has, so handing it a
+`MeshStandardMaterial` instead of the shipped `MeshToonMaterial` costs it nothing: the grain rides
+on whatever body a look supplies rather than being wired into the toon shader by name.
+
+**A prop's colour lives in its material; the crowd's and the edge's live per instance.**
+`MaterialNeeds` is two fields because the four surfaces differ in exactly two ways: a prop needs
+its own colour baked in, because `worldToon` keys its cache by colour and a look still has to paint
+the skyline in its own palette rather than turn every shopfront white, while the crowd and the edge
+layer ask for white and multiply it with `instanceColor`, which is what lets a thousand posts and
+ninety parts a person cost one draw call apiece rather than one per colour; the ground alone asks
+for `vertexColors`, because its bands are painted per vertex rather than carried in the material at
+all. One small interface answering three different relationships to colour is what lets six looks
+meet four surfaces without a twenty-four-cell table.
+
+**Nothing may dispose a material it did not create, because `worldToon` is a cache.** A shared
+`MeshToonMaterial` is handed to every surface that asks for its colour and marked
+`userData.shared`, and every `dress` checks that flag before calling `dispose()` on what it is
+replacing. Skip the check and restyling one cart disposes the material every other cart, every
+shopfront and the wheel of that colour are still drawing through -- the failure a shared cache
+always risks, and the reason the flag exists.
+
 ## Entity inspection
 
 `?inspect=1` opens a turntable: one thing on a neutral stage, a camera that holds still, a slow
@@ -750,23 +803,29 @@ and the only place the fill cost of toon against PBR against matcap actually sho
 
 `?seed=<uint32 or any string>` (strings are hashed), `?stress=1` (pinned seed, full crowd, no input,
 per-frame sim/render milliseconds), `?debug=1` (top-down overlay), `?tier=low|mid|high`,
-`?look=<name>` (play under a comparator rendering treatment; see below).
+`?look=<name>` (play the whole world under one rendering direction; see below).
 
 `?compare=1` (or `?compare=row`) opens a side-by-side of rendering directions -- four panels
 crossing toon ramp against soft diffuse and ink shell against none, so each edge of that table
 moves one thing only, then two that ask about the line and the light instead: a finer warm ink, and
-a matcap. It changes nothing in the render path -- each panel builds its own `PartPools` and swaps
-materials on the meshes from outside -- and touches neither hash.
+a matcap. It changes nothing in the render path -- each panel builds its own `PartPools` and
+dresses it in one of the six looks, the same call the game itself makes -- and touches neither
+hash. `soft-thin`'s thinner line used to cost a per-frame sweep over every shell to shrink it,
+measured at about a third of the pose cost; that sweep is gone, because a look's ink weight now
+folds into the same growth `put()` was already computing for every part's shell, so thinning a
+line costs nothing a shipped frame was not paying for already.
 
-`?look=<name>` plays a **normal run** under one of those six treatments: `current`, `toon-bare`,
-`soft-ink`, `soft`, `soft-thin`, `matcap`. Every panel in the comparator prints its own name, so
-the loop is to read a panel and then type what it says. Six still turntables cannot answer how a
-direction holds up in motion, at crowd distance, from the game's own camera under the game's own
-lights, and that is the only place it has to hold up. `game.ts` dynamic-imports
-`compare/treatments.ts` and runs the same surgery on its single set of pools, so a run without the
-flag downloads none of it; it is applied after `applyTier` because a treatment that turns the ink
-off would otherwise be overruled a line later by the tier's own ink setting. An unknown name warns
-with the real list and plays the shipped look.
+`?look=<name>` plays a **normal run** under one rendering direction applied to everything on
+screen -- the crowd, the benches and lamps, the carts, the shopfronts and the ground -- rather than
+the crowd alone: `current`, `toon-bare`, `soft-ink`, `soft`, `soft-thin`, `matcap`. The six live as
+data in `src/render/look.ts`, and `?look=` names them by the same slug the comparator's panels
+print, so the loop is to read a panel and then type what it says. Six still turntables cannot
+answer how a direction holds up in motion, at crowd distance, from the game's own camera under the
+game's own lights, and that is the only place it has to hold up. `game.ts` dynamic-imports
+`render/look.ts` and calls `World.dress` then `PartPools.dress`, so a run without the flag
+downloads none of it; it is applied after `applyTier` because a look that turns the ink off would
+otherwise be overruled a line later by the tier's own ink setting. An unknown name warns with the
+real list and plays the shipped look.
 
 Each panel prints what its treatment costs, split three ways because the three are not equally
 knowable. **Structure** is exact rather than measured: draw calls and instance matrices per person,
@@ -774,9 +833,8 @@ which only the ink shells move -- each pool draws its shell as a second `Instanc
 them off halves both, 14 calls to 7 and 90 instances to 45. **CPU** is measured on demand, by the
 `cost` button, `B`, or `&cost=1`: it poses a full 190-person crowd and times it, which is fair to
 quote because posing costs the same whether those people land on six pixels or six hundred. Ink is
-worth something like a sixth of it and `soft-thin`'s per-frame `weighInk` sweep about a third more,
-while the choice of material costs nothing at all -- read the shape of that rather than the exact
-percentages, which move with the machine. **Fill** is deliberately absent from the cards. It scales with the
+worth something like a sixth of it, and the choice of material costs nothing at all -- read the
+shape of that rather than the exact percentages, which move with the machine. **Fill** is deliberately absent from the cards. It scales with the
 pixels people cover, a panel covers almost none, and a millisecond quoted at panel size would rank
 the six by an effect that barely exists there -- confidently, which is worse. `?look=` and
 `npm run bench:looks` measure it where it is real.
@@ -797,19 +855,21 @@ own rather than through each panel's pools, because the baseline panel draws thr
 it runs a throwaway pass before the first measurement, or whichever treatment leads the list
 carries the JIT's first sight of a crowd and reads a few percent high for being first.
 
-`src/compare/` is therefore **not** disposable. The game depends on `treatments.ts`, so deleting
-the directory fails `tsc` and takes `npm run lint` and `npm test` down with it -- the guard is a
-real dependency, not a note asking nicely. Retiring it is a decision about `?look=` first: promote
-the winning treatment into `render/materials.ts` and drop the flag, or keep both. The six panels
-and the six names are one list in `compare/treatments.ts`; adding a treatment there gives it a
-panel and a `?look=` name together.
+`src/compare/` is therefore genuinely disposable, on purpose. Nothing outside it depends on
+anything inside it: `main.ts` names the directory only to *open* it, exactly as it opens the
+inspector, and `test/look.test.ts` walks every file under `src/` and fails the moment that stops
+being true. The six looks and their names live in `render/look.ts`, not here; what `treatments.ts`
+keeps is the one thing a comparator panel still wants that a look does not answer -- picking a
+bare `PartPools`'s meshes back out of the scene it just put them in, to caption their structure.
+Retiring the comparator is therefore a decision about the tool alone: delete the directory and the
+game keeps compiling, keeps testing green, and keeps playing under every `?look=`.
 
 `?inspect=1` opens the turntable and `?inspect=row` its side-by-side row; `&entity=` chooses what
 stands on it (`person` by default, plus `kiosk`, `furniture`, `bench`, `lamp`, `bin`). Both take
 `&seed=` and mirror the rest of their state back into the address bar — every control under its own
-id, every active overlay under its own, plus `paused`, `yaw`, `ink` and the view (`zoom`, `panx`,
-`pany`) — so a reload after a code change brings back the same thing at the same settings, seen
-from the same distance.
+id, every active overlay under its own, plus `paused`, `yaw`, `look`, `ink` and the view (`zoom`,
+`panx`, `pany`) — so a reload after a code change brings back the same thing at the same settings,
+seen from the same distance.
 
 ## Determinism rules
 

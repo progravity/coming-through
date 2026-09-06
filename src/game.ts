@@ -27,7 +27,7 @@ const params = new URLSearchParams(location.search);
 /** Stress mode pins this seed so runs are comparable across machines and commits. */
 const STRESS_SEED = 1;
 const stress = params.get('stress') === '1';
-/** Optional rendering treatment borrowed from the comparator; see applyLook below. */
+/** Optional rendering direction, played on top of a normal run; see applyLook below. */
 const lookParam = params.get('look');
 const seedParam = params.get('seed');
 const initialSeed = stress ? STRESS_SEED : seedParam !== null && seedParam !== '' ? parseSeed(seedParam) : randomSeed();
@@ -137,18 +137,19 @@ function cycleCamera(): void { ui.setCamera(rig.cycle()); }
 function toggleDebug(): void { ui.setDebug(debug.toggle()); }
 
 /**
- * `?look=<name>` plays an ordinary run under one of the comparator's rendering treatments, named
- * by the slug its panel prints (`current`, `toon-bare`, `soft-ink`, `soft`, `soft-thin`, `matcap`).
+ * `?look=<name>` plays an ordinary run under one rendering direction applied to the whole world,
+ * named by the slug its comparator panel prints (`current`, `toon-bare`, `soft-ink`, `soft`,
+ * `soft-thin`, `matcap`).
  *
  * Six still turntables cannot answer how a direction holds up in motion, at crowd distance, from
  * the game's own camera under the game's own lights -- and that is where it has to hold up. This
- * costs nothing to find out: the treatments already restyle a `PartPools` from outside the render
- * path, so the same surgery runs on the game's single set of pools with no change to `pools.ts`,
- * `materials.ts` or `person.ts`.
+ * costs nothing to find out: a look is data in `render/look.ts`, and every surface already knows
+ * how to wear one, so playing a real run under it is `world.dress(look)` and `pools.dress(look)`
+ * and nothing else.
  *
  * Dynamically imported, so a run without the flag never downloads the tool -- and applied after
- * `applyTier`, or a treatment that turns the ink off would be overruled a line later by the tier's
- * own ink setting.
+ * `applyTier`, or a look that turns the ink off would be overruled a line later by the tier's own
+ * ink setting.
  */
 async function applyLook(name: string): Promise<void> {
     const { LOOK_NAMES, lookNamed } = await import('./render/look.ts');

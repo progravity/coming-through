@@ -9,8 +9,9 @@
  *
  * What is left here is the one thing the comparator still wants that a look does not answer: each
  * panel builds a bare `PartPools` with no world around it, and needs to pick the character meshes
- * back out of the scene it just put them in -- to caption their structure, and to swap materials
- * from outside without also restyling anything else instanced in the same scene.
+ * back out of the scene it just put them in, to caption their structure. The swap itself is
+ * `PartPools.dress`, called directly on the panel's own pools -- `poolMeshes` only finds what is
+ * already there.
  */
 import * as THREE from 'three';
 

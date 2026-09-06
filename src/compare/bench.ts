@@ -56,11 +56,11 @@ export interface Structure {
 }
 
 /**
- * Read the structural cost off the meshes rather than off the treatment that set them.
+ * Read the structural cost off the meshes rather than off the look that set them.
  *
  * `setInk` hides the shells by clearing `visible`, so what is drawn is a property of the meshes
- * themselves -- which keeps this honest if a treatment ever turns the shells off some other way,
- * and keeps it from having to know which treatments do.
+ * themselves -- which keeps this honest if a look ever turns the shells off some other way, and
+ * keeps it from having to know which looks do.
  */
 export function structureOf(meshes: PoolMeshes): Structure {
     const inked = meshes.ink.some(m => m.visible);
