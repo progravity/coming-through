@@ -689,6 +689,13 @@ survives being read from the walkway at an angle with a crowd in front of it -- 
 kiosks' oversized toppers are, at a scale set by the building rather than by the cart. Three things
 were found on the turntable and are worth keeping:
 
+- **Nothing may share a plane with anything.** The whole layer is boxes on one grid, so exact
+  coplanarity is the easy mistake: the corner pilasters ended flush with the wall's own end, two
+  outward-facing quads at `da = +-3.5`, and the trim tore into the wall down the full height of every
+  corner. A pilaster wraps its corner instead, standing proud on both faces it turns -- and clear of
+  the plinth and the cornice, which reach further along than the wall does. The souvenir shop's two
+  ribbons had the same fault where they crossed. Coincident faces that point *opposite* ways are
+  fine, since only one of the pair is ever drawn; it is two faces pointing the same way that tear.
 - **A symbol has to be oversized against the building, not against itself.** The first pass sized
   them like cart toppers, at 1.5 m on a 7 m frontage, and they read as ornaments. They are 2 to 3 m
   now and reach 6 to 7 m up.

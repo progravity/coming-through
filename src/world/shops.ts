@@ -96,14 +96,24 @@ function storefront(striped: boolean): Prim[] {
         { shape: 'box', colour: 'trim', dn: FRONT + 0.01, dy: 1.75, da, across: 0.06, up: 1.5, along: 1.95 },
         { shape: 'box', colour: SHOP.glass, dn: FRONT + 0.05, dy: 1.75, da, across: 0.06, up: 1.24, along: 1.69 },
     ];
+    /**
+     * A corner pilaster, standing proud of the wall on **both** the faces it turns.
+     *
+     * It has to wrap the corner rather than stop flush with it, and that is a rendering fact rather
+     * than a stylistic one: flush means its outer face and the wall's end face are the same plane,
+     * two outward quads fighting for the same depth, which shows as the trim tearing into the wall
+     * along the whole height of the corner. Everything here is boxes on a shared grid, so exact
+     * coplanarity is the easy mistake and the one to check for -- and it has to clear the plinth
+     * and the cornice too, which reach further along than the wall does.
+     */
     const pilaster = (da: number): Prim => (
-        { shape: 'box', colour: 'trim', dn: FRONT - 0.04, dy: WALL / 2, da, across: 0.22, up: WALL, along: 0.34 }
+        { shape: 'box', colour: 'trim', dn: FRONT - 0.04, dy: WALL / 2, da, across: 0.22, up: WALL, along: 0.4 }
     );
     return [
         { shape: 'box', colour: 'base', dn: 0, dy: WALL / 2, da: 0, across: SHOP_BOX.across, up: WALL, along: SHOP_BOX.along, solid: true },
         { shape: 'box', colour: 'trim', dn: 0, dy: 0.17, da: 0, across: SHOP_BOX.across + 0.18, up: 0.34, along: SHOP_BOX.along + 0.18 },
         { shape: 'box', colour: 'trim', dn: 0, dy: WALL + 0.11, da: 0, across: SHOP_BOX.across + 0.3, up: 0.22, along: SHOP_BOX.along + 0.3 },
-        pilaster(-(HALF - 0.17)), pilaster(HALF - 0.17),
+        pilaster(-(HALF - 0.15)), pilaster(HALF - 0.15),
         // The door starts at the plinth's top rather than at the ground, so the step reads as a step.
         { shape: 'box', colour: 'trim', dn: FRONT + 0.01, dy: 1.37, da: 0, across: 0.06, up: 2.06, along: 1.7 },
         { shape: 'box', colour: 'accent', dn: FRONT + 0.05, dy: 1.35, da: 0, across: 0.06, up: 1.86, along: 1.42 },
@@ -201,8 +211,10 @@ const CANDY_SYMBOL: readonly Prim[] = [
 /** A gift box: ribbon crossing it both ways, and a bow on top. */
 const SOUVENIR_SYMBOL: readonly Prim[] = [
     { shape: 'box', colour: 'topper', dn: PLINTH_N, dy: 4.85, da: 0, across: 2, up: 2, along: 2 },
+    // The second ribbon is the taller of the two, so the pair cross over rather than sharing their
+    // top and bottom planes -- two coplanar faces meeting at a right angle tear at the crossing.
     { shape: 'box', colour: 'accent', dn: PLINTH_N, dy: 4.85, da: 0, across: 2.06, up: 2.06, along: 0.38 },
-    { shape: 'box', colour: 'accent', dn: PLINTH_N, dy: 4.85, da: 0, across: 0.38, up: 2.06, along: 2.06 },
+    { shape: 'box', colour: 'accent', dn: PLINTH_N, dy: 4.85, da: 0, across: 0.38, up: 2.12, along: 2.06 },
     ball('accent', 6.12, 0.44, 0.62),
     ball('accent', 6.12, -0.44, 0.62),
     ball('accent', 6.12, 0, 0.38),
@@ -278,12 +290,12 @@ const HAT_SHELF = 4.0, HAT_APART = 1.7;
 const CLOTHING_SYMBOL: readonly Prim[] = [
     { shape: 'box', colour: 'trim', dn: PLINTH_N, dy: 3.89, da: 0, across: 0.95, up: 0.22, along: 5.1 },
     // The stands. Ironwork, like every other slender thing in this world.
-    ...([[-HAT_APART, 0.38], [0, 0.62], [HAT_APART, 0.62]] as const).map(([da, up]): Prim => (
+    ...([[-HAT_APART, 0.44], [0, 0.62], [HAT_APART, 0.66]] as const).map(([da, up]): Prim => (
         { shape: 'cyl', colour: EDGE.iron, dn: PLINTH_N, dy: HAT_SHELF + up / 2, da, across: 0.13, up, along: 0.13 }
     )),
     // Sun hat: wide brim, band, shallow dome. The dome's underside is buried in the brim.
     { shape: 'cyl', colour: 'topper', dn: PLINTH_N, dy: 4.45, da: -HAT_APART, across: 1.45, up: 0.14, along: 1.45 },
-    { shape: 'cyl', colour: 'accent', dn: PLINTH_N, dy: 4.58, da: -HAT_APART, across: 1.06, up: 0.12, along: 1.06 },
+    { shape: 'cyl', colour: 'accent', dn: PLINTH_N, dy: 4.57, da: -HAT_APART, across: 1.06, up: 0.18, along: 1.06 },
     { shape: 'ball', colour: 'topper', dn: PLINTH_N, dy: 4.7, da: -HAT_APART, across: 1, up: 0.56, along: 1 },
     // Cap: a band the dome's lower half sits inside, the dome, and a peak dipping out of one side.
     { shape: 'cyl', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.72, da: 0, across: 0.94, up: 0.28, along: 0.94 },
