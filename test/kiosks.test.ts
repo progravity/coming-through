@@ -254,25 +254,29 @@ test('the carts follow a walkway that bends, widens and climbs', () => {
 
 // ---------- the two points ----------
 
-test('the service point faces the walkway and the attendant stands behind the counter', () => {
+test('the service point faces the walkway and the staff stand behind the counter', () => {
     for (const curve of [PATH, VARIED]) {
         for (const k of kiosks(curve)) {
+            // A cart claims the vendor property, so it has to carry the property's data. The two
+            // used to be loose fields that could not be missing and could not be asked for either.
+            const v = k.vendor;
+            assert.ok(v !== undefined, `${k.type} is a vendor with no service or staff spot`);
             const edge = curve.halfWidth(k.s), side = -k.facing;
             const inset = (p: { n: number }): number => edge - Math.abs(p.n);
             // Both are on the cart's own side of the path and inside the railings.
-            assert.equal(Math.sign(k.service.n), side, `${k.type}'s service point crossed the centreline`);
-            assert.equal(Math.sign(k.attendant.n), side, `${k.type}'s attendant point crossed the centreline`);
-            assert.ok(inset(k.attendant) > 0.3, `${k.type}'s attendant is standing in the railings`);
-            assert.ok(inset(k.service) < 2 * edge, `${k.type}'s service point is off the walkway`);
-            // The customer is on the walkway side of the cart, the attendant on the railing side.
-            assert.ok(inset(k.service) > inset(k) + k.solid.r, `${k.type} serves from behind its own counter`);
-            assert.ok(inset(k.attendant) < inset(k) - k.solid.r, `${k.type}'s attendant is out front with the customers`);
+            assert.equal(Math.sign(v.service.n), side, `${k.type}'s service point crossed the centreline`);
+            assert.equal(Math.sign(v.staff.n), side, `${k.type}'s staff point crossed the centreline`);
+            assert.ok(inset(v.staff) > 0.3, `${k.type}'s staff are standing in the railings`);
+            assert.ok(inset(v.service) < 2 * edge, `${k.type}'s service point is off the walkway`);
+            // The customer is on the walkway side of the cart, the staff on the railing side.
+            assert.ok(inset(v.service) > inset(k) + k.solid.r, `${k.type} serves from behind its own counter`);
+            assert.ok(inset(v.staff) < inset(k) - k.solid.r, `${k.type}'s staff are out front with the customers`);
             // Both are derived through the frame, so they sit on the path rather than beside it.
-            const f = curve.frameAt(k.service.s, frame);
-            pathPlace(f, k.service.n, 0, at);
+            const f = curve.frameAt(v.service.s, frame);
+            pathPlace(f, v.service.n, 0, at);
             assert.ok(Math.abs(curve.surfaceY(at.x, at.z) - at.y) < 1e-6, 'the service point is not on the surface');
             // And there is room to stand at either of them: neither is inside the cart.
-            for (const spot of [k.service, k.attendant]) {
+            for (const spot of [v.service, v.staff]) {
                 const d = Math.abs(Math.abs(spot.n) - Math.abs(k.solid.n));
                 assert.ok(d > k.solid.r + 0.3, `${k.type} has no room for a body at one of its points`);
             }

@@ -25,7 +25,7 @@ import type { Cast, Controls, DrawnPart, Inspectable, Readout } from '../inspect
 import { EDGE_OVERLAYS, EdgeExhibit, spotMarker } from './edge.ts';
 
 const POINTS = 'points';
-const SERVICE_C = 0x7ad17a, ATTENDANT_C = 0xd17a9c;
+const SERVICE_C = 0x7ad17a, STAFF_C = 0xd17a9c;
 
 interface Cart { type: KioskType; arch: StructureArchetype; paint: Paint; placed: Placed }
 
@@ -58,7 +58,9 @@ class KioskCast implements Cast {
             const plan: EdgePlan = { standing: placed.standing, bars: [], solids: [placed.solid] };
             const ex = new EdgeExhibit(this.scene, plan, facing);
             const points = new THREE.Group();
-            points.add(spotMarker(placed.service, SERVICE_C), spotMarker(placed.attendant, ATTENDANT_C));
+            if (placed.vendor !== undefined) {
+                points.add(spotMarker(placed.vendor.service, SERVICE_C), spotMarker(placed.vendor.staff, STAFF_C));
+            }
             ex.addOverlay(POINTS, points);
             this.exhibits.push(ex);
             this.carts.push({ type, arch, paint, placed });
@@ -93,6 +95,10 @@ class KioskCast implements Cast {
         const sol = k.placed.solid;
         const n = (v: number, d = 2): string => v.toFixed(d);
         const solid = k.arch.parts.filter(p => p.solid === true).length;
+        const v = k.placed.vendor;
+        const spots: (readonly [string, string])[] = v === undefined ? []
+            : [['service', `s ${n(v.service.s)} · n ${n(v.service.n)}`],
+                ['staff', `s ${n(v.staff.s)} · n ${n(v.staff.n)}`]];
         return {
             title: k.arch.name,
             sub: `${k.type} · ${this.parts(i).length} parts`,
@@ -102,8 +108,7 @@ class KioskCast implements Cast {
                 ['collider', `capsule · half ${n(sol.half)} · r ${n(sol.r)}`],
                 ['from', `${solid} solid part${solid === 1 ? '' : 's'} of ${k.arch.parts.length}`],
                 ['stands at', `s ${n(sol.s)} · n ${n(sol.n)}`],
-                ['service', `s ${n(k.placed.service.s)} · n ${n(k.placed.service.n)}`],
-                ['attendant', `s ${n(k.placed.attendant.s)} · n ${n(k.placed.attendant.n)}`],
+                ...spots,
             ],
             swatches: SLOTS.map(slot => [slot, k.paint[slot]] as const),
             line: `${k.type} · ${n(top)}m`,

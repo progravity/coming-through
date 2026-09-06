@@ -14,6 +14,7 @@ import { join, relative } from 'node:path';
 import { ARCH, ARCH_KEYS } from '../src/archetypes.ts';
 import { PROPERTIES, entityMeta, hasProperty } from '../src/entity.ts';
 import { ENTITIES } from '../src/inspect/registry.ts';
+import { KIOSK_ARCHETYPES, KIOSK_TYPES, kiosks } from '../src/world/kiosks.ts';
 import type { Property } from '../src/entity.ts';
 
 const SRC = new URL('../src/', import.meta.url).pathname;
@@ -113,4 +114,34 @@ test('the archetype keys are what they always were, in the order they always wer
     // name of a taxonomy axis -- is safe precisely because it kept its place.
     assert.deepEqual(ARCH_KEYS, ['tourist', 'dave', 'mary', 'kyle', 'linda', 'johnsons', 'timmy']);
     assert.equal(ARCH.johnsons.name, 'The Johnsons');
+});
+
+test('every cart declares itself an immobile, solid, placed vendor', () => {
+    for (const type of KIOSK_TYPES) {
+        const meta = KIOSK_ARCHETYPES[type].entity;
+        assert.equal(meta.family, 'kiosk', `${type} is not filed as a kiosk`);
+        assert.equal(meta.type, type, `${type} calls itself '${meta.type}'`);
+        assert.equal(meta.placement, 'placed-with-requirements');
+        assert.deepEqual(new Set(meta.properties), new Set(['immobile', 'static-obstacle', 'vendor']));
+    }
+});
+
+test('a vendor is an entity with the vendor property, which has a service spot and a staff spot', () => {
+    // The capability's whole definition, tested as one sentence. It crosses families on purpose:
+    // the carts have it today and a shopfront asks the same question, so it is a property carrying
+    // data rather than a pair of fields that could only ever be a fact about carts.
+    for (const type of KIOSK_TYPES) {
+        const arch = KIOSK_ARCHETYPES[type];
+        assert.ok(hasProperty(arch.entity, 'vendor'), `${type} lost the vendor property`);
+        assert.ok(arch.vendor !== undefined, `${type} claims vendor and carries no spots`);
+        assert.equal(typeof arch.vendor.service.dn, 'number');
+        assert.equal(typeof arch.vendor.staff.dn, 'number');
+    }
+    // And placed, the spots are in path coordinates -- turned with the cart rather than authored
+    // beside it. Where they land is `test/kiosks.test.ts`; that they exist at all is the capability.
+    for (const k of kiosks()) {
+        assert.ok(k.vendor !== undefined, `${k.type} was placed without its vendor spots`);
+        assert.equal(typeof k.vendor.service.s, 'number');
+        assert.equal(typeof k.vendor.staff.n, 'number');
+    }
 });

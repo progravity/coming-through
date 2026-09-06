@@ -24,6 +24,7 @@
  */
 import { fromList } from '../palette.ts';
 import type { Rng } from '../core/rng.ts';
+import type { EntityMeta, PathSpot, Vendor } from '../entity.ts';
 import type { Motion, Shape, Solid, Standing } from './edge.ts';
 
 /**
@@ -73,13 +74,12 @@ export interface Prim {
 }
 
 /**
- * A place beside a structure that later mechanics will want a handle on: where a customer stands to
- * be served, and where an attendant stands to serve them.
+ * A place beside a structure, in the structure's own terms so it turns with it.
  *
- * Given in the structure's own terms so they turn with it. Nothing reads these yet -- there is no
- * visiting, no queueing and no attendant -- and that is the point of capturing them now: they are
- * derived from the placement and the facing rather than being a third list to keep in step with the
- * carts once something does.
+ * Nothing reads these yet -- there is no visiting, no queueing and no staff agent -- and that is the
+ * point of capturing them now: they are derived from the placement and the facing rather than being
+ * a third list to keep in step with the carts once something does. What carries them is the
+ * **vendor capability**; see `Vendor` in `entity.ts`.
  */
 export interface Spot { dn: number; da: number; }
 
@@ -95,9 +95,19 @@ export interface StructureArchetype {
     /** For readouts and test failures; never drawn. */
     name: string;
     parts: readonly Prim[];
-    /** Where a customer would stand, on the walkway side, and an attendant, behind the counter. */
-    service: Spot;
-    attendant: Spot;
+    /** What kind of thing this is, on all four taxonomy axes. See `entity.ts`. */
+    entity: EntityMeta;
+    /**
+     * The `vendor` property's data, present exactly when `entity.properties` has `vendor`: where a
+     * customer stands to be served, and where staff stand to serve them.
+     *
+     * They were two loose fields sitting side by side with nothing to say they belonged together or
+     * what they were for. As one capability they are answerable -- a vendor is an entity with the
+     * vendor property, which has a service spot and a staff spot -- and the answer is the same
+     * shape for a cart and for the shopfront that asks it next, which is why it is a property
+     * carrying data rather than a pair of fields that could only be a fact about carts.
+     */
+    vendor?: { service: Spot; staff: Spot };
     colours: Record<Slot, readonly number[]>;
     /**
      * Slots that must not come out the same colour as one another.
@@ -191,8 +201,8 @@ export interface Site {
     phase?: number;
 }
 
-/** A placed structure: the parts to draw, the footprint to walk round, and the two points. */
-export interface Placed { standing: Standing[]; solid: Solid; service: { s: number; n: number }; attendant: { s: number; n: number }; }
+/** A placed structure: the parts to draw, the footprint to walk round, and any capability data. */
+export interface Placed { standing: Standing[]; solid: Solid; vendor?: Vendor; }
 
 /**
  * Turn one structure's own cross-section into the path's.
@@ -219,11 +229,13 @@ export function placeStructure(arch: StructureArchetype, paint: Paint, at: Site,
         piece,
     }));
     const fp = footprintOf(arch);
-    const spot = (sp: Spot): { s: number; n: number } => ({ s: at.s + f * sp.da, n: at.n + f * sp.dn });
+    const spot = (sp: Spot): PathSpot => ({ s: at.s + f * sp.da, n: at.n + f * sp.dn });
     return {
         standing,
         solid: { piece, s: at.s + f * fp.da, n: at.n + f * fp.dn, half: fp.half, r: fp.r },
-        service: spot(arch.service),
-        attendant: spot(arch.attendant),
+        // Turned through the same facing the parts are, so a cart faced the other way takes both
+        // spots with it rather than serving its customers out of its own back.
+        vendor: arch.vendor === undefined ? undefined
+            : { service: spot(arch.vendor.service), staff: spot(arch.vendor.staff) },
     };
 }

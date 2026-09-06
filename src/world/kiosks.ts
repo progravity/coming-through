@@ -25,6 +25,8 @@
  *   this layer's own, seeded by a constant. Nothing here reads the run seed or three.js.
  */
 import { Rng, hashString } from '../core/rng.ts';
+import { entityMeta } from '../entity.ts';
+import type { Vendor } from '../entity.ts';
 import { EDGE, INK, KIOSK } from '../palette.ts';
 import { clearOf } from './edge.ts';
 import type { EdgePlan, Solid, Standing } from './edge.ts';
@@ -61,8 +63,8 @@ import type { Paint, Prim, Slot, StructureArchetype } from './structure.ts';
  * comfortably over the widest collision circle the crowd produces.
  */
 export const KIOSK_N = 2.3;
-/** How far the serving side and the attendant's side stand from the cart's own centre. */
-const SERVE_OUT = 0.95, ATTEND_BACK = 0.95;
+/** How far the serving side and the staff side stand from the cart's own centre. */
+const SERVE_OUT = 0.95, STAFF_BACK = 0.95;
 
 /** The cart body, its counter, and the along-path length both are measured from. */
 const BODY_W = 0.9, BODY_H = 0.86, BODY_LEN = 1.8, BODY_Y = 0.62;
@@ -101,9 +103,9 @@ const awning = (): Prim[] => [
     { shape: 'cyl', colour: EDGE.iron, dn: 0.44, dy: (DECK + AWN_Y) / 2, da: 0.88, across: 0.05, up: AWN_Y - DECK, along: 0.05 },
 ];
 
-/** Where a customer stands and where an attendant stands, the same on every cart. */
+/** Where a customer stands and where staff stand, the same on every cart. */
 const SERVICE = { dn: SERVE_OUT + BODY_W / 2, da: 0 };
-const ATTENDANT = { dn: -(ATTEND_BACK + BODY_W / 2), da: 0 };
+const STAFF = { dn: -(STAFF_BACK + BODY_W / 2), da: 0 };
 
 /** One archetype, with the parts of a cart already under whatever it is topped by. */
 function kiosk(
@@ -112,7 +114,11 @@ function kiosk(
 ): StructureArchetype {
     return {
         id, name, parts: [...cart(), ...(opt.awning === true ? awning() : []), ...topper],
-        service: SERVICE, attendant: ATTENDANT, colours, distinct: opt.distinct,
+        // Every cart is the same kind of thing: it does not move, you walk into it, and it serves
+        // people. Nothing about its form is in here -- that is what `parts` is.
+        entity: entityMeta('kiosk', id, ['immobile', 'static-obstacle', 'vendor'], 'placed-with-requirements'),
+        vendor: { service: SERVICE, staff: STAFF },
+        colours, distinct: opt.distinct,
     };
 }
 
@@ -381,9 +387,8 @@ export interface Kiosk {
     s: number; n: number; facing: 1 | -1;
     /** Ties the collider to the parts it was derived from. */
     piece: number;
-    /** Where a customer would stand, and where an attendant would. Path coordinates. */
-    service: { s: number; n: number };
-    attendant: { s: number; n: number };
+    /** The vendor capability's spots, in path coordinates. Turned with the cart. */
+    vendor?: Vendor;
     standing: Standing[];
     solid: Solid;
 }
@@ -412,7 +417,7 @@ export function kiosks(curve: PathCurve = PATH, spans: readonly EdgeSpan[] = [..
     return out;
 }
 
-/** The carts as an edge plan: what to draw, and what to walk round. */
+/** The carts as an edge plan: what to draw, what to walk round, and what each of them is. */
 export function kioskPlan(curve: PathCurve = PATH, spans?: readonly EdgeSpan[]): EdgePlan {
     const all = kiosks(curve, spans);
     return { standing: all.flatMap(k => k.standing), bars: [], solids: all.map(k => k.solid) };
