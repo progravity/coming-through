@@ -76,7 +76,15 @@ export const SHELL_OVER = 0.025;
  */
 export const SHELL_FLOOR = 0.7;
 
-/** A look's ink weight folded into a shipped clearance, without letting it invert the shell. */
+/**
+ * A look's ink weight folded into a shipped clearance, without letting it invert the shell.
+ *
+ * **The edge layer's rule, not everyone's.** `kit.ts` grows a piece by a clearance capped at a
+ * fraction of each axis, so flooring the clearance itself is the right place for it there. The
+ * crowd deliberately does not call this: `PartPools.shellGrowth` floors the whole *grown length*
+ * instead, which is what the per-frame sweep it replaced used to do, and flooring both would thin
+ * the line by less than a look asked for. A third surface with shells has to decide which it is.
+ */
 export const inkClearance = (shipped: number, weight: number): number =>
     Math.max(shipped + weight, shipped * SHELL_FLOOR);
 

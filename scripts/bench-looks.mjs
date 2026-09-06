@@ -1,6 +1,6 @@
-// What each rendering treatment costs in the real game: ?stress=1&look=<slug> at a full crowd,
-// swept over all six, printed as a table. This is the half the comparator cannot measure -- fill
-// cost scales with the pixels people cover, and a comparison panel covers almost none.
+// What each look costs in the real game: ?stress=1&look=<slug> at a full crowd, swept over all six,
+// printed as a table. This is the half the comparator cannot measure -- fill cost scales with the
+// pixels people cover, and a comparison panel covers almost none.
 //
 // Usage: npm run dev -- --port 5198 & node scripts/bench-looks.mjs http://localhost:5198 [seconds]
 //        node scripts/bench-looks.mjs http://localhost:5198 30 --gpu
@@ -29,6 +29,9 @@ import { spawn } from 'node:child_process';
 const args = process.argv.slice(2);
 const gpu = args.includes('--gpu');
 const [base = 'http://localhost:5173', secs = gpu ? '20' : '120'] = args.filter(a => !a.startsWith('--'));
+// The one hand-kept copy of the slugs: this is plain node and cannot import the .ts. Keep it in
+// step with `LOOKS` in src/render/look.ts -- a seventh look added there and not here is simply
+// never benched, and nothing complains.
 const LOOKS = ['current', 'toon-bare', 'soft-ink', 'soft', 'soft-thin', 'matcap'];
 
 const CH = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -56,7 +59,7 @@ const send = (method, params = {}, sessionId) => new Promise(r => {
 
 const rows = [];
 for (const look of LOOKS) {
-    // A fresh target per look, so nothing a previous treatment left on the pools can carry over.
+    // A fresh target per look, so nothing a previous look left on the pools can carry over.
     const url = base.replace(/\/$/, '') + `/?stress=1&tier=high&look=${look}`;
     const { result: { targetId } } = await send('Target.createTarget', { url: 'about:blank' });
     const { result: { sessionId } } = await send('Target.attachToTarget', { targetId, flatten: true });

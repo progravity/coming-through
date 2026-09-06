@@ -148,8 +148,12 @@ function toggleDebug(): void { ui.setDebug(debug.toggle()); }
  * and nothing else.
  *
  * Dynamically imported, so a run without the flag never downloads the tool -- and applied after
- * `applyTier`, or a look that turns the ink off would be overruled a line later by the tier's own
- * ink setting.
+ * `applyTier`, so the look has the last word on the ink either way. **That relationship is
+ * bidirectional now that a look reaches every surface**: `toon-bare` takes the line off a `high`
+ * run, and `?tier=low&look=soft-ink` puts it back on, because `soft-ink` asks for the shipped ink
+ * and an absent `inkOn` means shipped rather than "whatever the tier just decided". Judging a look
+ * is the whole point of the flag, so the look winning is the behaviour worth having -- but it does
+ * mean `?look=` is not a way to measure a tier.
  */
 async function applyLook(name: string): Promise<void> {
     const { LOOK_NAMES, lookNamed } = await import('./render/look.ts');

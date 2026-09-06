@@ -61,9 +61,12 @@ export class PartPools {
             const mesh = new THREE.InstancedMesh(geo, makeToonMaterial(toonMap), n);
             const out = new THREE.InstancedMesh(geo, makeInkMaterial(), n);
             mesh.frustumCulled = out.frustumCulled = false;
-            // Tagged so the comparator's treatments can find the character pools by what they are
-            // rather than by being the only instanced meshes in the scene -- the edge layer is
-            // instanced too, and a restyled railing is a bug nothing would report.
+            // Tagged so `compare/treatments.ts` can find the character pools by what they are
+            // rather than by being the only instanced meshes in a scene -- the edge layer is
+            // instanced too. It is a *count* the tag protects, not a style: a panel captions the
+            // crowd's draw calls and instances per person, and picking the world's meshes up with
+            // them would report a number about the wrong thing. Restyling the railings alongside
+            // the crowd is what a look is now for, and `EdgeLayer.dress` does it deliberately.
             mesh.userData.part = out.userData.part = true;
             const white = new THREE.Color(0xffffff);
             for (let i = 0; i < n; i++) { mesh.setMatrixAt(i, ZERO); out.setMatrixAt(i, ZERO); mesh.setColorAt(i, white); }

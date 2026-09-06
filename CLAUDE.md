@@ -636,6 +636,21 @@ to its shipped clearance -- not leave whatever the previous look left behind. Re
 switching looks in the inspector would be a one-way door and `current` would be a no-op instead of
 a working button, which is the bug the difference exists to prevent.
 
+**Ink has one master, and reconciling it is what *choosing* a look does -- nothing else.** A look
+with `inkOn: false` and an `ink` button that says otherwise cannot both be right, so selecting
+`toon-bare` moves the button and you can see why the line went away; selecting `current` moves it
+back, because an absent field means as shipped here too. But the inspector reconciles **only in the
+`look` branch of `patch`**: a rebuild is not a choice and a page load is not one either. Reconciling
+on a rebuild took the ink away from anyone who had pressed `o`, once per `[`; reconciling at
+start-up read `?ink=0`, overruled it with a look that had not changed, and wrote it back out of the
+address bar, so the switch survived neither a reload nor a keypress. What `rebuild` does instead is
+dress and then **re-assert the overlays over the top** -- `cast.dress(look); cast.overlays(...)` --
+which is what makes the button a switch rather than a suggestion. The tool always writes `look` and
+`ink` into the URL together, so only a hand-typed URL can state a look and a contradicting button;
+there the button wins, being the more specific of the two. In the game the equivalent is
+`ui.setInk(pools.inkOn)` after dressing, and there the look wins outright because there is no button
+to defer to -- see `?tier=` below.
+
 **Each layer dresses itself.** `PartPools.dress`, `EdgeLayer.dress`, `Props.dress` and
 `Ground.dress` are four implementations of one call, because only the surface that chose how it
 colours itself can put that choice back correctly -- the crowd knows it multiplies white by
@@ -659,12 +674,19 @@ for `vertexColors`, because its bands are painted per vertex rather than carried
 all. One small interface answering three different relationships to colour is what lets six looks
 meet four surfaces without a twenty-four-cell table.
 
-**Nothing may dispose a material it did not create, because `worldToon` is a cache.** A shared
-`MeshToonMaterial` is handed to every surface that asks for its colour and marked
-`userData.shared`, and every `dress` checks that flag before calling `dispose()` on what it is
-replacing. Skip the check and restyling one cart disposes the material every other cart, every
-shopfront and the wheel of that colour are still drawing through -- the failure a shared cache
-always risks, and the reason the flag exists.
+**Nothing may dispose a material it did not create, and the test for that is identity against the
+one it shipped with.** Every `dress` captures its surface's shipped material when the surface is
+built and disposes only what is not that: `if (had !== shipped) had.dispose()`. Identity rather
+than a flag, because the flag is a fact about `worldToon`'s cache and not about ownership. A
+surface whose shipped material is its own -- the ground's is, and a building's will be -- carries
+no `userData.shared`, so a flag-only check disposes the very material `current` has to put back and
+hands out a dead one on the next dress. The identity check subsumes the cached case, because a
+cached shared material *is* that layer's shipped one.
+
+`userData.shared` stays where it is as the **second** lock, on the two layers that draw through the
+cache. `worldToon` hands one `MeshToonMaterial` to every surface asking for a colour and marks it,
+so disposing the white one takes the material every cart, every railing and every shopfront of that
+colour is still drawing through -- the failure a shared cache always risks, and worth two locks.
 
 ## Entity inspection
 
@@ -794,12 +816,12 @@ against a running dev server (see the note in that file about headless frame rat
 mixes CPU work with software rasterisation; `node scripts/bench-pose.mjs 190` times just the
 per-frame cost of posing a crowd into the instance buffers, with no GL context at all.
 
-`npm run bench:looks -- http://localhost:5198` sweeps all six rendering treatments through
-`?stress=1&look=` at a full crowd and prints them as a table. Read its columns knowing where each
-comes from: `pose` is CPU only and is trustworthy headless, `render` is everything the driver did
-and under SwiftShader is software rasterisation saying nothing about a real GPU. Add `--gpu` to run
-Chrome headed on the real one, which is the only way to get a `render` column worth comparing --
-and the only place the fill cost of toon against PBR against matcap actually shows up.
+`npm run bench:looks -- http://localhost:5198` sweeps all six looks through `?stress=1&look=` at a
+full crowd and prints them as a table. Read its columns knowing where each comes from: `pose` is CPU
+only and is trustworthy headless, `render` is everything the driver did and under SwiftShader is
+software rasterisation saying nothing about a real GPU. Add `--gpu` to run Chrome headed on the real
+one, which is the only way to get a `render` column worth comparing -- and the only place the fill
+cost of toon against PBR against matcap actually shows up.
 
 `?seed=<uint32 or any string>` (strings are hashed), `?stress=1` (pinned seed, full crowd, no input,
 per-frame sim/render milliseconds), `?debug=1` (top-down overlay), `?tier=low|mid|high`,
@@ -823,14 +845,16 @@ print, so the loop is to read a panel and then type what it says. Six still turn
 answer how a direction holds up in motion, at crowd distance, from the game's own camera under the
 game's own lights, and that is the only place it has to hold up. `game.ts` dynamic-imports
 `render/look.ts` and calls `World.dress` then `PartPools.dress`, so a run without the flag
-downloads none of it; it is applied after `applyTier` because a look that turns the ink off would
-otherwise be overruled a line later by the tier's own ink setting. An unknown name warns with the
-real list and plays the shipped look.
+downloads none of it; it is applied after `applyTier`, which gives the look the last word on the ink
+in **both** directions -- `toon-bare` takes the line off a `high` run, and `?tier=low&look=soft-ink`
+puts it back on, because an absent `inkOn` means the shipped ink rather than whatever the tier just
+decided. Judging a look is what the flag is for, so the look winning is right; it does mean `?look=`
+is not a way to measure a tier. An unknown name warns with the real list and plays the shipped look.
 
-Each panel prints what its treatment costs, split three ways because the three are not equally
-knowable. **Structure** is exact rather than measured: draw calls and instance matrices per person,
-which only the ink shells move -- each pool draws its shell as a second `InstancedMesh`, so turning
-them off halves both, 14 calls to 7 and 90 instances to 45. **CPU** is measured on demand, by the
+Each panel prints what its look costs, split three ways because the three are not equally knowable.
+**Structure** is exact rather than measured: draw calls and instance matrices per person, which only
+the ink shells move -- each pool draws its shell as a second `InstancedMesh`, so turning them off
+halves both, 14 calls to 7 and 90 instances to 45. **CPU** is measured on demand, by the
 `cost` button, `B`, or `&cost=1`: it poses a full 190-person crowd and times it, which is fair to
 quote because posing costs the same whether those people land on six pixels or six hundred. Ink is
 worth something like a sixth of it, and the choice of material costs nothing at all -- read the
@@ -848,12 +872,12 @@ card sits over the figure's head, which is where shading reads hardest -- that i
 is for.
 
 Two things in `compare/bench.ts` keep that CPU figure honest, and the test for both is that the
-three treatments doing identical CPU work report the same number. It times through a rig of its
-own rather than through each panel's pools, because the baseline panel draws through
-`RecordingPools`, whose `put` composes a second matrix per part -- benchmarking in place charges
-`Current` for the measuring apparatus and reports the shipped look as the slowest of the six. And
-it runs a throwaway pass before the first measurement, or whichever treatment leads the list
-carries the JIT's first sight of a crowd and reads a few percent high for being first.
+three looks doing identical CPU work report the same number. It times through a rig of its own
+rather than through each panel's pools, because the baseline panel draws through `RecordingPools`,
+whose `put` composes a second matrix per part -- benchmarking in place charges `Current` for the
+measuring apparatus and reports the shipped look as the slowest of the six. And it runs a throwaway
+pass before the first measurement, or whichever look leads the list carries the JIT's first sight of
+a crowd and reads a few percent high for being first.
 
 `src/compare/` is therefore genuinely disposable, on purpose. Nothing outside it depends on
 anything inside it: `main.ts` names the directory only to *open* it, exactly as it opens the
