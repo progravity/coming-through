@@ -136,9 +136,6 @@ function applyTier(t: Tier): void {
 function cycleCamera(): void { ui.setCamera(rig.cycle()); }
 function toggleDebug(): void { ui.setDebug(debug.toggle()); }
 
-/** A treatment's per-frame pass, run between commit() and the render. Null unless `?look=` is on. */
-let lookAfter: (() => void) | null = null;
-
 /**
  * `?look=<name>` plays an ordinary run under one of the comparator's rendering treatments, named
  * by the slug its panel prints (`current`, `toon-bare`, `soft-ink`, `soft`, `soft-thin`, `matcap`).
@@ -147,28 +144,24 @@ let lookAfter: (() => void) | null = null;
  * the game's own camera under the game's own lights -- and that is where it has to hold up. This
  * costs nothing to find out: the treatments already restyle a `PartPools` from outside the render
  * path, so the same surgery runs on the game's single set of pools with no change to `pools.ts`,
- * `materials.ts` or `person.ts`. `poolMeshes` picks the pools out by the tag they carry, so the
- * edge layer's own instanced meshes are left alone.
+ * `materials.ts` or `person.ts`.
  *
  * Dynamically imported, so a run without the flag never downloads the tool -- and applied after
  * `applyTier`, or a treatment that turns the ink off would be overruled a line later by the tier's
  * own ink setting.
  */
 async function applyLook(name: string): Promise<void> {
-    const { LOOK_NAMES, poolMeshes, treatmentNamed } = await import('./compare/treatments.ts');
-    const treatment = treatmentNamed(name);
-    if (treatment === null) {
-        console.warn(`?look=${name} is not a rendering treatment. Try one of: ${LOOK_NAMES.join(', ')}`);
+    const { LOOK_NAMES, lookNamed } = await import('./render/look.ts');
+    const look = lookNamed(name);
+    if (look === null) {
+        console.warn(`?look=${name} is not a rendering look. Try one of: ${LOOK_NAMES.join(', ')}`);
         return;
     }
-    const meshes = poolMeshes(world.scene);
-    treatment.dress(pools, meshes);
-    // dress() may have turned the shells off behind setInk()'s back; the world's line and the
-    // button both have to agree with what is actually drawn, and toggling afterwards works from there.
+    pools.dress(look);
+    // dress() may have turned the shells off; the world's line and the button both have to agree
+    // with what is actually drawn, and toggling afterwards works from there.
     world.setInk(pools.inkOn);
     ui.setInk(pools.inkOn);
-    const after = treatment.after;
-    if (after !== undefined) lookAfter = () => after(meshes);
 }
 
 function finish(): void {
@@ -285,9 +278,6 @@ function frame(now: number): void {
     if (rig.mode === 'first') pools.freeSlot(PLAYER_SLOT);
     else drawPerson(pools, PLAYER_SLOT, p, playerView, t, PATH.surfaceY(playerView.x, playerView.z));
     pools.commit();
-    // Counted inside poseMs on purpose: it edits the same instance buffers the pose just filled,
-    // so a treatment that costs something should say so rather than hide in the gap before the GL.
-    lookAfter?.();
     const poseMs = performance.now() - renderStart;
     world.animate(t);
     renderer.render(world.scene, rig.update(frameDt, playerView));

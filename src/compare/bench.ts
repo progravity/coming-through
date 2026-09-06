@@ -1,23 +1,24 @@
 /**
- * What a rendering treatment costs, measured only where it can be measured honestly.
+ * What a rendering look costs, measured only where it can be measured honestly.
  *
  * A panel is a sixth of the screen with one person on it, and the thing that most separates these
  * six -- how expensive their fragment shader is -- scales with the pixels people cover. Timing a
- * panel's render would therefore rank the treatments by an effect that barely exists at panel
- * size, and rank them confidently, in milliseconds. So this file deliberately does not do it.
- * Two things it can report instead, both of which survive the change of scale:
+ * panel's render would therefore rank the looks by an effect that barely exists at panel size,
+ * and rank them confidently, in milliseconds. So this file deliberately does not do it. Two things
+ * it can report instead, both of which survive the change of scale:
  *
  * - **Structure**, which is exact rather than measured. Each pool draws its ink shell as a second
- *   `InstancedMesh`, so a treatment that turns the shells off halves both the draw calls a crowd
- *   costs and the instance matrices a person writes. Nothing else here moves those numbers.
+ *   `InstancedMesh`, so a look that turns the shells off halves both the draw calls a crowd costs
+ *   and the instance matrices a person writes. Nothing else here moves those numbers.
  * - **CPU**, which is screen-independent. Posing a crowd into the instance buffers takes the same
  *   time whether those people land on six pixels or six hundred, so the figure measured on this
- *   stage is the one the game pays. It is `scripts/bench-pose.mjs` with a panel's ink state and
- *   post-pass in place.
+ *   stage is the one the game pays. It is `scripts/bench-pose.mjs` with a panel's ink state dressed
+ *   on first.
  *
  * That second one is measured through a rig of its own rather than through each panel's pools,
  * which matters more than it sounds. Only two things move the CPU cost -- whether the ink shells
- * are written, and whether the treatment adds a per-frame pass -- and materials move it not at
+ * are written, and whether a look thins them, which is a different constant inside the per-part
+ * growth `put()` already computes rather than a pass of its own -- and materials move it not at
  * all, so one rig can run all six under conditions that are identical by construction. Panel
  * pools cannot: the baseline panel draws through `RecordingPools`, whose `put` composes a second
  * matrix per part for the gizmos, so benchmarking in place would have charged `Current` for the
@@ -29,10 +30,10 @@
 import * as THREE from 'three';
 import { archetypeForSeed, Subject } from '../inspect/subject.ts';
 import type { Overrides } from '../inspect/subject.ts';
+import type { Look } from '../render/look.ts';
 import { drawPerson } from '../render/person.ts';
 import { PER, PartPools } from '../render/pools.ts';
-import { poolMeshes } from './treatments.ts';
-import type { LiveTreatment, PoolMeshes } from './treatments.ts';
+import type { PoolMeshes } from './treatments.ts';
 import { MAX_CROWD } from '../sim/simulation.ts';
 
 /** Instance matrices one person's parts occupy, before the ink shell doubles them. */
@@ -91,38 +92,31 @@ function benchCrowd(seed: number): Subject[] {
 }
 
 /**
- * The pools every treatment is timed through: off-screen, never rendered, never dressed. Built
- * once on the first measurement and kept, because allocating a pool set is itself slow enough to
- * land in whichever panel happened to be measured first.
+ * The pools every look is timed through: off-screen and never rendered. Built once on the first
+ * measurement and kept, because allocating a pool set is itself slow enough to land in whichever
+ * panel happened to be measured first.
  */
-let rig: { pools: PartPools; meshes: PoolMeshes } | null = null;
+let rig: PartPools | null = null;
 
-function benchRig(): { pools: PartPools; meshes: PoolMeshes } {
-    if (rig === null) {
-        const scene = new THREE.Scene();
-        const pools = new PartPools(scene);
-        rig = { pools, meshes: poolMeshes(scene) };
-    }
+function benchRig(): PartPools {
+    if (rig === null) rig = new PartPools(new THREE.Scene());
     return rig;
 }
 
 /**
- * Mean milliseconds to pose a full crowd with this treatment's per-frame work in place.
+ * Mean milliseconds to pose a full crowd with this look dressed on.
  *
- * `inkOn` is read off the panel rather than inferred from the treatment, so what is timed is what
- * that panel is really doing. The clock advances so nothing measures one frame repeated, and the
- * mean is reported rather than the best: best-of reads lower and steadier, but the number worth
- * trading against how a panel looks is what a frame actually costs, not what it costs on its
- * luckiest run.
+ * The clock advances so nothing measures one frame repeated, and the mean is reported rather than
+ * the best: best-of reads lower and steadier, but the number worth trading against how a panel
+ * looks is what a frame actually costs, not what it costs on its luckiest run.
  */
-function pass(pools: PartPools, meshes: PoolMeshes, treatment: LiveTreatment, crowd: Subject[], frames: number): number {
+function pass(pools: PartPools, crowd: Subject[], frames: number): number {
     let total = 0;
     for (let f = 0; f < frames; f++) {
         const t = f * 0.016;
         const t0 = performance.now();
         for (let i = 0; i < crowd.length; i++) drawPerson(pools, i, crowd[i], crowd[i], t);
         pools.commit();
-        treatment.after?.(meshes);
         total += performance.now() - t0;
     }
     return total;
@@ -131,19 +125,25 @@ function pass(pools: PartPools, meshes: PoolMeshes, treatment: LiveTreatment, cr
 /** Whether anything has posed a crowd through the rig yet. See the warm-up note below. */
 let primed = false;
 
-export function measureCpuMs(treatment: LiveTreatment, inkOn: boolean, seed: number): number {
-    const { pools, meshes } = benchRig();
+/**
+ * `inkOn` is read off the panel rather than off the look, so what is timed is what that panel is
+ * really doing. `dress()` still has to run first: since Task 2 folded a look's ink weight into the
+ * per-part growth `put()` already computes, a thinned line is no longer a separate pass to skip
+ * timing -- it is a different constant inside the hot path, and only `dress()` sets it.
+ */
+export function measureCpuMs(look: Look, inkOn: boolean, seed: number): number {
+    const pools = benchRig();
     const crowd = benchCrowd(seed);
+    pools.dress(look);
     pools.setInk(inkOn);
-    // Two warm-ups, and the extra one is not belt and braces. Each treatment needs its own frames
-    // to settle, but the *first* treatment measured also carries the JIT's first sight of posing a
-    // crowd at all, and reads a few percent high for no reason except being first in the list.
-    // Charging that to whichever panel happens to lead would make three treatments that do
-    // identical CPU work report three different numbers, which is exactly the lie this file exists
-    // to avoid.
-    if (!primed) { pass(pools, meshes, treatment, crowd, WARMUP); primed = true; }
-    pass(pools, meshes, treatment, crowd, WARMUP);
-    const total = pass(pools, meshes, treatment, crowd, FRAMES);
+    // Two warm-ups, and the extra one is not belt and braces. Each look needs its own frames to
+    // settle, but the *first* look measured also carries the JIT's first sight of posing a crowd at
+    // all, and reads a few percent high for no reason except being first in the list. Charging that
+    // to whichever panel happens to lead would make three looks that do identical CPU work report
+    // three different numbers, which is exactly the lie this file exists to avoid.
+    if (!primed) { pass(pools, crowd, WARMUP); primed = true; }
+    pass(pools, crowd, WARMUP);
+    const total = pass(pools, crowd, FRAMES);
     pools.freeAll();
     return total / FRAMES;
 }

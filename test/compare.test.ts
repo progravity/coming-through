@@ -1,26 +1,17 @@
 /**
- * Guards the two things the rendering treatments publish outside their own directory: the `?look=`
- * names the game resolves a treatment by, and the cost figures the comparator prints beside them.
+ * Guards the cost figures the comparator prints beside each panel.
  *
- * Neither fails loudly on its own. A duplicate slug throws nothing -- `treatmentNamed` returns the
- * first match, so one panel would quietly become unreachable while its printed name went on
- * looking like an instruction. And the structural line is the one number on a card that is claimed
- * as exact rather than measured, so it is worth pinning to the behaviour it describes.
+ * The structural line is the one number on a card that is claimed as exact rather than measured,
+ * so it is worth pinning to the behaviour it describes. The `?look=` names and the looks themselves
+ * are guarded in `test/look.test.ts` now -- they are data in `src/render/look.ts`, not surgery in
+ * this directory.
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
 import { structureOf } from '../src/compare/bench.ts';
-import { LIVE_TREATMENTS, LOOK_NAMES, poolMeshes, treatmentNamed } from '../src/compare/treatments.ts';
+import { poolMeshes } from '../src/compare/treatments.ts';
 import { PartPools } from '../src/render/pools.ts';
-
-test('every ?look= name is unique and resolves to its own treatment', () => {
-    assert.equal(new Set(LOOK_NAMES).size, LIVE_TREATMENTS.length, 'two treatments share a ?look= name');
-    for (const t of LIVE_TREATMENTS) {
-        assert.equal(treatmentNamed(t.slug), t, `?look=${t.slug} resolves to the wrong treatment`);
-    }
-    assert.equal(treatmentNamed('no-such-look'), null, 'an unknown name has to be refused, not guessed at');
-});
 
 test('the ink shells are half of what a person costs to draw', () => {
     const scene = new THREE.Scene();

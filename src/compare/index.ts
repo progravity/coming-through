@@ -4,19 +4,20 @@
  *
  * Six panels on one canvas, each rendering the *same* seeded people at the same size from the same
  * camera, so the only thing left for the eye to explain is the shading. Every one of them runs the
- * game's own `drawPerson` over the game's own `PartPools` and differs only in the materials swapped
- * onto those pools from outside (see treatments.ts), which is what makes the comparison mean
- * anything: no panel is a redrawing of a person, only a reshading of the same one.
+ * game's own `drawPerson` over the game's own `PartPools`, dressed in one of the six `Look`s from
+ * `../render/look.ts`, which is what makes the comparison mean anything: no panel is a redrawing
+ * of a person, only a reshading of the same one.
  *
  * This file is deliberately wasteful -- six scenes, six part pools, no shared draw calls -- and
  * none of that matters here; being able to judge the directions side by side does. It is also
- * where a treatment's name is published: every caption prints the `?look=` slug that plays a real
+ * where a look's name is published: every caption prints the `?look=` slug that plays a real
  * run under that panel, so the loop is to read a panel and then type what it says.
  *
- * `treatments.ts` is imported by the game for exactly that reason; nothing else in this directory
- * is, and `main.ts` only reaches this file through a dynamic import behind the flag. It reads no
- * `spawn` or `behavior` draws and never builds a `Simulation` -- `Subject` is the turntable's,
- * which already guarantees that -- so neither determinism hash can move.
+ * The looks themselves live in `../render/look.ts`, alongside the game that plays under one and the
+ * inspector that will switch between them; nothing in this directory is imported outside it, and
+ * `main.ts` only reaches this file through a dynamic import behind the flag. It reads no `spawn`
+ * or `behavior` draws and never builds a `Simulation` -- `Subject` is the turntable's, which
+ * already guarantees that -- so neither determinism hash can move.
  */
 import * as THREE from 'three';
 import { parseSeed, randomSeed } from '../core/rng.ts';
@@ -24,14 +25,16 @@ import { MAX_CATCHUP_STEPS, SIM_DT } from '../core/time.ts';
 import { RecordingPools, measure, newBounds } from '../inspect/gizmos.ts';
 import { ARCH_OPTIONS, Subject, archetypeForSeed } from '../inspect/subject.ts';
 import type { ArchOverride, Overrides } from '../inspect/subject.ts';
+import { LOOKS } from '../render/look.ts';
+import type { Look } from '../render/look.ts';
 import { drawPerson } from '../render/person.ts';
 import { PartPools } from '../render/pools.ts';
 import { BENCH_CROWD, measureCpuMs, structureOf } from './bench.ts';
 import { PanelStage } from './stage.ts';
 import { ROW_COUNT, readState, writeState } from './state.ts';
 import type { CompareState } from './state.ts';
-import { LIVE_TREATMENTS, poolMeshes } from './treatments.ts';
-import type { LiveTreatment, PoolMeshes } from './treatments.ts';
+import { poolMeshes } from './treatments.ts';
+import type { PoolMeshes } from './treatments.ts';
 
 const TAU = Math.PI * 2;
 /** Turntable rate in radians per second, the turntable's own. */
@@ -50,7 +53,7 @@ interface Panel {
     /** Every panel draws through the game's pools every frame; only the materials differ. */
     pools: PartPools;
     meshes: PoolMeshes;
-    treatment: LiveTreatment;
+    look: Look;
     /** The caption card over the panel. */
     caption: HTMLElement;
     /** The measured-CPU line on that card, empty until the bench has been run. */
@@ -124,18 +127,18 @@ export function startCompare(mode: string): void {
         }
     };
 
-    const makeCaption = (t: LiveTreatment, meshes: PoolMeshes): { cap: HTMLElement; cpuLine: HTMLElement } => {
+    const makeCaption = (look: Look, meshes: PoolMeshes): { cap: HTMLElement; cpuLine: HTMLElement } => {
         const cap = document.createElement('div');
         cap.className = 'cap';
         const b = document.createElement('b');
-        b.textContent = t.name;
+        b.textContent = look.name;
         const note = line('');
-        note.textContent = t.note;
+        note.textContent = look.note;
         // The one thing on the card that is an instruction rather than a description, so it is the
         // one thing picked out in colour.
         const key = line('');
         const em = document.createElement('em');
-        em.textContent = `?look=${t.slug}`;
+        em.textContent = `?look=${look.slug}`;
         key.appendChild(em);
 
         // Structure is exact and never changes, so it is printed once and left alone. The shader
@@ -143,7 +146,7 @@ export function startCompare(mode: string): void {
         // no number here can answer.
         const st = structureOf(meshes);
         const cost = line('cost');
-        num(cost, [st.calls, ' calls · ', st.instances, ' inst/person · ', t.fill]);
+        num(cost, [st.calls, ' calls · ', st.instances, ' inst/person · ', look.fill]);
 
         // Second `.cost` in a row, so the stylesheet drops the rule that divides cost from copy.
         const cpuLine = line('cost');
@@ -162,15 +165,15 @@ export function startCompare(mode: string): void {
     const baseStage = new PanelStage();
     const recorder = new RecordingPools(baseStage.scene);
 
-    for (let i = 0; i < LIVE_TREATMENTS.length; i++) {
-        const treatment = LIVE_TREATMENTS[i];
+    for (let i = 0; i < LOOKS.length; i++) {
+        const look = LOOKS[i];
         const stage = i === 0 ? baseStage : new PanelStage();
         const pools = i === 0 ? recorder : new PartPools(stage.scene);
         const meshes = poolMeshes(stage.scene);
-        treatment.dress(pools, meshes);
-        const { cap, cpuLine } = makeCaption(treatment, meshes);
+        pools.dress(look);
+        const { cap, cpuLine } = makeCaption(look, meshes);
         cap.onclick = () => patch({ collapsed: !state.collapsed });
-        panels.push({ stage, pools, meshes, treatment, caption: cap, cpuLine, x: 0, y: 0, w: 1, h: 1, cellTop: 0 });
+        panels.push({ stage, pools, meshes, look, caption: cap, cpuLine, x: 0, y: 0, w: 1, h: 1, cellTop: 0 });
     }
 
     // ---------- measured cost ----------
@@ -192,7 +195,7 @@ export function startCompare(mode: string): void {
         placeCaptions();
         requestAnimationFrame(() => requestAnimationFrame(() => {
             for (const p of panels) {
-                const ms = measureCpuMs(p.treatment, p.pools.inkOn, state.seed);
+                const ms = measureCpuMs(p.look, p.pools.inkOn, state.seed);
                 num(p.cpuLine, ['CPU ', ms.toFixed(2), ' ms · ', BENCH_CROWD, ' people']);
             }
             placeCaptions();
@@ -503,7 +506,6 @@ export function startCompare(mode: string): void {
             if (p.pools === recorder) recorder.beginRecord();
             for (let i = 0; i < subjects.length; i++) drawPerson(p.pools, i, subjects[i], subjects[i], clock);
             p.pools.commit();
-            p.treatment.after?.(p.meshes);
         }
 
         // Each panel clears only its own scissor box, so the gutter between them has to be painted

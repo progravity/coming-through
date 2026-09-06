@@ -8,7 +8,9 @@
  * replaces.
  */
 import assert from 'node:assert/strict';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { test } from 'node:test';
+import { join } from 'node:path';
 import * as THREE from 'three';
 import { LOOKS, LOOK_NAMES, SHELL_FLOOR, SHELL_OVER, inkClearance, lookNamed } from '../src/render/look.ts';
 import { PartPools } from '../src/render/pools.ts';
@@ -123,4 +125,36 @@ test('a look that turns the ink off is visible in inkOn, so the world and the UI
     assert.equal(pools.inkOn, false);
     pools.dress(lookNamed('current'));
     assert.equal(pools.inkOn, true, 'current did not bring the ink back');
+});
+
+/** Every `.ts` file under `src/`, recursively. */
+function sources(dir: string, out: string[] = []): string[] {
+    for (const name of readdirSync(dir)) {
+        const full = join(dir, name);
+        if (statSync(full).isDirectory()) sources(full, out);
+        else if (name.endsWith('.ts')) out.push(full);
+    }
+    return out;
+}
+
+test('nothing outside the comparator depends on the comparator', () => {
+    // A dev tool should be reachable, not load-bearing. The one dependency there was -- the game
+    // reaching in for the treatments -- is what moving them was for, and a dependency nobody is
+    // watching grows back the first time someone finds a useful helper in there.
+    const root = new URL('../src/', import.meta.url).pathname;
+    let checked = 0;
+    for (const file of sources(root)) {
+        const rel = file.slice(root.length);
+        if (rel.startsWith('compare/')) continue;
+        const src = readFileSync(file, 'utf8');
+        const reaches = [...src.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)]
+            .map(m => m[1])
+            .filter(spec => spec.includes('compare/'));
+        // main.ts names it to *open* it -- the same line that opens the inspector. That is the
+        // entry point being an entry point, not a feature depending on the tool's contents.
+        const allowed = rel === 'main.ts' ? ['./compare/index.ts'] : [];
+        assert.deepEqual(reaches, allowed, `${rel} reaches into the comparator: ${reaches.join(', ')}`);
+        checked++;
+    }
+    assert.ok(checked > 20, `only scanned ${checked} files under src/`);
 });
