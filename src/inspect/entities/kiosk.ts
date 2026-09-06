@@ -34,8 +34,6 @@ class KioskCast implements Cast {
     private exhibits: EdgeExhibit[] = [];
     private carts: Cart[] = [];
     private active: ReadonlySet<string> = new Set();
-    /** Held so a rebuild -- disposing and remaking every exhibit -- can re-dress the new ones. */
-    private look: Look | null = null;
 
     // Not a parameter property: `erasableSyntaxOnly` is on, so those are a compile error here.
     constructor(scene: THREE.Scene) { this.scene = scene; }
@@ -66,9 +64,9 @@ class KioskCast implements Cast {
             this.carts.push({ type, arch, paint, placed });
         }
         this.apply();
-        // Freshly built exhibits wear the shipped look until told otherwise; a look already chosen
-        // must not be silently lost the moment the seed or the cart type steps.
-        if (this.look !== null) for (const e of this.exhibits) e.dress(this.look);
+        // No re-dressing here: the shell dresses the whole cast on the line after this returns, so
+        // a look kept a second time would only be a look applied twice -- which under a look with a
+        // body means one material built and thrown away per batch, on every keypress that rebuilds.
     }
 
     /** Nothing on a cart moves under its own steam; the bobbing and the spinning are `draw`'s. */
@@ -87,7 +85,6 @@ class KioskCast implements Cast {
     }
 
     dress(look: Look | null): void {
-        this.look = look;
         for (const e of this.exhibits) e.dress(look);
     }
 

@@ -90,17 +90,42 @@ export function startInspector(mode: string): void {
         tops.length = 0;
         for (let i = 0; i < n; i++) tops.push(0);
         needsReadout = true;
-        // The exhibits are new, so whatever look was on has to be put back on them.
+        // The exhibits are new, so whatever look was on has to be put back on them -- and whatever
+        // the overlay buttons say has to be put back over the top of that.
         dressAll();
     }
 
-    /** Put the current look on everything the stage is holding. Called on a change and after a rebuild. */
+    /**
+     * Put the current look on everything the stage is holding, then let the overlays have the last
+     * word. Called on a look change and after a rebuild.
+     *
+     * The second half is the load-bearing one. `dress` sets every surface's ink to what the look
+     * asks for, and **an absent `inkOn` asks for the shipped line** -- so a dress alone turns the
+     * ink back on under `current`, which is the shipped look and four of the six. Re-asserting the
+     * overlays over the top is what makes the `ink` button a switch rather than a suggestion: it
+     * survives a rebuild, and it survives a look with no opinion about the line.
+     */
     function dressAll(): void {
         cast.dress(lookNamed(state.look));
-        // A look that turns the ink off and an ink overlay that says it is on cannot both be right.
-        // The look wins and the button moves, so you can see why the line went away.
-        const wantsInk = lookNamed(state.look)?.inkOn ?? true;
-        if (wantsInk !== state.overlays.has(INK)) toggleOverlay(INK);
+        cast.overlays(state.overlays);
+    }
+
+    /**
+     * Move the `ink` button to match the look just chosen, so the two cannot disagree.
+     *
+     * A look that turns the line off and a button that says it is on cannot both be right: the look
+     * wins and the button moves, which is how you see why the line went away. An absent `inkOn`
+     * means the shipped line, so `current` brings the button back on -- that is the same
+     * "absent means as shipped" rule every surface dresses by, applied to the switch.
+     *
+     * **Choosing a look is the only thing that may do this.** A rebuild is not a choice, and a
+     * start-up is not one either: the URL states the look and the button separately, and the
+     * button is the more specific of the two. Reconciling there is what used to strip `?ink=0` out
+     * of a reloaded address bar and put the line back after every `[`.
+     */
+    function syncInk(): void {
+        const wants = lookNamed(state.look)?.inkOn ?? true;
+        if (wants !== state.overlays.has(INK)) toggleOverlay(INK);
     }
 
     /** Apply a change, rebuilding the cast only when it must. */
@@ -120,7 +145,10 @@ export function startInspector(mode: string): void {
             gizmos.setVisible(state.overlays.has(GIZMOS));
             cast.overlays(state.overlays);
         }
-        if (p.look !== undefined) { state.look = p.look; dressAll(); }
+        // Reconciling the button belongs here rather than in `dressAll`, which a rebuild also calls:
+        // a rebuild is not a look change, and treating it as one is what took the ink away from
+        // anyone who had switched it off by hand.
+        if (p.look !== undefined) { state.look = p.look; syncInk(); dressAll(); }
         panel.sync(state);
         if (must) { rebuild(); reframe(); }
         // Once per change, never per frame: a held arrow key or a slider drag reaches here many
@@ -287,7 +315,11 @@ export function startInspector(mode: string): void {
     // ---------- start ----------
     gizmos.setVisible(state.overlays.has(GIZMOS));
     cast.overlays(state.overlays);
-    dressAll();
+    // No dressing here: `rebuild` does it, along with re-asserting these overlays over the top. The
+    // URL's `look` and its `ink` are two statements of equal standing and the button is the more
+    // specific, so a URL that says both is honoured as written -- which is what makes `?ink=0`
+    // reload as `?ink=0`. The tool always writes both together, so the pair can only disagree in a
+    // hand-typed URL, where the button is the reading that survives.
     stage.setView(state.view);
     panel.sync(state);
     rebuild();

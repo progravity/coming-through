@@ -42,8 +42,6 @@ class FurnitureCast implements Cast {
     private kinds: Kind[] = [];
     private plans: EdgePlan[] = [];
     private active: ReadonlySet<string> = new Set();
-    /** Held so a rebuild -- disposing and remaking every exhibit -- can re-dress the new ones. */
-    private look: Look | null = null;
 
     constructor(scene: THREE.Scene) { this.scene = scene; }
 
@@ -62,9 +60,9 @@ class FurnitureCast implements Cast {
             this.plans.push(plan);
         }
         this.apply();
-        // Freshly built exhibits wear the shipped look until told otherwise; a look already chosen
-        // must not be silently lost the moment the seed or the kind steps.
-        if (this.look !== null) for (const e of this.exhibits) e.dress(this.look);
+        // No re-dressing here: the shell dresses the whole cast on the line after this returns, so
+        // a look kept a second time would only be a look applied twice -- which under a look with a
+        // body means one material built and thrown away per batch, on every keypress that rebuilds.
     }
 
     step(): void {}
@@ -82,7 +80,6 @@ class FurnitureCast implements Cast {
     }
 
     dress(look: Look | null): void {
-        this.look = look;
         for (const e of this.exhibits) e.dress(look);
     }
 

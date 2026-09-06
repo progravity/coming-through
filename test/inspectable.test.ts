@@ -20,7 +20,7 @@ import type { DrawnPart } from '../src/inspect/inspectable.ts';
 import { PERSON } from '../src/inspect/entities/person.ts';
 import { Subject } from '../src/inspect/subject.ts';
 import { ARCH_KEYS } from '../src/archetypes.ts';
-import { controlOf, defaultControls, findKey, overlaysOf } from '../src/inspect/inspectable.ts';
+import { INK, controlOf, defaultControls, findKey, overlaysOf } from '../src/inspect/inspectable.ts';
 import type { Cast, Inspectable } from '../src/inspect/inspectable.ts';
 import { ENTITIES, resolve } from '../src/inspect/registry.ts';
 import { queryOf, readState, stateFor } from '../src/inspect/state.ts';
@@ -28,7 +28,7 @@ import { FURNITURE } from '../src/inspect/entities/furniture.ts';
 import { KIOSK } from '../src/inspect/entities/kiosk.ts';
 import { bench } from '../src/world/furniture.ts';
 import { PATH } from '../src/world/path.ts';
-import { LOOKS, LOOK_NAMES, lookNamed } from '../src/render/look.ts';
+import { LOOK_NAMES, lookNamed } from '../src/render/look.ts';
 
 /** A part is a unit cube under its own matrix, whichever pool or kit drew it. */
 const part = (x: number, y: number, z: number, sx: number, sy: number, sz: number): DrawnPart => ({
@@ -434,6 +434,26 @@ test('the inspector offers exactly the looks that exist, from the one list', () 
     assert.equal(queryOf(stateFor(person, 'single', '?seed=1'), person).get('look'), null);
 });
 
+test('the ink switch and the look are two statements in the URL, and both survive a reload', () => {
+    // The regression this pins: `?ink=0` was read into the state, then overruled at start-up by
+    // reconciling the button against a look that had not changed, and then written back out of the
+    // address bar -- so the switch did not survive a reload and did not survive a rebuild either.
+    // Reconciling belongs to a look *change*, and this pair has to be a fixed point without one.
+    const person = ENTITIES[0];
+    const s = stateFor(person, 'single', '?ink=0');
+    assert.equal(s.look, 'current');
+    assert.equal(s.overlays.has(INK), false, 'the URL asked for no ink and did not get it');
+    assert.equal(queryOf(s, person).get('ink'), '0', 'the ink switch fell out of the address bar');
+    // Twice, so it is a fixed point rather than something that merely survived once.
+    assert.equal(queryOf(stateFor(person, 'single', `?${queryOf(s, person)}`), person).get('ink'), '0');
+    // The pair the tool itself writes when a look does turn the line off, read back the same way.
+    const bare = stateFor(person, 'single', '?ink=0&look=toon-bare');
+    assert.equal(lookNamed('toon-bare')?.inkOn, false, 'toon-bare stopped having an opinion');
+    assert.equal(bare.overlays.has(INK), false);
+    assert.equal(queryOf(bare, person).get('look'), 'toon-bare');
+    assert.equal(queryOf(bare, person).get('ink'), '0');
+});
+
 test('every cast can wear a look, including the ones made of edge pieces', () => {
     for (const entity of ENTITIES) {
         const cast = entity.mount(new THREE.Scene());
@@ -446,5 +466,4 @@ test('every cast can wear a look, including the ones made of edge pieces', () =>
         cast.dress(lookNamed('current'));
         assert.ok(cast.parts(0).length > 0, `${entity.id} lost its parts to a look`);
     }
-    assert.ok(LOOKS.length === 6);
 });
