@@ -233,22 +233,30 @@ const TOY_SYMBOL: readonly Prim[] = [
  *
  * A row rather than one object, and that is the point of it -- what says *clothes shop* is a
  * display, and three of a thing is the smallest number that reads as one. The staggering does the
- * rest of the work: the three tops climb 4.98, 5.28, 6.04, so no hat's outline is swallowed by its
+ * rest of the work: the three tops climb 4.98, 5.26, 6.04, so no hat's outline is swallowed by its
  * neighbour's and the group has a shape of its own rather than being a flat band.
  *
  * The three are chosen to differ in *outline* and not merely in trim, since colour is the first
  * thing distance takes away:
  *
  * - **A sun hat** is a wide flat disc with a shallow dome on it -- much wider than it is tall.
- * - **A cap** is a dome on a flat rim, with a peak out of one side of it. Two things make it a cap
- *   rather than a ball on a stick. The rim is a disc *wider than the dome at every height it
- *   covers*, so the dome's underside is swallowed by it and the silhouette ends in a hard
- *   horizontal line -- a ball left to close over on its own reads as a sphere however squashed it
- *   is, because a curve that returns to a point has no bottom edge to see. And the peak points
- *   **along the path rather than at the walkway**: aimed at the viewer it is a disc seen end-on, so
- *   the cap read as a beanie from the only angle anybody sees it from. Sideways it is a profile,
- *   and a profile is what a cap is recognised by -- which is how the other two are read here too.
- *   The peak sits at the rim's own height, so the two merge into one continuous brim.
+ * - **A cap** is a hemisphere on a short straight band, with a peak out of **one side only**. Three
+ *   things had to be true before it read as one, and each was found by getting one of them wrong.
+ *
+ *   The crown needs a *flat bottom*: a ball left to close over on its own is a sphere however much
+ *   it is squashed, because a curve returning to a point gives the eye no bottom edge to see. So
+ *   the band is as tall as the dome's lower half and swallows it exactly, and what shows is a
+ *   straight wall ending in a hard horizontal line.
+ *
+ *   But the band must **not stick out past the crown**, which is the correction after that one. A
+ *   disc wider than the dome is a brim, and a brim all the way round is a bowler -- the one thing a
+ *   cap is defined by *not* having. So the band clears the dome by 30 mm, which is enough to stop
+ *   the two surfaces interpenetrating at the seam and far too little to read as a brim, and the
+ *   peak is then the only thing on the whole hat that protrudes.
+ *
+ *   And the peak points **along the path rather than at the walkway**: aimed at the viewer it is a
+ *   disc seen end-on, so the cap read as a beanie from the only angle anybody sees it from. It
+ *   comes off the bottom of the band and dips a little, which is what stops it reading as a shelf.
  * - **A top hat** is a tall cylinder on a narrow brim, and it is the tallest thing on the shelf.
  *
  * **Only the sun hat's colour rolls.** The top hat is `SHOP.felt` -- a top hat is black, and a roll
@@ -262,17 +270,17 @@ const HAT_SHELF = 4.0, HAT_APART = 1.7;
 const CLOTHING_SYMBOL: readonly Prim[] = [
     { shape: 'box', colour: 'trim', dn: PLINTH_N, dy: 3.89, da: 0, across: 0.95, up: 0.22, along: 5.1 },
     // The stands. Ironwork, like every other slender thing in this world.
-    ...([[-HAT_APART, 0.38], [0, 0.68], [HAT_APART, 0.62]] as const).map(([da, up]): Prim => (
+    ...([[-HAT_APART, 0.38], [0, 0.62], [HAT_APART, 0.62]] as const).map(([da, up]): Prim => (
         { shape: 'cyl', colour: EDGE.iron, dn: PLINTH_N, dy: HAT_SHELF + up / 2, da, across: 0.13, up, along: 0.13 }
     )),
     // Sun hat: wide brim, band, shallow dome. The dome's underside is buried in the brim.
     { shape: 'cyl', colour: 'topper', dn: PLINTH_N, dy: 4.45, da: -HAT_APART, across: 1.45, up: 0.14, along: 1.45 },
     { shape: 'cyl', colour: 'accent', dn: PLINTH_N, dy: 4.58, da: -HAT_APART, across: 1.06, up: 0.12, along: 1.06 },
     { shape: 'ball', colour: 'topper', dn: PLINTH_N, dy: 4.7, da: -HAT_APART, across: 1, up: 0.56, along: 1 },
-    // Cap: a flat rim, a dome sitting down inside it, and a peak out of one side at the rim's height.
-    { shape: 'cyl', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.72, da: 0, across: 1.18, up: 0.16, along: 1.18 },
-    { shape: 'ball', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.97, da: 0, across: 1.02, up: 0.62, along: 1.02 },
-    { shape: 'cyl', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.72, da: -0.42, across: 0.86, up: 0.13, along: 0.86 },
+    // Cap: a band the dome's lower half sits inside, the dome, and a peak dipping out of one side.
+    { shape: 'cyl', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.75, da: 0, across: 1.08, up: 0.34, along: 1.08 },
+    { shape: 'ball', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.92, da: 0, across: 1.02, up: 0.68, along: 1.02 },
+    { shape: 'cyl', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.66, da: -0.44, across: 0.88, up: 0.12, along: 0.88, tilt: -0.16 },
     // Top hat: narrow brim, band, tall crown standing on the shelf's high end.
     { shape: 'cyl', colour: SHOP.felt, dn: PLINTH_N, dy: 4.69, da: HAT_APART, across: 1.35, up: 0.15, along: 1.35 },
     { shape: 'cyl', colour: 'accent', dn: PLINTH_N, dy: 4.93, da: HAT_APART, across: 0.95, up: 0.2, along: 0.95 },

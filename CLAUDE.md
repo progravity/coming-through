@@ -695,14 +695,18 @@ were found on the turntable and are worth keeping:
 - **A stack must overlap.** Toy blocks with gaps between them and a tilted cap read as a tower
   falling over. They overlap by a third and lean only slightly, about the tangent.
 - **A group of things has to be staggered, and it has to be read in profile.** The three hats climb
-  4.98, 5.28 and 6.04, so no outline is swallowed by its neighbour's. The cap's peak points *along
+  4.98, 5.26 and 6.04, so no outline is swallowed by its neighbour's. The cap's peak points *along
   the path* rather than at the walkway: aimed at the viewer it is a disc seen end-on, and the cap
   read as a beanie from the only angle anybody sees it from.
-- **A ball has no bottom edge, however much you squash it.** The cap's dome sits down inside a rim
-  disc that is wider than the dome at every height it covers, so the silhouette ends in a hard
-  horizontal line. Left to close over on its own the dome read as a sphere on a stick -- a curve
-  returning to a point gives the eye nothing to read as a base, which is the same reason the sun
-  hat's dome is buried in its brim and a person's joints are sealed rather than butted.
+- **A ball has no bottom edge, however much you squash it.** The cap's dome sits inside a band as
+  tall as its lower half, so the silhouette ends in a hard horizontal line. Left to close over on
+  its own it read as a sphere on a stick -- a curve returning to a point gives the eye nothing to
+  read as a base, which is the same reason the sun hat's dome is buried in its brim and a person's
+  joints are sealed rather than butted.
+- **But the thing that gives it a bottom must not also give it a brim.** The band clears the dome by
+  30 mm: enough to stop the two surfaces interpenetrating at the seam, far too little to read as a
+  brim. Wider, it was a bowler -- and a brim all the way round is the one thing a cap is defined by
+  *not* having, so the peak has to be the only part of the hat that protrudes at all.
 - **Mid-tone, never dark** -- for anything whose shape has to be read *inside* its silhouette.
   `SHOP.hat` is diluted toward off-white rather than charcoal, because the toon ramp drops a shaded
   face to its darkest band and a colour that starts dark puts brim, band and crown all on one value.
