@@ -1,9 +1,16 @@
 /**
  * The inspection stage: a neutral graded backdrop, a height reference to read proportions against,
- * a soft ground shadow per figure, and a camera that never moves.
+ * a soft ground shadow per figure, and a camera that stands still and changes its lens.
  *
- * The camera being fixed is the whole point -- the person spins, the frame does not -- so a render
- * taken before a change and one taken after put the head in the same pixels.
+ * The camera not moving is the whole point -- the exhibit spins, the frame does not -- so a render
+ * taken before a change and one taken after put the head in the same pixels. **Zoom is therefore a
+ * lens and not a walk**: `placeCamera` takes the distance at the base lens whatever the zoom, and
+ * narrows the field of view instead. That is what keeps a comparison at 4x a fair comparison --
+ * approaching a figure foreshortens it, and foreshortening is precisely what a stage built to judge
+ * proportion must hold still. It also means no zoom can put the camera inside a body.
+ *
+ * The view survives a reload, because a view you cannot get back to is a view you cannot compare
+ * against; see `state.ts`, which carries it in the address bar beside the angle.
  */
 import * as THREE from 'three';
 import { addLights } from '../world/index.ts';
@@ -139,6 +146,113 @@ export function frameFor(extents: readonly Extent[]): Framing {
     };
 }
 
+/**
+ * How far the view is zoomed in, and how far it has been slid from the middle.
+ *
+ * Both are dimensionless: `zoom` is a magnification and the pan is a fraction of what was visible
+ * at rest. So a view means the same thing on a 1.7 m person as on a 4.7 m cart, and survives the
+ * stage being re-framed under it when the seed or the cast changes.
+ */
+export interface View { zoom: number; panX: number; panY: number }
+
+export const REST: View = { zoom: 1, panX: 0, panY: 0 };
+
+/**
+ * Zoom stops at 1 because below it there is nothing to see -- the framing already fits the exhibit
+ * with a margin, and zooming out only adds empty stage. The ceiling is where a person's eye fills
+ * the shot, which is as close as anything here is worth looking at.
+ */
+export const ZOOM_MIN = 1, ZOOM_MAX = 12;
+/** One press of a zoom key or button. The wheel is finer; this is for reaching a round number. */
+export const ZOOM_STEP = 1.25;
+
+const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
+const finite = (v: number, fallback: number): number => (Number.isFinite(v) ? v : fallback);
+
+/**
+ * The nearest view the stage can actually show.
+ *
+ * The pan range is **exactly the room the zoom took away**: `1 - 1/zoom` of what was visible at
+ * rest, so panned as far as it goes the edge of the shot lands where the resting shot's edge was.
+ * Everything you could see before you zoomed is still reachable, just not all at once -- and at
+ * rest the range is zero, so there is no panning away from a subject that is already whole.
+ */
+export function clampView(view: View): View {
+    const zoom = clamp(finite(view.zoom, ZOOM_MIN), ZOOM_MIN, ZOOM_MAX);
+    const room = 1 - 1 / zoom;
+    return {
+        zoom,
+        panX: clamp(finite(view.panX, 0), -room, room),
+        panY: clamp(finite(view.panY, 0), -room, room),
+    };
+}
+
+/**
+ * Zoom to `zoom` while holding the point at screen fraction (`u`, `v`) still, both in -1..1 from
+ * the middle. It is what makes a wheel usable: you put the pointer on a collar seam and roll,
+ * rather than zooming to the centre of the stage and then hunting for the seam with a pan.
+ *
+ * The chrome's own sideways nudge is left out of the arithmetic. It scales with the lens like
+ * everything else, so ignoring it lets the held point drift by the difference between the two
+ * cards' widths -- about six millimetres across the whole zoom range, which is less than the line
+ * weight of the thing being held still.
+ */
+export function zoomAt(view: View, zoom: number, u: number, v: number): View {
+    const from = clampView(view);
+    const to = clampView({ ...from, zoom });
+    const k = 1 / from.zoom - 1 / to.zoom;
+    return clampView({ zoom: to.zoom, panX: from.panX + u * k, panY: from.panY + v * k });
+}
+
+/** The box the camera has to hold, without the row positions that came with it. */
+export type Box = Pick<Framing, 'halfW' | 'halfH' | 'centerY'>;
+
+/** Where the camera stands, and what lens it is wearing. It never turns: it only slides. */
+export interface Placement {
+    /** Where it stands and where it looks, which share an x and a y because it points down -z. */
+    x: number;
+    y: number;
+    dist: number;
+    /** Half the vertical field of view as a tangent -- the lens, and the only thing zoom moves. */
+    halfV: number;
+}
+
+/** The lens the stage frames at, before any zoom narrows it. */
+const BASE_FOV = 30;
+const BASE_HALF_V = Math.tan((BASE_FOV * Math.PI) / 360);
+
+/**
+ * Put the camera where `box` fills the clear strip between the cards, then apply the view.
+ *
+ * Pure arithmetic, out here rather than inside `resize`, so the zoom, the pan and the clamp can be
+ * checked without a canvas -- the same reason `frameFor` is out here.
+ *
+ * `dist` is taken at the **base** lens at every zoom, which is the whole of what makes this a lens
+ * rather than a walk. The pan is then a fraction of what that resting shot showed, so the two
+ * compose without either needing to know the other's units.
+ */
+export function placeCamera(
+    box: Box, view: View, width: number, height: number, insetL = 0, insetR = 0,
+): Placement {
+    const v = clampView(view);
+    const aspect = width / Math.max(1, height);
+    // Widen the framed box by however much of the viewport the chrome eats, so the content still
+    // fits the clear strip between the cards.
+    const usable = Math.max(width * 0.35, width - insetL - insetR);
+    const dist = Math.max(box.halfH / BASE_HALF_V, (box.halfW * width) / usable / (BASE_HALF_V * aspect));
+    const seenH = dist * BASE_HALF_V, seenW = seenH * aspect;
+    // Slide the camera so the framed centre lands on the middle of the clear strip rather than the
+    // middle of the canvas: a wider card on the right pushes the camera right, not left. It is a
+    // fraction of what is visible, so it narrows with the lens.
+    const shift = (((insetR - insetL) / width) * seenW) / v.zoom;
+    return {
+        x: shift + v.panX * seenW,
+        y: box.centerY + v.panY * seenH,
+        dist,
+        halfV: BASE_HALF_V / v.zoom,
+    };
+}
+
 export class Stage {
     readonly scene = new THREE.Scene();
     readonly camera = new THREE.PerspectiveCamera(30, 1, 0.1, 120);
@@ -148,10 +262,13 @@ export class Stage {
     private readonly shadows: THREE.Mesh[] = [];
     private readonly shadowGeo = new THREE.PlaneGeometry(1, 1);
     private readonly shadowMat: THREE.MeshBasicMaterial;
-    /** Half extents the camera must fit, set by `layout` and re-applied on every resize. */
-    private halfW = 0.95;
-    private halfH = 1.2;
-    private centerY = 0.95;
+    /**
+     * What the camera must hold, set by `layout` and re-applied on every resize. The values here
+     * are a placeholder for the one frame before the first `layout`, not a claim about any subject.
+     */
+    private box: Box = { halfW: 1, halfH: 1, centerY: 1 };
+    /** Zoom and pan, held across a re-frame: you zoom in to compare, and comparing takes two casts. */
+    private view: View = REST;
     private insetL = 0;
     private insetR = 0;
 
@@ -192,11 +309,15 @@ export class Stage {
      */
     layout(extents: readonly Extent[]): number[] {
         const f = frameFor(extents);
-        this.halfW = f.halfW;
-        this.halfH = f.halfH;
-        this.centerY = f.centerY;
+        this.box = { halfW: f.halfW, halfH: f.halfH, centerY: f.centerY };
         this.resize(innerWidth, innerHeight, this.insetL, this.insetR);
         return f.xs;
+    }
+
+    /** Zoom and pan. Kept when the cast is rebuilt, so a zoomed comparison survives a new seed. */
+    setView(view: View): void {
+        this.view = clampView(view);
+        this.resize(innerWidth, innerHeight, this.insetL, this.insetR);
     }
 
     /**
@@ -231,26 +352,20 @@ export class Stage {
         this.insetL = insetL; this.insetR = insetR;
         const cam = this.camera;
         cam.aspect = width / Math.max(1, height);
-        const halfV = Math.tan((cam.fov * Math.PI) / 360);
-        // Widen the framed box by however much of the viewport the chrome eats, so the content
-        // still fits the clear strip between the cards.
-        const usable = Math.max(width * 0.35, width - insetL - insetR);
-        const dist = Math.max(this.halfH / halfV, (this.halfW * width) / usable / (halfV * cam.aspect));
-        // Slide the camera so world x = 0 lands on the centre of the clear strip rather than the
-        // centre of the canvas: a wider card on the right pushes the camera right, not left.
-        const visibleHalfW = dist * halfV * cam.aspect;
-        const shift = ((insetR - insetL) / width) * visibleHalfW;
-        cam.position.set(shift, this.centerY, dist);
-        cam.lookAt(shift, this.centerY, 0);
+        const p = placeCamera(this.box, this.view, width, height, insetL, insetR);
+        cam.fov = (2 * Math.atan(p.halfV) * 180) / Math.PI;
+        cam.position.set(p.x, p.y, p.dist);
+        cam.lookAt(p.x, p.y, 0);
         cam.updateProjectionMatrix();
 
-        this.setReference(Math.ceil(this.centerY + dist * halfV));
+        // Drawn to the top of the shot, so zooming in gives finer marks rather than a taller ruler.
+        this.setReference(Math.ceil(p.y + p.dist * p.halfV));
 
         // Scale the reference about the camera axis by exactly the perspective it loses by hanging
         // further back, so a 1 m mark reads as 1 m against the body rather than as 0.85 m.
-        const k = (dist - REF_Z) / dist;
+        const k = (p.dist - REF_Z) / p.dist;
         this.reference.scale.set(k, k, 1);
-        this.reference.position.set(shift * (1 - k), this.centerY * (1 - k), REF_Z);
+        this.reference.position.set(p.x * (1 - k), p.y * (1 - k), REF_Z);
     }
 
     /**

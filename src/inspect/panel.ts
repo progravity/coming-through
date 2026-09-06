@@ -7,6 +7,7 @@
 import { overlaysOf } from './inspectable.ts';
 import type { ControlValue, Inspectable, Readout } from './inspectable.ts';
 import { ENTITIES } from './registry.ts';
+import { ZOOM_STEP } from './stage.ts';
 import type { InspectState } from './state.ts';
 
 const CSS = `
@@ -93,6 +94,9 @@ export interface Handlers {
     step(delta: number): void;
     setSeedText(text: string): void;
     setEntity(id: string): void;
+    /** Zoom in or out by a step, about the middle of the stage. */
+    zoom(by: number): void;
+    resetView(): void;
 }
 
 /**
@@ -111,6 +115,7 @@ export class Panel {
     private readonly seedLabel = label('seed');
     private readonly seedRow = document.createElement('div');
     private readonly angleRow = document.createElement('div');
+    private readonly viewRow = document.createElement('div');
     private readonly readoutEl = document.createElement('div');
     private readonly castEl = document.createElement('div');
     private readonly statusEl = document.createElement('div');
@@ -166,6 +171,15 @@ export class Panel {
             this.angleRow.appendChild(button(`${deg}°`, () => h.patch({ paused: true, yaw: (deg * Math.PI) / 180 })));
         }
         this.pauseBtn = button('pause spin', () => h.patch({ paused: !this.pauseBtn.classList.contains('on') }));
+
+        // Zoom has a keyboard and a wheel, but a dev tool nobody wrote a manual for needs the
+        // buttons too -- and `reset` most of all, because a view you cannot get out of is a trap.
+        this.viewRow.className = 'row';
+        this.viewRow.append(
+            button('−', () => h.zoom(1 / ZOOM_STEP)),
+            button('reset', () => h.resetView()),
+            button('+', () => h.zoom(ZOOM_STEP)),
+        );
 
         this.ctl.append(label('entity'), this.picker.el, label('stage'), this.modeSeg.el, this.dyn);
 
@@ -235,6 +249,10 @@ export class Panel {
         }
         this.dyn.append(label('debug'), debug);
 
+        // `view` sits above `hold angle` for the reason `debug` does: the angle row is eight buttons
+        // that wrap to three lines, so it is both the tallest thing in the strip and the least
+        // reached for, and anything below it falls off the bottom of a short window.
+        this.dyn.append(label('view'), this.viewRow);
         this.dyn.append(label('hold angle'), this.angleRow);
 
         this.keysEl.textContent = keysFor(e);
@@ -282,14 +300,16 @@ export class Panel {
         for (const [id, el] of this.scalars) {
             if (document.activeElement !== el) el.value = String(Math.round(Number(s.controls[id]) * 1000));
         }
+        const zoom = s.view.zoom > 1 ? ` · <b>${s.view.zoom.toFixed(1)}×</b>` : '';
         this.statusEl.innerHTML =
-            `angle <b>${yawDeg.toFixed(0)}°</b>${extra === '' ? '' : ` · ${extra}`}${s.paused ? ' · paused' : ''}`;
+            `angle <b>${yawDeg.toFixed(0)}°</b>${zoom}${extra === '' ? '' : ` · ${extra}`}` +
+            `${s.paused ? ' · paused' : ''}`;
     }
 }
 
 /** The help line, read off the declaration so it cannot describe a key that is not bound. */
 function keysFor(e: Inspectable): string {
-    const bits = ['[ ] next', '← → turn', 'space pause'];
+    const bits = ['[ ] next', '← → turn', 'space pause', 'wheel zoom', 'shift-drag pan', '0 reset view'];
     for (const c of e.controls) {
         // A scalar names two nudge keys where every other kind names one; it has no `key` at all.
         if (c.kind === 'scalar') {

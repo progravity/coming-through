@@ -18,7 +18,7 @@ import { GIZMOS, controlOf, findKey } from './inspectable.ts';
 import type { ControlValue, DrawnPart, Inspectable, Readout } from './inspectable.ts';
 import { Panel } from './panel.ts';
 import { DEFAULT_ENTITY, byId } from './registry.ts';
-import { Stage } from './stage.ts';
+import { REST, Stage, ZOOM_STEP, clampView, zoomAt } from './stage.ts';
 import type { Extent } from './stage.ts';
 import { readState, writeState } from './state.ts';
 import type { InspectState } from './state.ts';
@@ -26,6 +26,9 @@ import type { InspectState } from './state.ts';
 const TAU = Math.PI * 2;
 /** Turntable rate in radians per second: slow enough to read a silhouette as it comes round. */
 const SPIN = 0.4;
+
+/** How fast a wheel notch magnifies. The step the keys and buttons take is the stage's own. */
+const WHEEL_RATE = 0.0015;
 
 const wrapTau = (a: number): number => ((a % TAU) + TAU) % TAU;
 const wrap01 = (v: number): number => ((v % 1) + 1) % 1;
@@ -99,6 +102,7 @@ export function startInspector(mode: string): void {
         if (p.seed !== undefined) state.seed = p.seed;
         if (p.paused !== undefined) state.paused = p.paused;
         if (p.yaw !== undefined) state.yaw = wrapTau(p.yaw);
+        if (p.view !== undefined) { state.view = clampView(p.view); stage.setView(state.view); }
         if (p.overlays !== undefined) {
             state.overlays = p.overlays;
             gizmos.setVisible(state.overlays.has(GIZMOS));
@@ -147,6 +151,8 @@ export function startInspector(mode: string): void {
         q.set('inspect', state.mode === 'row' ? 'row' : '1');
         q.set('seed', String(state.seed));
         if (id !== DEFAULT_ENTITY) q.set('entity', id);
+        // The view is dimensionless, so it carries: 4x on a person is 4x on a cart.
+        if (state.view.zoom !== REST.zoom) q.set('zoom', state.view.zoom.toFixed(2));
         location.search = q.toString();
     }
 
@@ -157,27 +163,65 @@ export function startInspector(mode: string): void {
         step: stepVariation,
         setSeedText: (text: string) => { if (text.trim() !== '') patch({ seed: parseSeed(text) }); },
         setEntity,
+        zoom: stepZoom,
+        resetView: () => patch({ view: REST }),
     });
     panel.setEntity(entity);
 
-    // ---------- input: drag or arrows to hold an angle ----------
-    let dragging = -1, dragX = 0;
+    // ---------- input: drag or arrows to hold an angle, wheel and a modified drag to look closer ----------
+    let dragging = -1, dragX = 0, dragY = 0, panning = false;
     const canvas = renderer.domElement;
     canvas.style.touchAction = 'none';
+    /** Where a pointer is on the canvas, as -1..1 from the middle, with y up as the world has it. */
+    const at = (e: PointerEvent | WheelEvent): { u: number; v: number } => {
+        const r = canvas.getBoundingClientRect();
+        return {
+            u: (2 * (e.clientX - r.left)) / r.width - 1,
+            v: 1 - (2 * (e.clientY - r.top)) / r.height,
+        };
+    };
     canvas.addEventListener('pointerdown', e => {
-        dragging = e.pointerId; dragX = e.clientX;
+        dragging = e.pointerId; dragX = e.clientX; dragY = e.clientY;
+        // Shift or the right button pans; a plain drag still turns the thing on the stage.
+        panning = e.shiftKey || e.button === 2;
         canvas.setPointerCapture(e.pointerId);
-        // Dragging is how you hold an angle, so it stops the turntable rather than fighting it.
-        if (!state.paused) patch({ paused: true });
+        // Turning is how you hold an angle, so it stops the turntable rather than fighting it.
+        // Panning does not: it has no quarrel with the spin.
+        if (!panning && !state.paused) patch({ paused: true });
     });
     canvas.addEventListener('pointermove', e => {
         if (e.pointerId !== dragging) return;
-        state.yaw = wrapTau(state.yaw + (e.clientX - dragX) * 0.008);
-        dragX = e.clientX;
+        const dx = e.clientX - dragX, dy = e.clientY - dragY;
+        dragX = e.clientX; dragY = e.clientY;
+        if (!panning) { state.yaw = wrapTau(state.yaw + dx * 0.008); return; }
+        // A pan is a fraction of what the resting shot showed, and the zoomed shot is exactly
+        // `zoom` times smaller -- so a pixel is worth `2 / (size * zoom)` of it whatever is on
+        // stage, and the content follows the pointer rather than fleeing it.
+        const { zoom } = state.view;
+        patch({ view: {
+            zoom,
+            panX: state.view.panX - (dx * 2) / (canvas.clientWidth * zoom),
+            panY: state.view.panY + (dy * 2) / (canvas.clientHeight * zoom),
+        } });
     });
-    const endDrag = (e: PointerEvent): void => { if (e.pointerId === dragging) dragging = -1; };
+    const endDrag = (e: PointerEvent): void => { if (e.pointerId === dragging) { dragging = -1; panning = false; } };
     canvas.addEventListener('pointerup', endDrag);
     canvas.addEventListener('pointercancel', endDrag);
+    // Right-dragging to pan would otherwise leave a menu open over the stage on the way out.
+    canvas.addEventListener('contextmenu', e => e.preventDefault());
+
+    canvas.addEventListener('wheel', e => {
+        e.preventDefault();
+        const { u, v } = at(e);
+        // Multiplicative, so a notch is worth the same fraction at every zoom, and about the
+        // pointer, so you put it on the thing you want and roll.
+        patch({ view: zoomAt(state.view, state.view.zoom * Math.exp(-e.deltaY * WHEEL_RATE), u, v) });
+    }, { passive: false });
+
+    /** Zoom a step about the middle of the stage, which is where a key press has to aim. */
+    function stepZoom(by: number): void {
+        patch({ view: zoomAt(state.view, state.view.zoom * by, 0, 0) });
+    }
 
     /** The entity's own half of the keyboard, from its declaration. */
     function declaredKey(key: string, shift: boolean): boolean {
@@ -209,6 +253,9 @@ export function startInspector(mode: string): void {
             case ' ': patch({ paused: !state.paused }); break;
             case '1': patch({ mode: 'single' }); break;
             case '2': patch({ mode: 'row' }); break;
+            case '0': patch({ view: REST }); break;
+            case '+': case '=': stepZoom(ZOOM_STEP); break;
+            case '-': case '_': stepZoom(1 / ZOOM_STEP); break;
             default: if (!declaredKey(e.key, e.shiftKey)) return;
         }
         e.preventDefault();
@@ -225,6 +272,7 @@ export function startInspector(mode: string): void {
     // ---------- start ----------
     gizmos.setVisible(state.overlays.has(GIZMOS));
     cast.overlays(state.overlays);
+    stage.setView(state.view);
     panel.sync(state);
     rebuild();
     reframe();

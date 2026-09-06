@@ -14,8 +14,8 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';
 import * as THREE from 'three';
 import { measure, newBounds } from '../src/inspect/gizmos.ts';
-import { frameFor } from '../src/inspect/stage.ts';
-import type { Extent } from '../src/inspect/stage.ts';
+import { REST, clampView, frameFor, placeCamera, zoomAt } from '../src/inspect/stage.ts';
+import type { Extent, View } from '../src/inspect/stage.ts';
 import type { DrawnPart } from '../src/inspect/inspectable.ts';
 import { PERSON } from '../src/inspect/entities/person.ts';
 import { Subject } from '../src/inspect/subject.ts';
@@ -273,6 +273,106 @@ test('a row leaves every exhibit room to turn without touching its neighbour', (
     // And the row sits on the stage's centre whatever sizes it is made of.
     const left = f.xs[0] - row[0].radius, right = f.xs[2] + row[2].radius;
     assert.ok(Math.abs(left + right) < 1e-9, `the row is off centre by ${((left + right) / 2).toFixed(3)} m`);
+});
+
+/**
+ * The view -- zoom and pan -- laid over that framing.
+ *
+ * Testable for the same reason the framing is: the camera's placement is arithmetic on measured
+ * numbers, so it can be checked without a canvas. The screen size below is a plain 16:9 window with
+ * no chrome, because what is being checked is the lens and the pan, not the card insets.
+ */
+const SCREEN = [1600, 900, 0, 0] as const;
+const rest: View = { zoom: 1, panX: 0, panY: 0 };
+
+test('zooming narrows the lens and leaves the camera standing where it was', () => {
+    const f = frameFor([extent(0.31, 1.55)]);
+    const at1 = placeCamera(f, rest, ...SCREEN);
+    const at4 = placeCamera(f, { zoom: 4, panX: 0, panY: 0 }, ...SCREEN);
+    // The camera not moving is the whole reason this is a lens rather than a walk: proportions read
+    // the same at 4x as at rest, so a comparison at zoom is still a fair comparison.
+    assert.equal(at4.dist, at1.dist, 'the camera moved when the lens should have narrowed');
+    assert.ok(Math.abs(at4.halfV * 4 - at1.halfV) < 1e-12, `4x showed ${at1.halfV / at4.halfV}x`);
+    // And at rest the whole framed box is still in shot, which is what zoom must not disturb.
+    assert.ok(at1.dist * at1.halfV >= f.halfH - 1e-9, 'the framed box no longer fits the shot');
+    assert.ok(Math.abs(at1.y - f.centerY) < 1e-12, 'the shot is off the framed centre at rest');
+});
+
+test('panning cannot move anything until you have zoomed in', () => {
+    const f = frameFor([extent(0.31, 1.55)]);
+    // Nothing is off screen at rest, so there is nowhere to pan to and the clamp says so.
+    const shoved = placeCamera(f, { zoom: 1, panX: 1, panY: -1 }, ...SCREEN);
+    const still = placeCamera(f, rest, ...SCREEN);
+    assert.equal(shoved.x, still.x, 'panned sideways with the whole subject already in shot');
+    assert.equal(shoved.y, still.y, 'panned upward with the whole subject already in shot');
+});
+
+test('panning stops at the edge of what you could see before you zoomed', () => {
+    const f = frameFor([extent(1.07, 4.74)]);
+    const base = placeCamera(f, rest, ...SCREEN);
+    const seenW = base.dist * base.halfV * (1600 / 900), seenH = base.dist * base.halfV;
+    for (const zoom of [1, 2, 4, 12]) {
+        const far = placeCamera(f, { zoom, panX: 1, panY: 1 }, ...SCREEN);
+        const halfH = far.dist * far.halfV, halfW = halfH * (1600 / 900);
+        // Panned as far as it goes, the edge of the shot lands exactly where the resting shot's
+        // edge was: everything you could see at rest is still reachable, just not all at once.
+        assert.ok(far.y + halfH <= base.y + seenH + 1e-9, `at ${zoom}x the shot ran above what rest showed`);
+        assert.ok(far.x + halfW <= base.x + seenW + 1e-9, `at ${zoom}x the shot ran outside what rest showed`);
+    }
+    const four = placeCamera(f, { zoom: 4, panX: 1, panY: 0 }, ...SCREEN);
+    assert.ok(Math.abs((four.x - base.x) - seenW * 0.75) < 1e-9, 'a quarter-size shot should pan three quarters out');
+});
+
+test('zooming at a point leaves that point where it is', () => {
+    const f = frameFor([extent(0.31, 1.55)]);
+    // A point up and to the right -- a shoulder, say -- held still while the lens narrows onto it.
+    const u = 0.6, v = 0.4;
+    const before = placeCamera(f, rest, ...SCREEN);
+    const view = zoomAt(rest, 4, u, v);
+    const after = placeCamera(f, view, ...SCREEN);
+    const whereBefore = {
+        x: before.x + u * before.dist * before.halfV * (1600 / 900),
+        y: before.y + v * before.dist * before.halfV,
+    };
+    const whereAfter = {
+        x: after.x + u * after.dist * after.halfV * (1600 / 900),
+        y: after.y + v * after.dist * after.halfV,
+    };
+    assert.ok(Math.abs(whereAfter.x - whereBefore.x) < 1e-9, `the point slid ${whereAfter.x - whereBefore.x} m across`);
+    assert.ok(Math.abs(whereAfter.y - whereBefore.y) < 1e-9, `the point slid ${whereAfter.y - whereBefore.y} m up`);
+});
+
+test('a view is clamped to something the stage can actually show', () => {
+    assert.equal(clampView({ zoom: 0.2, panX: 0, panY: 0 }).zoom, 1, 'zoomed out past the framing');
+    assert.ok(clampView({ zoom: 1000, panX: 0, panY: 0 }).zoom <= 12, 'zoomed in without limit');
+    // The pan range grows with the zoom, because it is the room the zoom took away.
+    assert.equal(clampView({ zoom: 1, panX: 5, panY: 5 }).panX, 0);
+    assert.ok(Math.abs(clampView({ zoom: 2, panX: 5, panY: 0 }).panX - 0.5) < 1e-12);
+    assert.ok(Math.abs(clampView({ zoom: 4, panX: -5, panY: 0 }).panX + 0.75) < 1e-12);
+});
+
+test('a zoomed view survives a reload, and one at rest stays out of the address bar', () => {
+    const person = ENTITIES[0];
+    // At rest there is nothing to say, so the URL says nothing -- the same rule every control keeps.
+    const idle = stateFor(person, 'single', '?seed=1');
+    assert.deepEqual(idle.view, REST);
+    const bare = queryOf(idle, person);
+    assert.equal(bare.get('zoom'), null);
+    assert.equal(bare.get('panx'), null);
+    assert.equal(bare.get('pany'), null);
+
+    // Zoomed and slid off centre, it round-trips -- which is what makes a close look comparable
+    // across a code change, exactly as holding an angle is.
+    const close = stateFor(person, 'single', '?seed=1&zoom=4&panx=0.5&pany=-0.25');
+    assert.equal(close.view.zoom, 4);
+    assert.equal(close.view.panX, 0.5);
+    assert.equal(close.view.panY, -0.25);
+    const back = stateFor(person, 'single', `?${queryOf(close, person)}`);
+    assert.deepEqual(back.view, close.view);
+
+    // A pan the zoom cannot support is clamped on the way in rather than trusted.
+    const shoved = stateFor(person, 'single', '?seed=1&zoom=2&panx=9');
+    assert.equal(shoved.view.panX, 0.5);
 });
 
 test('a staged edge object stands at its anchor, on the ground, at its own size', () => {

@@ -615,8 +615,8 @@ proportion change cannot leave the camera aimed where the chest used to be.
 
 ## Entity inspection
 
-`?inspect=1` opens a turntable: one thing on a neutral stage, a fixed camera, a slow spin, and
-controls for whatever varies about it. `?inspect=row` puts a whole family side by side.
+`?inspect=1` opens a turntable: one thing on a neutral stage, a camera that holds still, a slow
+spin, and controls for whatever varies about it. `?inspect=row` puts a whole family side by side.
 `&entity=` chooses what is on the stage — `person` (the default, so every URL written before this
 existed still works), `kiosk`, `furniture`, and `bench`/`lamp`/`bin` as names for the furniture
 with its kind pinned.
@@ -677,6 +677,18 @@ it. The collider, the orientation arrows and a kiosk's service and attendant poi
 inner group, so they cannot drift off the thing they describe. A collider is drawn flat, because
 the collider *is* flat: the crowd walks in the x/z plane and is draped onto the surface at render
 time.
+
+**Zoom is a lens, not a walk.** `placeCamera` takes the camera's distance at the base lens whatever
+the zoom and narrows the field of view instead, so proportions read the same at 4x as at rest --
+which matters because approaching a figure foreshortens it, and foreshortening is exactly what a
+stage built to judge proportion has to hold still. It also means no zoom can put the camera inside
+a body. Pan is a fraction of what the resting shot showed, and its range is **the room the zoom
+took away**: `1 - 1/zoom`, so panned as far as it goes the edge of the shot lands where the resting
+shot's edge was, and at rest there is nowhere to pan because nothing is off screen. Both are
+dimensionless, so a view means the same thing on a 1.7 m person as on a 4.7 m cart, it survives the
+stage being re-framed under it, and it goes in the address bar beside the angle -- a close look you
+cannot reload is a close look you cannot compare against. The wheel zooms about the pointer, a
+shift-drag or a right-drag pans, and `0` puts it back.
 
 The four families are `agent` (people), `kiosk`, `path-furniture` (benches, lamps, bins) and
 `structure` — the last of which has no members yet and is where buildings go.
@@ -795,8 +807,9 @@ panel and a `?look=` name together.
 `?inspect=1` opens the turntable and `?inspect=row` its side-by-side row; `&entity=` chooses what
 stands on it (`person` by default, plus `kiosk`, `furniture`, `bench`, `lamp`, `bin`). Both take
 `&seed=` and mirror the rest of their state back into the address bar — every control under its own
-id, every active overlay under its own, plus `paused`, `yaw` and `ink` — so a reload after a code
-change brings back the same thing at the same settings.
+id, every active overlay under its own, plus `paused`, `yaw`, `ink` and the view (`zoom`, `panx`,
+`pany`) — so a reload after a code change brings back the same thing at the same settings, seen
+from the same distance.
 
 ## Determinism rules
 

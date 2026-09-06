@@ -15,6 +15,8 @@ import { parseSeed } from '../core/rng.ts';
 import { defaultControls, defaultOverlays, gateIds, overlaysOf } from './inspectable.ts';
 import type { Controls, Inspectable } from './inspectable.ts';
 import { DEFAULT_ENTITY, resolve } from './registry.ts';
+import { REST, clampView } from './stage.ts';
+import type { View } from './stage.ts';
 
 export type InspectMode = 'single' | 'row';
 
@@ -34,6 +36,11 @@ export interface InspectState {
     paused: boolean;
     /** Turntable angle in radians; 0 faces the camera. */
     yaw: number;
+    /**
+     * How closely the stage is looking, and where. Held here rather than in `Stage` because it goes
+     * in the address bar: a close look you cannot reload is a close look you cannot compare against.
+     */
+    view: View;
 }
 
 /** Fixed, never random: opening the tool twice has to show the same thing. */
@@ -81,6 +88,13 @@ export function stateFor(e: Inspectable, mode: string, search: string, pinned: C
         overlays,
         paused: flag(q.get('paused'), false),
         yaw: num(q.get('yaw'), 0) * (Math.PI / 180),
+        // Clamped on the way in rather than trusted: a hand-edited pan the zoom cannot support
+        // would otherwise put the subject off screen with no way back but the reset.
+        view: clampView({
+            zoom: num(q.get('zoom'), REST.zoom),
+            panX: num(q.get('panx'), REST.panX),
+            panY: num(q.get('pany'), REST.panY),
+        }),
     };
 }
 
@@ -109,6 +123,11 @@ export function queryOf(s: InspectState, e: Inspectable): URLSearchParams {
     // Angle and pause are live values, but they belong in the URL too: holding a specific angle
     // across a reload is what makes a before/after render of a change comparable.
     if (s.paused) { q.set('paused', '1'); q.set('yaw', ((s.yaw * 180) / Math.PI).toFixed(1)); }
+    // The view is the angle's other half: both are live values that belong in the URL, because
+    // holding a specific close look across a reload is what makes a before/after render comparable.
+    if (s.view.zoom !== REST.zoom) q.set('zoom', s.view.zoom.toFixed(2));
+    if (s.view.panX !== REST.panX) q.set('panx', s.view.panX.toFixed(3));
+    if (s.view.panY !== REST.panY) q.set('pany', s.view.panY.toFixed(3));
     for (const o of overlaysOf(e)) {
         const on = s.overlays.has(o.id);
         if (on !== (o.on === true)) q.set(o.id, on ? '1' : '0');
