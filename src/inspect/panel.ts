@@ -9,7 +9,8 @@ import { overlaysOf } from './inspectable.ts';
 import type { ControlValue, Inspectable, Readout } from './inspectable.ts';
 import { ENTITIES } from './registry.ts';
 import { ZOOM_STEP } from './stage.ts';
-import type { InspectState } from './state.ts';
+import { PANELS } from './state.ts';
+import type { InspectState, PanelId } from './state.ts';
 
 const CSS = `
 body.inspect > *:not(#inspector):not(canvas):not(script){display:none!important}
@@ -43,6 +44,17 @@ body.inspect > *:not(#inspector):not(canvas):not(script){display:none!important}
 #cast li{display:flex;gap:6px;font-size:11.5px;padding:1px 0}
 #cast b{font-weight:500;min-width:60px}
 #cast span{color:#8f8b83}
+/* A shut card keeps its heading and drops the rest, and stops reserving a fixed width, so the
+   stage can take the space back -- Panel.insets measures what is actually there. */
+#inspector .card.min{width:auto;max-height:none;overflow:visible}
+#inspector .card.min > *:not(h2):not(h3){display:none}
+#ctl h2,#read h2,#cast h3{cursor:pointer;user-select:none}
+/* On the left of the title, where the control card's own right-floated subtitle cannot collide. */
+#ctl h2::before,#read h2::before,#cast h3::before{content:'▾ ';color:#8f8b83;font-weight:400}
+#inspector .card.min h2::before,#inspector .card.min h3::before{content:'▸ '}
+/* The control card's subtitle floats right, which an auto-width card has nothing to float
+   against. A shut card is a label, so it drops the subtitle and sizes to the line it still shows. */
+#ctl.min h2 span{display:none}
 #status{bottom:12px;left:50%;transform:translateX(-50%);padding:7px 14px;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:12px;color:#c3bfb7}
 #status b{color:#e8c34a;font-weight:600}
 #keys{bottom:12px;right:12px;padding:7px 11px;font-size:11px;color:#7e7a73;max-width:min(46vw,430px);text-align:right}
@@ -100,6 +112,8 @@ export interface Handlers {
     /** Zoom in or out by a step, about the middle of the stage. */
     zoom(by: number): void;
     resetView(): void;
+    /** Shut a card down to its title, or open it again. */
+    togglePanel(id: PanelId): void;
 }
 
 /**
@@ -133,6 +147,8 @@ export class Panel {
     private readonly overlayBtns = new Map<string, HTMLButtonElement>();
     // Not a parameter property: `erasableSyntaxOnly` is on, so those are a compile error here.
     private readonly h: Handlers;
+    /** Which elements each shuttable id owns. `read` owns both left cards: one slot, two modes. */
+    private readonly cards: Record<PanelId, readonly HTMLElement[]>;
 
     constructor(h: Handlers) {
         this.h = h;
@@ -194,6 +210,9 @@ export class Panel {
 
         this.root.append(this.ctl, this.readoutEl, this.castEl, this.statusEl, this.keysEl);
         document.body.appendChild(this.root);
+
+        this.cards = { ctl: [this.ctl], read: [this.readoutEl, this.castEl] };
+        for (const id of PANELS) for (const el of this.cards[id]) shutOnHeading(el, () => h.togglePanel(id));
     }
 
     /** Build the half of the strip the entity decides. Called once, at start-up. */
@@ -289,6 +308,9 @@ export class Panel {
         this.looks?.set(s.look);
         for (const [id, b] of this.toggles) b.classList.toggle('on', s.controls[id] === true);
         for (const [id, b] of this.overlayBtns) b.classList.toggle('on', s.overlays.has(id));
+        for (const id of PANELS) {
+            for (const el of this.cards[id]) el.classList.toggle('min', s.minimised.has(id));
+        }
         if (document.activeElement !== this.seedBox) this.seedBox.value = String(s.seed);
     }
 
@@ -318,6 +340,24 @@ export class Panel {
             `angle <b>${yawDeg.toFixed(0)}°</b>${zoom}${extra === '' ? '' : ` · ${extra}`}` +
             `${s.paused ? ' · paused' : ''}`;
     }
+}
+
+/**
+ * Toggle a card when its own heading is clicked, and only then.
+ *
+ * Delegated rather than bound to the heading, because the readout and the cast list rewrite their
+ * innerHTML on every change and would drop a bound listener with it. The two guards matter: the
+ * control card is full of buttons and sliders, so a click anywhere in it would otherwise shut the
+ * card every time you used one, and a heading inside some future nested card would otherwise shut
+ * its parent as well.
+ */
+function shutOnHeading(card: HTMLElement, toggle: () => void): void {
+    card.addEventListener('click', e => {
+        const target = e.target as HTMLElement | null;
+        if (target === null) return;
+        if (target.closest('h2, h3') === null || target.closest('.card') !== card) return;
+        toggle();
+    });
 }
 
 /** The help line, read off the declaration so it cannot describe a key that is not bound. */

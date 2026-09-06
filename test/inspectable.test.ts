@@ -376,6 +376,29 @@ test('a zoomed view survives a reload, and one at rest stays out of the address 
     assert.equal(shoved.view.panX, 0.5);
 });
 
+test('a minimised panel survives a reload, and an open one stays out of the address bar', () => {
+    const person = ENTITIES[0];
+    // Nothing minimised is the default, so the URL says nothing -- the rule every other setting keeps.
+    const open = stateFor(person, 'single', '?seed=1');
+    assert.deepEqual([...open.minimised], []);
+    assert.equal(queryOf(open, person).get('min'), null);
+
+    // The control card shut on its own, which is the case the feature exists for.
+    const shut = stateFor(person, 'single', '?seed=1&min=ctl');
+    assert.deepEqual([...shut.minimised], ['ctl']);
+    assert.equal(queryOf(shut, person).get('min'), 'ctl');
+
+    // Both, and back again: a stage cleared of chrome is a view worth reloading into.
+    const both = stateFor(person, 'single', '?min=ctl,read');
+    assert.deepEqual([...both.minimised].sort(), ['ctl', 'read']);
+    const back = stateFor(person, 'single', `?${queryOf(both, person)}`);
+    assert.deepEqual([...back.minimised].sort(), ['ctl', 'read']);
+
+    // A name nobody publishes is dropped rather than carried around as state nothing can act on.
+    assert.deepEqual([...stateFor(person, 'single', '?min=ctl,nonesuch').minimised], ['ctl']);
+    assert.deepEqual([...stateFor(person, 'single', '?min=').minimised], []);
+});
+
 test('a staged edge object stands at its anchor, on the ground, at its own size', () => {
     const cast = FURNITURE.mount(new THREE.Scene());
     cast.rebuild(1, 1, { ...defaultControls(FURNITURE), kind: 'bench' });

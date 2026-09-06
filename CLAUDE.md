@@ -891,9 +891,15 @@ game keeps compiling, keeps testing green, and keeps playing under every `?look=
 `?inspect=1` opens the turntable and `?inspect=row` its side-by-side row; `&entity=` chooses what
 stands on it (`person` by default, plus `kiosk`, `furniture`, `bench`, `lamp`, `bin`). Both take
 `&seed=` and mirror the rest of their state back into the address bar — every control under its own
-id, every active overlay under its own, plus `paused`, `yaw`, `look`, `ink` and the view (`zoom`,
-`panx`, `pany`) — so a reload after a code change brings back the same thing at the same settings,
-seen from the same distance.
+id, every active overlay under its own, plus `paused`, `yaw`, `look`, `ink`, the view (`zoom`,
+`panx`, `pany`) and any shut cards (`min=ctl,read`) — so a reload after a code change brings back
+the same thing at the same settings, seen from the same distance.
+
+**A card can be shut down to its title**, by clicking its heading or pressing `H` for the control
+card. That is a framing decision rather than a tidying one: `Stage.resize` frames the subject into
+whatever `Panel.insets` leaves clear, so shutting the controls hands the width back to the stage and
+the subject grows into it. Which is why it is in the address bar with the angle and the zoom, and
+why toggling one re-frames rather than rebuilds — the cast has not changed, only the room it stands in.
 
 ## Determinism rules
 

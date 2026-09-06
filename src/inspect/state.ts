@@ -21,6 +21,17 @@ import type { View } from './stage.ts';
 
 export type InspectMode = 'single' | 'row';
 
+/**
+ * The cards that can be shut, by id.
+ *
+ * Two rather than five: `#status` and `#keys` are already one line each, and a control for hiding a
+ * line is more chrome than the line. `read` covers both left-hand cards -- the recipe readout and
+ * the row's cast list -- because they are the same slot in different modes and nobody thinks of
+ * them as two panels.
+ */
+export const PANELS = ['ctl', 'read'] as const;
+export type PanelId = (typeof PANELS)[number];
+
 export interface InspectState {
     /** Which `Inspectable` is on stage, by id. */
     entity: string;
@@ -44,6 +55,15 @@ export interface InspectState {
     view: View;
     /** Which rendering direction is on, by slug. `current` is the shipped one and stays out of the address bar. */
     look: string;
+    /**
+     * The cards currently shut down to their titles.
+     *
+     * A view setting like the angle and the zoom, and in the URL for the same reason: a stage
+     * cleared of chrome is a framing, and a framing you cannot reload is one you cannot compare
+     * against. Shutting a card also gives the subject its width back -- `Stage.resize` frames into
+     * whatever `Panel.insets` leaves clear -- so this moves the camera, not just the furniture.
+     */
+    minimised: Set<PanelId>;
 }
 
 /** Fixed, never random: opening the tool twice has to show the same thing. */
@@ -93,6 +113,10 @@ export function stateFor(e: Inspectable, mode: string, search: string, pinned: C
         yaw: num(q.get('yaw'), 0) * (Math.PI / 180),
         // Clamped on the way in rather than trusted: a hand-edited pan the zoom cannot support
         // would otherwise put the subject off screen with no way back but the reset.
+        // Unknown names are dropped rather than carried: state nothing can act on is state that
+        // outlives the card it named.
+        minimised: new Set((q.get('min') ?? '').split(',').filter((id): id is PanelId =>
+            (PANELS as readonly string[]).includes(id))),
         view: clampView({
             zoom: num(q.get('zoom'), REST.zoom),
             panX: num(q.get('panx'), REST.panX),
@@ -137,6 +161,10 @@ export function queryOf(s: InspectState, e: Inspectable): URLSearchParams {
         if (on !== (o.on === true)) q.set(o.id, on ? '1' : '0');
     }
     if (s.look !== 'current') q.set('look', s.look);
+    // In `PANELS` order rather than insertion order, so the same pair of shut cards is the same URL
+    // however you got there.
+    const shut = PANELS.filter(id => s.minimised.has(id));
+    if (shut.length > 0) q.set('min', shut.join(','));
     return q;
 }
 

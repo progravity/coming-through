@@ -22,7 +22,7 @@ import { DEFAULT_ENTITY, byId } from './registry.ts';
 import { REST, Stage, ZOOM_STEP, clampView, zoomAt } from './stage.ts';
 import type { Extent } from './stage.ts';
 import { readState, writeState } from './state.ts';
-import type { InspectState } from './state.ts';
+import type { InspectState, PanelId } from './state.ts';
 
 const TAU = Math.PI * 2;
 /** Turntable rate in radians per second: slow enough to read a silhouette as it comes round. */
@@ -149,7 +149,12 @@ export function startInspector(mode: string): void {
         // a rebuild is not a look change, and treating it as one is what took the ink away from
         // anyone who had switched it off by hand.
         if (p.look !== undefined) { state.look = p.look; syncInk(); dressAll(); }
+        if (p.minimised !== undefined) state.minimised = p.minimised;
         panel.sync(state);
+        // After `sync`, which is what put the class on the card: `reframe` measures what the cards
+        // actually cover, so it has to run once the DOM already reflects the change. Not a rebuild
+        // -- the cast is exactly the same, it just has more room to stand in.
+        if (p.minimised !== undefined) reframe();
         if (must) { rebuild(); reframe(); }
         // Once per change, never per frame: a held arrow key or a slider drag reaches here many
         // times a second, and browsers rate-limit replaceState -- Safari throws past 100 in 30s.
@@ -207,6 +212,7 @@ export function startInspector(mode: string): void {
         setLook: (slug: string) => patch({ look: slug }),
         zoom: stepZoom,
         resetView: () => patch({ view: REST }),
+        togglePanel,
     });
     panel.setEntity(entity);
 
@@ -260,6 +266,13 @@ export function startInspector(mode: string): void {
         patch({ view: zoomAt(state.view, state.view.zoom * Math.exp(-e.deltaY * WHEEL_RATE), u, v) });
     }, { passive: false });
 
+    /** Shut a card down to its title, or open it again. */
+    function togglePanel(id: PanelId): void {
+        const next = new Set(state.minimised);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        patch({ minimised: next });
+    }
+
     /** Zoom a step about the middle of the stage, which is where a key press has to aim. */
     function stepZoom(by: number): void {
         patch({ view: zoomAt(state.view, state.view.zoom * by, 0, 0) });
@@ -296,6 +309,7 @@ export function startInspector(mode: string): void {
             case '1': patch({ mode: 'single' }); break;
             case '2': patch({ mode: 'row' }); break;
             case '0': patch({ view: REST }); break;
+            case 'h': case 'H': togglePanel('ctl'); break;
             case '+': case '=': stepZoom(ZOOM_STEP); break;
             case '-': case '_': stepZoom(1 / ZOOM_STEP); break;
             case 'l': case 'L': patch({ look: cycle(LOOK_NAMES, state.look, 1) }); break;
