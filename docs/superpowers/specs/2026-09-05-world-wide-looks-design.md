@@ -89,12 +89,40 @@ Reading absence as "leave alone" would make every look a one-way door and `curre
 toon gradient and the ink colour, and `world/material.ts` imports it — so it is the one place that
 is neither the game's, nor the comparator's, nor the inspector's.
 
-**This gives up a guard, deliberately.** CLAUDE.md currently says `src/compare/` is not disposable
-because `game.ts` imports `treatments.ts`, and calls that "a real dependency, not a note asking
-nicely". After this the game imports `render/look.ts` instead, and `compare/` becomes genuinely
-deletable. That is the correct shape — a dev tool should not be load-bearing by accident — but it
-is a real loss and the documentation has to stop claiming otherwise. What remains in
-`compare/treatments.ts` is only the panel-building half: `poolMeshes`, the card copy, the bench rig.
+### The comparator stops being a dependency, and stays that way
+
+CLAUDE.md currently says `src/compare/` is not disposable because `game.ts` imports
+`treatments.ts`, and calls that "a real dependency, not a note asking nicely". **That inverts here,
+on purpose: after this, nothing outside `compare/` depends on anything inside it.** A dev tool
+should be reachable, not load-bearing.
+
+There is exactly one such dependency today — `game.ts` does
+`await import('./compare/treatments.ts')` for `LOOK_NAMES`, `poolMeshes` and `treatmentNamed`.
+Moving the looks to `render/look.ts` removes the first and third, and the each-layer-dresses-itself
+design removes the need for the second: nothing outside the comparator has to *find* meshes any
+more, because every layer already knows its own.
+
+Two references remain and both are correct:
+
+- `src/main.ts` dynamic-imports `compare/index.ts` to **open** the tool when `?compare=` is present.
+  That is the entry point's job — it is how the tool is reachable at all — and it is the same line
+  that opens the inspector. It is not a feature depending on the comparator's contents.
+- `test/compare.test.ts` tests the comparator. Its look-related assertions move to a test of
+  `render/look.ts`; what stays is the panel and bench rig it is actually about.
+
+**A test pins this**, in the shape the inspector's shell-purity test already uses: scan every file
+under `src/` outside `compare/`, and fail if any of them — statically or dynamically — imports from
+`compare/`, with `main.ts`'s dispatch line as the single named exception. Without it the dependency
+grows back the first time something finds a useful helper in there.
+
+What stays in `compare/treatments.ts` is only the panel-building half: `poolMeshes` (which the
+comparator still wants, because its panels build bare `PartPools` with no world around them), the
+card copy, and the bench rig.
+
+**A direction worth noting but not fixing here:** `compare/` imports `inspect/subject.ts` and
+`inspect/gizmos.ts`. That is the comparator depending on the inspector, which is the harmless
+direction — deleting `compare/` still leaves `inspect/` whole. Untangling it is a separate question
+and out of scope.
 
 ## How a look reaches four surfaces
 
@@ -150,21 +178,45 @@ under every look. This is why the ground was not simply excluded: an alternative
 a dead-flat ground is judged unfairly, and the grain is documented as the thing that stops the
 surface reading as a repeat.
 
-## The ink weight, and why it enters the render path
+## The ink weight: a number, not a pass
 
-`inkWeight` cannot be applied once. `PartPools.commit()` rewrites every instance matrix each frame,
-and `EdgeLayer.animate` rewrites the movers, so a weighting applied at dress time is gone on the
-next frame. Today the comparator handles this with a per-frame `after()` hook that each panel runs
-between commit and render.
+`inkWeight` cannot be applied once and left alone — `PartPools.commit()` rewrites every instance
+matrix each frame and `EdgeLayer.animate` rewrites the movers, so a weighting applied at dress time
+is gone on the next frame. Today the comparator solves that with a per-frame `after()` hook that
+sweeps every ink matrix and rescales its three columns. CLAUDE.md measures that sweep: `soft-thin`
+costs "about a third more" CPU than posing the crowd does in the first place.
 
-That hook goes. Instead **each layer honours its stored look wherever it writes matrices** — `commit`
-for the pools, `animate` for the edge — and the `after` concept disappears from the vocabulary.
+**The sweep is unnecessary, and this design deletes it.** `put()` is already computing the shell's
+growth, once per part, from the part's own size:
 
-This is a real change of status and should be recorded as one. CLAUDE.md currently notes with some
-satisfaction that the treatments restyle from outside the render path "with no change to `pools.ts`".
-That was true of a comparator's surgery; it is not true of a rendering feature the game supports, and
-the trade is worth it — one `if (weight !== 0)` on a path that already loops over every instance,
-against a per-frame hook that every consumer has to remember to call.
+```ts
+const gx = 1.06 + 0.025 / sx;   // shell column length = sx * 1.06 + 0.025
+```
+
+A weight is just a different constant in that expression. Folding it in is exactly equivalent —
+`sx * 1.06 + 0.025 + weight` — and costs nothing beyond the addition already there:
+
+```ts
+const gx = 1.06 + this.inkOver / sx;   // inkOver = 0.025 + look.inkWeight
+```
+
+The `FLOOR` clamp that stops a negative weight inverting a small part's shell folds in with it, as a
+`Math.max` on a value being computed anyway rather than a second pass over 8,600 matrices. The edge
+layer's `grow()` in `kit.ts` takes the same treatment against its own `INK_OVER`.
+
+So the answer to "does this cost the simulation anything" is **no, and it gives some back**: a run
+with no look reads a field instead of a literal and is otherwise the code it is today, and
+`soft-thin` — the one look that had a real per-frame cost — loses it entirely. The `after()` hook
+disappears from the vocabulary, so no consumer has to remember to call it.
+
+**This is measured, not asserted.** `scripts/bench-pose.mjs` exists for precisely this path and
+times posing a full 190-person crowd into the instance buffers with no GL context. The
+implementation gates on it: a before-and-after run, with the shipped look, showing no regression.
+
+One consequence to record honestly: CLAUDE.md currently notes that the treatments restyle from
+outside the render path "with no change to `pools.ts`". That stops being true — `put` reads a field
+the look sets. That was a fair boast about a comparator's surgery and is the wrong goal for a
+rendering feature the game supports.
 
 ## What each consumer does
 
@@ -201,7 +253,12 @@ The looks are data, so most of this is checkable without a canvas:
   by driving the real exported list rather than a fixture;
 - `look` round-trips the inspector's URL;
 - a layer dressed with `current` after `matcap` is back on its shipped material — the restore path,
-  which only the inspector exercises and which is the easiest thing here to get wrong.
+  which only the inspector exercises and which is the easiest thing here to get wrong;
+- **nothing under `src/` outside `compare/` imports from `compare/`**, statically or dynamically,
+  save `main.ts`'s line that opens the tool;
+- the folded ink weight is arithmetically what the old sweep produced: a shell grown with
+  `inkWeight` set matches `weighInk`'s result for the same part sizes, including the `FLOOR` case
+  that a thin part triggers.
 
 Browser work, because no unit test can answer it: that a cart and a shopfront actually restyle, that
 per-instance colours survive a matcap, and that the ground keeps its grain under every look.
