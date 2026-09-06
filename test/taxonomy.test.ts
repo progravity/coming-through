@@ -13,6 +13,7 @@ import { test } from 'node:test';
 import { join, relative } from 'node:path';
 import { ARCH, ARCH_KEYS } from '../src/archetypes.ts';
 import { buildObstacles, obstaclesFrom } from '../src/sim/obstacles.ts';
+import { Simulation } from '../src/sim/simulation.ts';
 import { PROPERTIES, entityMeta, hasProperty } from '../src/entity.ts';
 import { ENTITIES } from '../src/inspect/registry.ts';
 import { FURNITURE_ENTITIES } from '../src/world/furniture.ts';
@@ -222,5 +223,45 @@ test('everyone the player can bump into says they are bump-relevant', () => {
     // And nothing you walk into is: hitting the furniture is a scrape, counted nowhere.
     for (const e of edgePlans().entities) {
         assert.ok(!hasProperty(e.meta, 'bump-relevant'), `piece ${e.piece} would score a bump`);
+    }
+});
+
+test("everything in the grid's fixed layer is immobile, and everyone in the crowd is mobile", () => {
+    // The pair is declared everywhere and read nowhere, which is deliberate: the grid's two layers
+    // -- rebuilt every step against set once -- are already that decision at the only site that
+    // makes it, and a branch for an immobile agent would guard behaviour no entity has. So the
+    // consistency is pinned here instead, and the branch arrives with the first stationed entity.
+    for (const e of edgePlans().entities) {
+        assert.ok(hasProperty(e.meta, 'immobile'), `piece ${e.piece} is in the fixed layer and not immobile`);
+        assert.ok(!hasProperty(e.meta, 'mobile'), `piece ${e.piece} is in the fixed layer and mobile`);
+    }
+    const sim = new Simulation(20260906);
+    sim.prime(40);
+    assert.ok(sim.crowd.agents.length > 0);
+    for (const a of sim.crowd.agents) {
+        assert.ok(hasProperty(a.A.entity, 'mobile'), `${a.type} walks and is not mobile`);
+        assert.ok(!hasProperty(a.A.entity, 'immobile'), `${a.type} walks and is immobile`);
+    }
+});
+
+test('nothing is stationed yet', () => {
+    // The seam, asserted empty. `stationed` is one line of vocabulary held open for the shop staff,
+    // and this is what stops it becoming half a feature while it waits: the day something carries
+    // it, this test fails and whoever added it has to say so.
+    for (const key of ARCH_KEYS) assert.ok(!hasProperty(ARCH[key].entity, 'stationed'), key);
+    for (const e of edgePlans().entities) assert.ok(!hasProperty(e.meta, 'stationed'), `piece ${e.piece}`);
+});
+
+test('the building family is declared and empty', () => {
+    // The other seam. Buildings are the same problem as the kiosks at a different size and reuse
+    // world/structure.ts; the family exists so that adding them is additive.
+    const families = new Set(edgePlans().entities.map(e => e.meta.family));
+    assert.deepEqual([...families].sort(), ['furniture', 'kiosk']);
+});
+
+test('only vendors carry vendor data', () => {
+    for (const e of edgePlans().entities) {
+        assert.equal(e.vendor !== undefined, hasProperty(e.meta, 'vendor'),
+            `piece ${e.piece} disagrees with itself about being a vendor`);
     }
 });
