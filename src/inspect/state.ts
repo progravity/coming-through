@@ -12,6 +12,7 @@
  * have been the wrong scheme.
  */
 import { parseSeed } from '../core/rng.ts';
+import { LOOK_NAMES } from '../render/look.ts';
 import { defaultControls, defaultOverlays, gateIds, overlaysOf } from './inspectable.ts';
 import type { Controls, Inspectable } from './inspectable.ts';
 import { DEFAULT_ENTITY, resolve } from './registry.ts';
@@ -41,6 +42,8 @@ export interface InspectState {
      * in the address bar: a close look you cannot reload is a close look you cannot compare against.
      */
     view: View;
+    /** Which rendering direction is on, by slug. `current` is the shipped one and stays out of the address bar. */
+    look: string;
 }
 
 /** Fixed, never random: opening the tool twice has to show the same thing. */
@@ -95,6 +98,7 @@ export function stateFor(e: Inspectable, mode: string, search: string, pinned: C
             panX: num(q.get('panx'), REST.panX),
             panY: num(q.get('pany'), REST.panY),
         }),
+        look: LOOK_NAMES.includes(q.get('look') ?? '') ? (q.get('look') as string) : 'current',
     };
 }
 
@@ -132,6 +136,7 @@ export function queryOf(s: InspectState, e: Inspectable): URLSearchParams {
         const on = s.overlays.has(o.id);
         if (on !== (o.on === true)) q.set(o.id, on ? '1' : '0');
     }
+    if (s.look !== 'current') q.set('look', s.look);
     return q;
 }
 

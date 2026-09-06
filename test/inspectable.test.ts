@@ -28,6 +28,7 @@ import { FURNITURE } from '../src/inspect/entities/furniture.ts';
 import { KIOSK } from '../src/inspect/entities/kiosk.ts';
 import { bench } from '../src/world/furniture.ts';
 import { PATH } from '../src/world/path.ts';
+import { LOOKS, LOOK_NAMES, lookNamed } from '../src/render/look.ts';
 
 /** A part is a unit cube under its own matrix, whichever pool or kit drew it. */
 const part = (x: number, y: number, z: number, sx: number, sy: number, sz: number): DrawnPart => ({
@@ -416,4 +417,34 @@ test('a value a cast wrote back does not reach the address bar', () => {
     live.controls.open = true;
     assert.equal(queryOf(live, FAKE).get('swing'), '0.900');
     assert.equal(queryOf(live, FAKE).get('open'), null);
+});
+
+test('the inspector offers exactly the looks that exist, from the one list', () => {
+    // The point of the buttons: a seventh look in render/look.ts grows a seventh button with no
+    // edit here, the same way a seventh entity grows a picker entry.
+    const person = ENTITIES[0];
+    const s = stateFor(person, 'single', '?look=matcap');
+    assert.equal(s.look, 'matcap');
+    assert.ok(LOOK_NAMES.includes(s.look));
+    // A name nobody published falls back to the shipped look rather than a blank screen.
+    assert.equal(stateFor(person, 'single', '?look=nonesuch').look, 'current');
+    assert.equal(stateFor(person, 'single', '?seed=1').look, 'current');
+    // and it round-trips
+    assert.equal(queryOf(s, person).get('look'), 'matcap');
+    assert.equal(queryOf(stateFor(person, 'single', '?seed=1'), person).get('look'), null);
+});
+
+test('every cast can wear a look, including the ones made of edge pieces', () => {
+    for (const entity of ENTITIES) {
+        const cast = entity.mount(new THREE.Scene());
+        cast.rebuild(1, 1, defaultControls(entity));
+        cast.draw(0, [0], 0);
+        // Not "it changed something" -- just that the interface is honoured by every conformance,
+        // which is what stops the shell reaching past it into a cast's internals.
+        assert.equal(typeof cast.dress, 'function', `${entity.id} cannot be dressed`);
+        cast.dress(lookNamed('soft'));
+        cast.dress(lookNamed('current'));
+        assert.ok(cast.parts(0).length > 0, `${entity.id} lost its parts to a look`);
+    }
+    assert.ok(LOOKS.length === 6);
 });

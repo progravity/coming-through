@@ -168,6 +168,11 @@ export class PartPools {
     }
 
     setInk(on: boolean): void {
+        // A same-state call is not a transition: `put` keeps every shell current while ink stays on,
+        // and a shell that stays hidden needs no clearing either way. Skipping here is what keeps a
+        // look switch that leaves `inkOn` alone -- most of them -- from blanking every shell for a
+        // frame it never needed to. Only an actual off-to-on edge reaches the clear below.
+        if (on === this.inkOn) return;
         this.inkOn = on;
         for (const name of Object.keys(this.pools) as PoolName[]) {
             const P = this.pools[name];

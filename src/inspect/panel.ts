@@ -4,6 +4,7 @@
  * All of it is injected from here -- including the rules that hide the game's own HUD -- so
  * index.html carries nothing for a tool that a normal run never loads.
  */
+import { LOOKS } from '../render/look.ts';
 import { overlaysOf } from './inspectable.ts';
 import type { ControlValue, Inspectable, Readout } from './inspectable.ts';
 import { ENTITIES } from './registry.ts';
@@ -90,6 +91,8 @@ export interface Handlers {
     /** Set one control by id. A gated scalar's gate is the shell's to switch, not the panel's. */
     setControl(id: string, v: ControlValue): void;
     toggleOverlay(id: string): void;
+    /** Wear one of `LOOKS`, by slug. */
+    setLook(slug: string): void;
     /** Next or previous variation: a fresh seed, or the next value of the stepping control. */
     step(delta: number): void;
     setSeedText(text: string): void;
@@ -124,6 +127,7 @@ export class Panel {
     private readonly modeSeg: Segmented<InspectState['mode']>;
     private readonly picker: Segmented<string>;
     private readonly enums = new Map<string, Segmented<string>>();
+    private looks: Segmented<string> | undefined;
     private readonly toggles = new Map<string, HTMLButtonElement>();
     private readonly scalars = new Map<string, HTMLInputElement>();
     private readonly overlayBtns = new Map<string, HTMLButtonElement>();
@@ -237,6 +241,12 @@ export class Panel {
             this.dyn.append(label(c.label), row);
         }
 
+        // `look` sits above `debug` for the same crowding reason `debug` sits above `hold angle`:
+        // the newest row goes as high as it can, so the tallest one stays last off the bottom.
+        const looks = segmented(LOOKS.map(l => l.slug), v => this.h.setLook(v));
+        this.looks = looks;
+        this.dyn.append(label('look'), looks.el);
+
         // The overlays sit above the angle presets: they are what the collider and the service
         // points are looked at through, and at the bottom of a strip that has grown an entity
         // picker they fall below the fold on a 900-pixel window.
@@ -274,6 +284,9 @@ export class Panel {
         this.modeSeg.set(s.mode);
         this.pauseBtn.classList.toggle('on', s.paused);
         for (const [id, seg] of this.enums) seg.set(String(s.controls[id]));
+        // The row exists only once an entity has been set, which is the same lifecycle every other
+        // declared control in this card has.
+        this.looks?.set(s.look);
         for (const [id, b] of this.toggles) b.classList.toggle('on', s.controls[id] === true);
         for (const [id, b] of this.overlayBtns) b.classList.toggle('on', s.overlays.has(id));
         if (document.activeElement !== this.seedBox) this.seedBox.value = String(s.seed);
@@ -309,7 +322,7 @@ export class Panel {
 
 /** The help line, read off the declaration so it cannot describe a key that is not bound. */
 function keysFor(e: Inspectable): string {
-    const bits = ['[ ] next', '← → turn', 'space pause', 'wheel zoom', 'shift-drag pan', '0 reset view'];
+    const bits = ['[ ] next', '← → turn', 'space pause', 'wheel zoom', 'shift-drag pan', '0 reset view', 'L look'];
     for (const c of e.controls) {
         // A scalar names two nudge keys where every other kind names one; it has no `key` at all.
         if (c.kind === 'scalar') {

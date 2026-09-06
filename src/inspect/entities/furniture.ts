@@ -15,6 +15,7 @@
 // Only ever a type here -- `EdgeExhibit` is what touches three.js.
 import type * as THREE from 'three';
 import { EDGE } from '../../palette.ts';
+import type { Look } from '../../render/look.ts';
 import type { EdgePlan } from '../../world/edge.ts';
 import { bench, bin, lamp } from '../../world/furniture.ts';
 import { PATH } from '../../world/path.ts';
@@ -41,6 +42,8 @@ class FurnitureCast implements Cast {
     private kinds: Kind[] = [];
     private plans: EdgePlan[] = [];
     private active: ReadonlySet<string> = new Set();
+    /** Held so a rebuild -- disposing and remaking every exhibit -- can re-dress the new ones. */
+    private look: Look | null = null;
 
     constructor(scene: THREE.Scene) { this.scene = scene; }
 
@@ -59,6 +62,9 @@ class FurnitureCast implements Cast {
             this.plans.push(plan);
         }
         this.apply();
+        // Freshly built exhibits wear the shipped look until told otherwise; a look already chosen
+        // must not be silently lost the moment the seed or the kind steps.
+        if (this.look !== null) for (const e of this.exhibits) e.dress(this.look);
     }
 
     step(): void {}
@@ -73,6 +79,11 @@ class FurnitureCast implements Cast {
 
     private apply(): void {
         for (const e of this.exhibits) { e.setInk(this.active.has(INK)); e.applyOverlays(this.active); }
+    }
+
+    dress(look: Look | null): void {
+        this.look = look;
+        for (const e of this.exhibits) e.dress(look);
     }
 
     readout(i: number, top: number): Readout {

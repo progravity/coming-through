@@ -13,8 +13,9 @@
 import * as THREE from 'three';
 import { parseSeed } from '../core/rng.ts';
 import { MAX_CATCHUP_STEPS, SIM_DT } from '../core/time.ts';
+import { LOOK_NAMES, lookNamed } from '../render/look.ts';
 import { PartGizmos, measure, newBounds } from './gizmos.ts';
-import { GIZMOS, controlOf, findKey } from './inspectable.ts';
+import { GIZMOS, INK, controlOf, findKey } from './inspectable.ts';
 import type { ControlValue, DrawnPart, Inspectable, Readout } from './inspectable.ts';
 import { Panel } from './panel.ts';
 import { DEFAULT_ENTITY, byId } from './registry.ts';
@@ -89,6 +90,17 @@ export function startInspector(mode: string): void {
         tops.length = 0;
         for (let i = 0; i < n; i++) tops.push(0);
         needsReadout = true;
+        // The exhibits are new, so whatever look was on has to be put back on them.
+        dressAll();
+    }
+
+    /** Put the current look on everything the stage is holding. Called on a change and after a rebuild. */
+    function dressAll(): void {
+        cast.dress(lookNamed(state.look));
+        // A look that turns the ink off and an ink overlay that says it is on cannot both be right.
+        // The look wins and the button moves, so you can see why the line went away.
+        const wantsInk = lookNamed(state.look)?.inkOn ?? true;
+        if (wantsInk !== state.overlays.has(INK)) toggleOverlay(INK);
     }
 
     /** Apply a change, rebuilding the cast only when it must. */
@@ -108,6 +120,7 @@ export function startInspector(mode: string): void {
             gizmos.setVisible(state.overlays.has(GIZMOS));
             cast.overlays(state.overlays);
         }
+        if (p.look !== undefined) { state.look = p.look; dressAll(); }
         panel.sync(state);
         if (must) { rebuild(); reframe(); }
         // Once per change, never per frame: a held arrow key or a slider drag reaches here many
@@ -163,6 +176,7 @@ export function startInspector(mode: string): void {
         step: stepVariation,
         setSeedText: (text: string) => { if (text.trim() !== '') patch({ seed: parseSeed(text) }); },
         setEntity,
+        setLook: (slug: string) => patch({ look: slug }),
         zoom: stepZoom,
         resetView: () => patch({ view: REST }),
     });
@@ -256,6 +270,7 @@ export function startInspector(mode: string): void {
             case '0': patch({ view: REST }); break;
             case '+': case '=': stepZoom(ZOOM_STEP); break;
             case '-': case '_': stepZoom(1 / ZOOM_STEP); break;
+            case 'l': case 'L': patch({ look: cycle(LOOK_NAMES, state.look, 1) }); break;
             default: if (!declaredKey(e.key, e.shiftKey)) return;
         }
         e.preventDefault();
@@ -272,6 +287,7 @@ export function startInspector(mode: string): void {
     // ---------- start ----------
     gizmos.setVisible(state.overlays.has(GIZMOS));
     cast.overlays(state.overlays);
+    dressAll();
     stage.setView(state.view);
     panel.sync(state);
     rebuild();

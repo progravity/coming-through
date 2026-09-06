@@ -16,6 +16,7 @@ import type * as THREE from 'three';
 import { ARCH_KEYS } from '../../archetypes.ts';
 import { OUTFITS, PALETTE } from '../../palette.ts';
 import type { Recipe } from '../../recipe.ts';
+import type { Look } from '../../render/look.ts';
 import { drawPerson } from '../../render/person.ts';
 import type { PartRecord } from '../gizmos.ts';
 import { RecordingPools } from '../gizmos.ts';
@@ -125,6 +126,12 @@ class PersonCast implements Cast {
         const on = active.has(INK);
         // setInk clears every shell on the way back in, so it is worth not asking twice.
         if (on !== this.ink) { this.ink = on; this.pools.setInk(on); }
+    }
+
+    /** `pools.dress` is what actually knows what a look means; the field just keeps in step with it. */
+    dress(look: Look | null): void {
+        this.pools.dress(look);
+        this.ink = this.pools.inkOn;
     }
 
     /**

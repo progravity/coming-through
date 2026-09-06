@@ -17,6 +17,7 @@
  * worse than no turntable.
  */
 import type * as THREE from 'three';
+import type { Look } from '../render/look.ts';
 
 /**
  * Which shelf a kind of entity sits on. Grouping for the picker, and a home for what comes next --
@@ -130,6 +131,14 @@ export interface Cast {
     readout(i: number, top: number): Readout;
     /** The one line that changes every frame, if this entity has anything to say there. */
     status?(): string;
+    /**
+     * Wear a rendering direction, or `null` for the shipped one.
+     *
+     * On the interface rather than in one conformance because **every** entity needs it -- the rule
+     * about pushing a single entity's needs into its own file does not apply to something all of
+     * them do, and the alternative is the shell reaching past this interface into a cast's pools.
+     */
+    dress(look: Look | null): void;
 }
 
 /** What one kind of entity is, and how to put some on a stage. */

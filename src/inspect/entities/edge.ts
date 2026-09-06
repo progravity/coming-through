@@ -11,6 +11,7 @@
  * The overlays live in the inner group, so they are turned with the object and cannot drift off it.
  */
 import * as THREE from 'three';
+import type { Look } from '../../render/look.ts';
 import type { EdgePlan, Solid, Standing } from '../../world/edge.ts';
 import { barMatrix, buildEdge, standingMatrix } from '../../world/kit.ts';
 import type { EdgeLayer } from '../../world/kit.ts';
@@ -199,6 +200,8 @@ export class EdgeExhibit {
     }
 
     setInk(on: boolean): void { this.layer.setInk(on); }
+
+    dress(look: Look | null): void { this.layer.dress(look); }
 
     /**
      * Show whichever of this exhibit's overlays are in `active`, and hide the rest.
