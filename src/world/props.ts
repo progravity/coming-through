@@ -47,6 +47,12 @@ export function buildProps(scene: THREE.Scene): Props {
     for (let i = 0; i < 7; i++) built.push(slab(scene, -(L + 38), 12 + i * 3.5, 3, 1 + i * 2.2, 3, 0x4a7fb5, (1 + i * 2.2) / 2));
     built.push(slab(scene, -(L + 60), 40, 14, 20, 14, 0x9a8f7a, 10));
 
+    /**
+     * What each prop shipped with, captured once, so `current` puts it back rather than rebuilding
+     * it -- and so `dress` can tell its own material from a look's by identity against this rather
+     * than by `worldToon`'s `userData.shared` flag, which happens to answer correctly here only
+     * because every prop's shipped material comes out of that cache.
+     */
     const shipped = built.map(m => m.material as THREE.Material);
     return {
         wheel,
@@ -58,7 +64,10 @@ export function buildProps(scene: THREE.Scene): Props {
                 const want = look?.body?.({ color: (shipped[i] as THREE.MeshToonMaterial).color.getHex(), vertexColors: false })
                     ?? shipped[i];
                 if (had === want) continue;
-                if (had.userData.shared !== true) had.dispose();
+                // Only ever dispose what a look made. The shared flag stays as a second lock: these
+                // materials are `worldToon`'s cache entries, and disposing one guts every other
+                // surface drawing in that colour.
+                if (had !== shipped[i] && had.userData.shared !== true) had.dispose();
                 mesh.material = want;
             }
         },

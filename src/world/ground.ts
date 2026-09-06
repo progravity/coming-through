@@ -276,6 +276,11 @@ const GRAIN_NEAR = 18, GRAIN_FAR = 55;
  * - **It fades out with distance.** Grain finer than a pixel is not texture, it is shimmer -- it
  *   crawls as the camera moves and it aliases into moire at range. Past `GRAIN_FAR` the surface is
  *   flat again, which is also where the fog has taken it.
+ *
+ * One constraint follows for anyone adding a look: **this assigns `onBeforeCompile` rather than
+ * chaining it**, and `Ground.dress` runs it over whatever material the look handed back. A look
+ * whose `body` patches the shader that way would have its patch overwritten on the ground alone,
+ * which reads as the ground being the one surface that ignored it. None of the six do.
  */
 function grainy<T extends THREE.Material>(m: T, depth: { value: number }): T {
     if (GRAIN === 0) return m;
@@ -359,6 +364,9 @@ export function buildGround(scene: THREE.Scene): Ground {
                 ? shipped
                 : grainy(look.body({ color: 0xffffff, vertexColors: true }), depth);
             if (surface.material !== want) {
+                // Only ever dispose what a look made. Identity against the captured shipped
+                // material rather than a `userData.shared` flag, because this one is the ground's
+                // own and carries no flag -- the case the flag alone would get wrong.
                 if (surface.material !== shipped) (surface.material as THREE.Material).dispose();
                 surface.material = want;
             }

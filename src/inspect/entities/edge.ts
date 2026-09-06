@@ -100,10 +100,14 @@ export function spotMarker(at: { s: number; n: number }, colour: number): THREE.
  * a process-wide cache keyed by colour and every kit batch draws through the same white one, so
  * disposing it throws away a shader program the rest of the page is still holding -- and three.js
  * quietly rebuilds it, so a rebuild per `[`, per cart type, per kind of furniture bought a shader
- * recompile that nothing on screen ever admitted to. It is the only toon material down here;
- * everything the exhibit makes for itself is basic or line-basic. The other is `ArrowHelper`, which
- * shares one line geometry and one cone geometry across every arrow three.js has ever made while
- * giving each arrow materials of its own -- so an arrow's geometry is not ours and its material is.
+ * recompile that nothing on screen ever admitted to. **`userData.shared` is the fact being tested**,
+ * and it is tested by name: a cached material is what must survive, not a toon one. Asking whether
+ * it was a `MeshToonMaterial` is true of exactly the same objects today and would stop being true
+ * the moment a look returned a toon material of its own -- a two-step ramp is the obvious seventh --
+ * which would then leak one material per batch, in a tool that rebuilds on every keypress.
+ * The other is `ArrowHelper`, which shares one line geometry and one cone geometry across every
+ * arrow three.js has ever made while giving each arrow materials of its own -- so an arrow's
+ * geometry is not ours and its material is.
  *
  * Only safe today because the inspector never runs beside a live world. `Stage` already imports
  * `world/index.ts`, so that is not a property to keep leaning on.
@@ -114,7 +118,7 @@ function disposeTree(root: THREE.Object3D): void {
         if (!(o.parent instanceof THREE.ArrowHelper)) m.geometry?.dispose();
         const mat = m.material;
         for (const x of Array.isArray(mat) ? mat : [mat]) {
-            if (x !== undefined && !(x instanceof THREE.MeshToonMaterial)) x.dispose();
+            if (x !== undefined && x.userData.shared !== true) x.dispose();
         }
     });
 }

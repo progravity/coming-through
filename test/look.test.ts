@@ -197,34 +197,63 @@ test('nothing outside the comparator depends on the comparator', () => {
     assert.ok(checked > 20, `only scanned ${checked} files under src/`);
 });
 
-test('the edge layer restyles without disposing the material every cart shares', () => {
+/** Every body mesh one instanced layer put under a scene: its shells wear the back-face ink. */
+function bodyMeshes(root: THREE.Object3D): THREE.InstancedMesh[] {
+    const out: THREE.InstancedMesh[] = [];
+    root.traverse(o => {
+        if (o instanceof THREE.InstancedMesh && (o.material as THREE.Material).side !== THREE.BackSide) out.push(o);
+    });
+    return out;
+}
+
+test('the edge layer restyles without disposing the material every cart shares, and comes back', () => {
     const scene = new THREE.Scene();
     const edge = buildEdge(scene, [edgePlans()]);
     const shared = worldToon(0xffffff);
     let disposed = 0;
     shared.addEventListener('dispose', () => { disposed++; });
+    const bodies = bodyMeshes(scene);
+    assert.ok(bodies.length > 0, 'the edge layer put no body meshes in the scene');
+    const shipped = bodies.map(m => m.material as THREE.Material);
 
     edge.dress(lookNamed('soft'));
     // The cache is keyed by colour and every batch draws through the same white material. Disposing
     // it guts every other surface that asked for white -- a bug this repo has already found once.
     assert.equal(disposed, 0, 'a look disposed the shared world material');
     assert.equal(worldToon(0xffffff), shared, 'the cache handed back a different object');
+    for (const m of bodies) assert.notEqual(m.material, shared, 'a batch kept its shipped material under soft');
 
+    // Restoring is the half easiest to get wrong, and the half a one-way door would pass without.
     edge.dress(lookNamed('current'));
     assert.equal(disposed, 0);
+    for (let i = 0; i < bodies.length; i++) {
+        assert.equal(bodies[i].material, shipped[i], 'the edge did not come back to its shipped material');
+    }
 });
 
-test('the props take a look, keeping the colour each one carries', () => {
+test('the props take a look, keeping the colour each one carries, and come back', () => {
     const scene = new THREE.Scene();
     const props = buildProps(scene);
-    const before = scene.children.filter((c): c is THREE.Mesh => c instanceof THREE.Mesh)
-        .map(m => (m.material as THREE.MeshToonMaterial).color.getHex());
+    const meshes = scene.children.filter((c): c is THREE.Mesh => c instanceof THREE.Mesh);
+    const shipped = meshes.map(m => m.material as THREE.Material);
+    const before = shipped.map(m => (m as THREE.MeshToonMaterial).color.getHex());
+    // Every prop draws through `worldToon`, so a dispose here would reach the edge layer and the
+    // rest of the skyline as well. Counted rather than assumed, on the materials themselves.
+    let disposed = 0;
+    for (const m of new Set(shipped)) m.addEventListener('dispose', () => { disposed++; });
+
     props.dress(lookNamed('soft'));
-    const after = scene.children.filter((c): c is THREE.Mesh => c instanceof THREE.Mesh)
-        .map(m => (m.material as THREE.MeshStandardMaterial).color.getHex());
+    const after = meshes.map(m => (m.material as THREE.MeshStandardMaterial).color.getHex());
     // A prop's colour is in its material, not on the instance, so a look that forgot to ask for it
     // would repaint the whole skyline white.
     assert.deepEqual(after, before, 'a prop lost its colour under a look');
+    assert.equal(disposed, 0, 'a look disposed a shared world material out from under the props');
+
+    props.dress(lookNamed('current'));
+    for (let i = 0; i < meshes.length; i++) {
+        assert.equal(meshes[i].material, shipped[i], 'a prop did not come back to its shipped material');
+    }
+    assert.equal(disposed, 0);
 });
 
 test('the ground takes a look and keeps its grain', () => {

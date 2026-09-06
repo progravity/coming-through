@@ -229,9 +229,11 @@ interface Mover { batch: Batch; index: number; st: Standing; }
 /**
  * Place every plan's pieces through the curve and hand `parent` one group holding all of it.
  *
- * A group rather than a handful of loose children on purpose: `compare/treatments.ts` restyles the
- * character pools by finding instanced meshes, and the edge is instanced too. Pool meshes carry a
- * tag it filters on, and keeping the edge one level down means it is not even offered.
+ * A group rather than a handful of loose children on purpose: the layer is **one thing**, so it
+ * goes in, comes out, moves and turns as one, and disposing an exhibit is one call. It also keeps
+ * the whole layer off a scene's top level, where `compare/treatments.ts` walks the children
+ * counting the character pools' meshes -- the tag on those is what really tells them apart, and
+ * this is the second lock on the same door.
  *
  * `parent` is an `Object3D` rather than a `Scene` so the inspection stage can hang one object's
  * worth of edge under a group it moves and turns. The game passes its scene, as it always did.
@@ -256,6 +258,17 @@ export function buildEdge(parent: THREE.Object3D, plans: readonly EdgePlan[], cu
     const built = kit.build();
     parent.add(built.group);
     const batches = built.batches;
+    /**
+     * What each batch shipped with, captured once.
+     *
+     * `dress` tells its own material from a look's by **identity against this**, not by the
+     * `userData.shared` flag alone. Every batch today ships through `worldToon(0xffffff)`, so the
+     * flag would answer correctly -- but only by luck: a layer whose shipped material is private
+     * carries no flag, and a flag-only check would dispose the very thing `current` has to put back.
+     * The identity check subsumes both cases, because a cached shared material *is* this layer's
+     * shipped one.
+     */
+    const shipped = batches.map(b => b.mesh?.material as THREE.Material | undefined);
 
     // Only the batches something actually moves in are re-uploaded, and only when there is one.
     const touched = [...new Set(movers.map(mv => mv.batch))];
@@ -286,14 +299,19 @@ export function buildEdge(parent: THREE.Object3D, plans: readonly EdgePlan[], cu
      */
     const dress = (look: Look | null): void => {
         over = inkClearance(INK_OVER, look?.inkWeight ?? 0);
-        for (const b of batches) {
+        for (let i = 0; i < batches.length; i++) {
+            const b = batches[i];
             const body = b.mesh, ink = b.inkMesh;
             if (body !== undefined) {
-                const want = look?.body?.({ color: 0xffffff, vertexColors: false }) ?? worldToon(0xffffff);
+                // Defined wherever `body` is: `Kit.build` writes the mesh and this in one breath.
+                const ship = shipped[i] as THREE.Material;
+                const want = look?.body?.({ color: 0xffffff, vertexColors: false }) ?? ship;
                 const had = body.material as THREE.Material;
                 if (had !== want) {
-                    // Never dispose the cache's own: it is shared with every other white surface.
-                    if (had.userData.shared !== true) had.dispose();
+                    // Only ever dispose what a look made. The shipped material is put back by the
+                    // next `current`, and it is `worldToon`'s cache entry besides -- shared with
+                    // every other white surface, which is the second reason not to touch it.
+                    if (had !== ship && had.userData.shared !== true) had.dispose();
                     body.material = want;
                 }
             }
