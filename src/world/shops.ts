@@ -233,19 +233,22 @@ const TOY_SYMBOL: readonly Prim[] = [
  *
  * A row rather than one object, and that is the point of it -- what says *clothes shop* is a
  * display, and three of a thing is the smallest number that reads as one. The staggering does the
- * rest of the work: the three tops climb 4.98, 5.29, 6.04, so no hat's outline is swallowed by its
+ * rest of the work: the three tops climb 4.98, 5.28, 6.04, so no hat's outline is swallowed by its
  * neighbour's and the group has a shape of its own rather than being a flat band.
  *
  * The three are chosen to differ in *outline* and not merely in trim, since colour is the first
  * thing distance takes away:
  *
  * - **A sun hat** is a wide flat disc with a shallow dome on it -- much wider than it is tall.
- * - **A cap** is a dome with a peak out of one side only. The peak is a disc pushed out until its
- *   back edge is buried in the dome, which is what leaves a half-disc showing without a half-disc
- *   primitive existing. It points **along the path rather than at the walkway**, which is the one
- *   correction this symbol needed: a peak aimed at the viewer is a disc seen end-on, so the cap
- *   read as a beanie from the only angle anybody sees it from. Sideways it is a profile, and a
- *   profile is what a cap is recognised by -- which is also how the other two are read here.
+ * - **A cap** is a dome on a flat rim, with a peak out of one side of it. Two things make it a cap
+ *   rather than a ball on a stick. The rim is a disc *wider than the dome at every height it
+ *   covers*, so the dome's underside is swallowed by it and the silhouette ends in a hard
+ *   horizontal line -- a ball left to close over on its own reads as a sphere however squashed it
+ *   is, because a curve that returns to a point has no bottom edge to see. And the peak points
+ *   **along the path rather than at the walkway**: aimed at the viewer it is a disc seen end-on, so
+ *   the cap read as a beanie from the only angle anybody sees it from. Sideways it is a profile,
+ *   and a profile is what a cap is recognised by -- which is how the other two are read here too.
+ *   The peak sits at the rim's own height, so the two merge into one continuous brim.
  * - **A top hat** is a tall cylinder on a narrow brim, and it is the tallest thing on the shelf.
  *
  * **Only the sun hat's colour rolls.** The top hat is `SHOP.felt` -- a top hat is black, and a roll
@@ -266,9 +269,10 @@ const CLOTHING_SYMBOL: readonly Prim[] = [
     { shape: 'cyl', colour: 'topper', dn: PLINTH_N, dy: 4.45, da: -HAT_APART, across: 1.45, up: 0.14, along: 1.45 },
     { shape: 'cyl', colour: 'accent', dn: PLINTH_N, dy: 4.58, da: -HAT_APART, across: 1.06, up: 0.12, along: 1.06 },
     { shape: 'ball', colour: 'topper', dn: PLINTH_N, dy: 4.7, da: -HAT_APART, across: 1, up: 0.56, along: 1 },
-    // Cap: a dome, and a peak pushed forward far enough that only its front half shows.
-    { shape: 'ball', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.95, da: 0, across: 1.05, up: 0.68, along: 1.05 },
-    { shape: 'cyl', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.68, da: -0.42, across: 0.82, up: 0.12, along: 0.82 },
+    // Cap: a flat rim, a dome sitting down inside it, and a peak out of one side at the rim's height.
+    { shape: 'cyl', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.72, da: 0, across: 1.18, up: 0.16, along: 1.18 },
+    { shape: 'ball', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.97, da: 0, across: 1.02, up: 0.62, along: 1.02 },
+    { shape: 'cyl', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.72, da: -0.42, across: 0.86, up: 0.13, along: 0.86 },
     // Top hat: narrow brim, band, tall crown standing on the shelf's high end.
     { shape: 'cyl', colour: SHOP.felt, dn: PLINTH_N, dy: 4.69, da: HAT_APART, across: 1.35, up: 0.15, along: 1.35 },
     { shape: 'cyl', colour: 'accent', dn: PLINTH_N, dy: 4.93, da: HAT_APART, across: 0.95, up: 0.2, along: 0.95 },
