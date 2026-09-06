@@ -596,21 +596,20 @@ export const SHOP = {
     blockB: mix(PALETTE[8], PALETTE[9], 0.2),
     blockC: mix(PALETTE[0], PALETTE[15], 0.22),
     /**
-     * A hat. Felt, so deeper and less saturated than the other four -- a bright disc on a stalk is
-     * a lollipop, and it is the band and the brim that say hat.
+     * A t-shirt. Dyed cotton, so these are garment colours -- the same kind of thing the crowd is
+     * wearing, which is the point of a clothes shop.
      *
-     * **Mid-tone, though, not dark**, which was the correction. The first set here mixed every
-     * entry *toward charcoal* and the whole hat came out a black dome: the toon ramp drops a
-     * curved surface's lower half to its darkest band, so a colour that starts dark has nowhere
-     * left to go and the crown, the band and the brim all land on one value. There is no shape in a
-     * silhouette that dark. Diluted the other way instead -- toward off-white -- the shaded half is
-     * still recognisably the same hue and the hat reads as three parts.
+     * **Mid-tone, not dark.** The toon ramp drops a surface's shaded half to its darkest band, so a
+     * colour that starts dark has nowhere left to go and the body, the sleeves and the collar all
+     * land on one value -- and a silhouette with no internal edges is a blob whatever shape it
+     * really is. Every entry here is diluted toward off-white rather than toward charcoal, so the
+     * shaded half is still recognisably the same hue and the shirt reads as its parts.
      */
-    felt: [
-        mix(PALETTE[23], PALETTE[15], 0.35),
-        mix(PALETTE[6], PALETTE[0], 0.28),
+    shirt: [
+        mix(PALETTE[7], PALETTE[0], 0.22),
         mix(PALETTE[19], PALETTE[18], 0.2),
         mix(PALETTE[10], PALETTE[0], 0.25),
-        mix(PALETTE[20], PALETTE[0], 0.25),
+        mix(PALETTE[16], PALETTE[17], 0.22),
+        mix(PALETTE[22], PALETTE[0], 0.22),
     ],
 } as const;

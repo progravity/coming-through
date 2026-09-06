@@ -674,7 +674,7 @@ user of the structure pattern. They replace the four nondescript cubes `props.ts
 | candy | a wrapped sweet, wrapper twisted off both ends | round with flared ends | striped |
 | souvenir | a gift box, ribbon both ways, a bow | cube with a bow | striped |
 | toy | three building blocks, stacked and overlapping | hard-edged stack | solid |
-| clothing | a hat: wide flat brim, band, short crown | wide disc under a low dome | solid |
+| clothing | a t-shirt: body, dropped sleeves, collar band | a wide T over a narrow body | solid |
 | drinks | the cart's cup at building scale, lid and straw | tall taper | striped |
 
 **The template is one function and every shop calls it**: wall, plinth, cornice, two corner
@@ -694,10 +694,15 @@ were found on the turntable and are worth keeping:
   now and reach 6 to 7 m up.
 - **A stack must overlap.** Toy blocks with gaps between them and a tilted cap read as a tower
   falling over. They overlap by a third and lean only slightly, about the tangent.
-- **A hat is wider than it is tall, and flat on top.** A domed cap on a tall crown is a bell or a
-  bullet -- nothing in the outline says hat. The brim is over three metres across and the top is a
-  disc. `SHOP.felt` is mid-tone for the same reason: mixed toward charcoal, the toon ramp put crown,
-  band and brim all on one value and there was no shape left in the silhouette.
+- **The T is the whole read.** The shirt's sleeves reach well past a body that is much narrower
+  than they are, so the corners under them are cut away; drawn as one rectangle it is a sign board,
+  and with sleeves that only just clear the body it is a cross. They drop rather than sticking
+  straight out, which is what says cloth rather than signage, and the collar sits mostly *inside*
+  the shoulder line -- centred on it, it read as a luggage tag.
+- **Mid-tone, never dark.** `SHOP.shirt` is diluted toward off-white rather than charcoal. The toon
+  ramp drops a shaded face to its darkest band, so a colour that starts dark puts body, sleeves and
+  collar all on one value, and a silhouette with no internal edges is a blob whatever shape it
+  really is. This was found on the hat that stood here before the shirt, and it outlived it.
 
 **Colour is a livery** (see "Structures and kiosks" above): wall from the primary, joinery from the
 secondary, door/sign/awning-band from the accent, and the symbol from the type's own product set.
@@ -985,9 +990,9 @@ shift-drag or a right-drag pans, and `0` puts it back.
 The families are the taxonomy's own, imported from `entity.ts` rather than declared here: `person`,
 `kiosk`, `furniture` (benches, lamps, bins) and `building` (the five shopfronts). **The shop
 turntable is where the five symbols were authored**, and it earned itself immediately: the toy
-shop's blocks read as a tower falling over, the hat read as a bell, and every symbol was less than
-half the size it needed to be. None of that is visible from the walkway until it is too late to fix
-cheaply. `?inspect=row&entity=shop` is the view that answers "can you tell these five apart".
+shop's blocks read as a tower falling over, the clothes shop's collar read as a luggage tag, and
+every symbol was less than half the size it needed to be against a seven-metre frontage. None of
+that is visible from the walkway until it is too late to fix cheaply. `?inspect=row&entity=shop` is the view that answers "can you tell these five apart".
 
 **Adding an entity is two steps.** Write `src/inspect/entities/<thing>.ts` exporting an
 `Inspectable` whose `Cast` builds through the game's own assembler and reports its parts, then add

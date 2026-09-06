@@ -229,23 +229,34 @@ const TOY_SYMBOL: readonly Prim[] = [
 ];
 
 /**
- * An oversized hat: a wide flat brim, a band, and a short crown that narrows upward.
+ * An oversized t-shirt: a body, two sleeves dropping away from the shoulders, and a collar band.
  *
- * `taper` is wide at the top, so the crown is `lean: PI` -- the same half turn that stands the
- * ice-cream cart's wafer on its point. Right way up it is a bucket; upside down it is a hat.
+ * **The T is the whole read.** What identifies a shirt at distance is the outline and nothing
+ * inside it -- a wide horizontal span at the top over a narrower body, with the corners under the
+ * sleeves cut away. So the sleeves reach well past the body on both sides and the body is a good
+ * deal narrower than they are; a shirt drawn as one rectangle is a sign board, and one whose
+ * sleeves only just clear the body is a cross.
  *
- * **The top is flat and the brim is enormous**, and both are corrections. A domed cap on a tall
- * crown gave a bell, or a bullet: rounded over and taller than it was wide, with nothing in the
- * outline that said hat rather than any other lump on a roof. What identifies a hat at distance is
- * that it is *wider than it is tall* and that it has a hard horizontal line most of the way down --
- * the brim -- so the brim is over three metres across, the crown is shorter than the brim is wide,
- * and the top is a disc rather than a dome.
+ * The sleeves **drop** rather than sticking straight out, which is what says cloth rather than
+ * signage. `tilt` turns a part about the frame's normal, tipping it along the path, and the two
+ * sides take opposite signs: a part's `+along` end goes *down* under a positive tilt, so the sleeve
+ * out at `+da` wants a positive one and its mirror a negative. Both flip together with the facing,
+ * so a shop on the far edge of the path hangs its shirt the same way up.
+ *
+ * It faces the walkway, being a flat-ish thing, and that is the right way round rather than a
+ * compromise: its face is square to the path's normal, so it is broadside exactly when a walker is
+ * level with the shop, and it turns to meet them as they come. It keeps 0.62 m of depth so that it
+ * still has mass in the oblique view rather than thinning to a line.
+ *
+ * The collar sits **mostly inside the body**, with only a fifth of it standing above the shoulder
+ * line. Centred on the shoulders it read as a luggage tag: a band around a neck hole is a ring you
+ * see the near side of, so most of it has to be below the edge it is cut into.
  */
 const CLOTHING_SYMBOL: readonly Prim[] = [
-    { shape: 'cyl', colour: 'topper', dn: PLINTH_N, dy: 4.02, da: 0, across: 3.2, up: 0.28, along: 3.2 },
-    { shape: 'cyl', colour: 'accent', dn: PLINTH_N, dy: 4.45, da: 0, across: 2, up: 0.42, along: 2 },
-    { shape: 'taper', colour: 'topper', dn: PLINTH_N, dy: 4.9, da: 0, across: 1.9, up: 1.25, along: 1.9, lean: Math.PI },
-    { shape: 'cyl', colour: 'topper', dn: PLINTH_N, dy: 5.55, da: 0, across: 1.4, up: 0.14, along: 1.4 },
+    { shape: 'box', colour: 'topper', dn: PLINTH_N, dy: 4.72, da: 0, across: 0.62, up: 1.85, along: 1.75 },
+    { shape: 'box', colour: 'topper', dn: PLINTH_N, dy: 5.28, da: -1.32, across: 0.62, up: 0.66, along: 1.15, tilt: -0.38 },
+    { shape: 'box', colour: 'topper', dn: PLINTH_N, dy: 5.28, da: 1.32, across: 0.62, up: 0.66, along: 1.15, tilt: 0.38 },
+    { shape: 'box', colour: 'accent', dn: PLINTH_N, dy: 5.6, da: 0, across: 0.66, up: 0.3, along: 0.86 },
 ];
 
 /** The drinks cart's cup at building scale: tapered body, banded waist, domed lid, angled straw. */
@@ -276,7 +287,7 @@ export const SHOP_ARCHETYPES: Record<ShopType, StructureArchetype> = {
     candy: shop('candy', 'Sweet shop', SHOP.sweet, CANDY_SYMBOL, { striped: true }),
     souvenir: shop('souvenir', 'Souvenirs', SHOP.gift, SOUVENIR_SYMBOL, { striped: true }),
     toy: shop('toy', 'Toy shop', SHOP.block, TOY_SYMBOL),
-    clothing: shop('clothing', 'Clothing', SHOP.felt, CLOTHING_SYMBOL),
+    clothing: shop('clothing', 'Clothing', SHOP.shirt, CLOTHING_SYMBOL),
     drinks: shop('drinks', 'Drinks', KIOSK.cup, DRINKS_SYMBOL, { striped: true }),
 };
 
