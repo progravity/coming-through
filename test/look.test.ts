@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
 import { LOOKS, LOOK_NAMES, SHELL_FLOOR, SHELL_OVER, inkClearance, lookNamed } from '../src/render/look.ts';
+import { PartPools } from '../src/render/pools.ts';
 
 test('the six are one list, named once, in the order their panels print', () => {
     assert.deepEqual(LOOK_NAMES, ['current', 'toon-bare', 'soft-ink', 'soft', 'soft-thin', 'matcap']);
@@ -65,4 +66,61 @@ test('the ink clearance folds a weight in the way the old sweep did', () => {
     // And it cannot invert a shell however negative the weight is.
     assert.ok(inkClearance(SHELL_OVER, -10) >= SHELL_OVER * SHELL_FLOOR - 1e-12);
     assert.ok(inkClearance(SHELL_OVER, -10) > 0);
+});
+
+/** The shell growth the old sweep produced, for one axis, so the folded version can be held to it. */
+function sweptGrowth(size: number, weight: number): number {
+    const shipped = 1.06 + SHELL_OVER / size;      // what put() writes with no look
+    const len = size * shipped;                    // the shell column's length
+    return Math.max(len + weight, len * SHELL_FLOOR) / size;
+}
+
+test('a dressed pool grows its shells exactly as the sweep used to', () => {
+    const pools = new PartPools(new THREE.Scene());
+    const thin = lookNamed('soft-thin');
+    assert.ok(thin !== null);
+    // A thigh, a hand and a lens: the sizes where a constant clearance behaves differently, and
+    // where the floor is the difference between a finer line and an inside-out shell.
+    for (const size of [0.3, 0.06, 0.012]) {
+        const want = sweptGrowth(size, thin.inkWeight ?? 0);
+        const got = pools.shellGrowth(size);       // shipped, before dressing
+        assert.ok(Math.abs(got - (1.06 + SHELL_OVER / size)) < 1e-12, `undressed growth moved at ${size}`);
+        pools.dress(thin);
+        assert.ok(Math.abs(pools.shellGrowth(size) - want) < 1e-9,
+            `at size ${size} the fold gave ${pools.shellGrowth(size)}, the sweep gave ${want}`);
+        pools.dress(null);
+        assert.ok(Math.abs(pools.shellGrowth(size) - got) < 1e-12, `undressing did not restore at ${size}`);
+    }
+});
+
+test('dressing swaps the body materials and puts the shipped ones back', () => {
+    const scene = new THREE.Scene();
+    const pools = new PartPools(scene);
+    const bodies = scene.children.filter(
+        (c): c is THREE.InstancedMesh => c instanceof THREE.InstancedMesh && (c.material as THREE.Material).side !== THREE.BackSide,
+    );
+    assert.ok(bodies.length > 0, 'the pools put no body meshes in the scene');
+    const shipped = bodies.map(m => m.material as THREE.Material);
+
+    // `soft-ink`, not `matcap`: a matcap body paints a canvas texture, which needs a `document`
+    // this suite's node runtime does not have -- the same reason the look above skips calling
+    // matcap's `body` under node. `soft-ink` exercises the identical `dress` swap-and-restore path.
+    pools.dress(lookNamed('soft-ink'));
+    for (let i = 0; i < bodies.length; i++) {
+        assert.notEqual(bodies[i].material, shipped[i], 'a body kept its shipped material under soft-ink');
+    }
+    // `current` declares nothing, and nothing means *as shipped* -- not "as it currently is".
+    pools.dress(lookNamed('current'));
+    for (let i = 0; i < bodies.length; i++) {
+        assert.equal(bodies[i].material, shipped[i], 'the shipped material did not come back');
+    }
+});
+
+test('a look that turns the ink off is visible in inkOn, so the world and the UI can agree', () => {
+    const pools = new PartPools(new THREE.Scene());
+    assert.equal(pools.inkOn, true);
+    pools.dress(lookNamed('toon-bare'));
+    assert.equal(pools.inkOn, false);
+    pools.dress(lookNamed('current'));
+    assert.equal(pools.inkOn, true, 'current did not bring the ink back');
 });

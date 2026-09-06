@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 import { MAX } from '../world/layout.ts';
-import { makeInkMaterial, makeToonGradient, makeToonMaterial } from './materials.ts';
+import { INK_LINE, makeInkMaterial, makeToonGradient, makeToonMaterial } from './materials.ts';
+import { SHELL_FLOOR, SHELL_OVER } from './look.ts';
+import type { Look } from './look.ts';
 
 export type PoolName = 'body' | 'head' | 'ball' | 'nub' | 'cyl' | 'cone' | 'box';
 
@@ -35,6 +37,22 @@ export class PartPools {
     private hi = 1;
     /** Whether the ink outline shells are currently visible. */
     inkOn = true;
+    /**
+     * The clearance every ink shell stands proud of its part, in metres.
+     *
+     * A field rather than the literal it used to be, because a look may thin the line -- and
+     * folding the weight in here is what lets it, at the cost of nothing. `put` was already
+     * computing this growth once per part from the part's own size; a weight is a different
+     * constant in an expression that is already running, where it used to be a second pass over
+     * every ink matrix on every frame.
+     */
+    private over = SHELL_OVER;
+    /** True only while a look has thinned the line, so the shipped look never pays for the floor. */
+    private thinned = false;
+    /** The material each body mesh shipped with, so `dress(null)` can put it back rather than rebuild it. */
+    private readonly shipped: THREE.Material[] = [];
+    private readonly bodies: THREE.InstancedMesh[] = [];
+    private readonly shells: THREE.InstancedMesh[] = [];
 
     constructor(scene: THREE.Scene) {
         const toonMap = makeToonGradient();
@@ -50,6 +68,8 @@ export class PartPools {
             const white = new THREE.Color(0xffffff);
             for (let i = 0; i < n; i++) { mesh.setMatrixAt(i, ZERO); out.setMatrixAt(i, ZERO); mesh.setColorAt(i, white); }
             scene.add(mesh); scene.add(out);
+            this.bodies.push(mesh); this.shells.push(out);
+            this.shipped.push(mesh.material as THREE.Material);
             return { mesh, out, per };
         };
         this.pools = {
@@ -85,7 +105,7 @@ export class PartPools {
         // axis times that axis's scale, so growing s to s * 1.06 + 0.025 is one multiply per element
         // of the matrix we already have -- much cheaper than composing the whole thing again.
         const e = _m.elements;
-        const gx = 1.06 + 0.025 / sx, gy = 1.06 + 0.025 / sy, gz = 1.06 + 0.025 / sz;
+        const gx = this.shellGrowth(sx), gy = this.shellGrowth(sy), gz = this.shellGrowth(sz);
         e[0] *= gx; e[1] *= gx; e[2] *= gx;
         e[4] *= gy; e[5] *= gy; e[6] *= gy;
         e[8] *= gz; e[9] *= gz; e[10] *= gz;
@@ -158,6 +178,49 @@ export class PartPools {
             // back into use later cannot surface a shell left over from before ink was switched off.
             if (on) { for (let i = 0; i < P.out.instanceMatrix.count; i++) P.out.setMatrixAt(i, ZERO); P.out.instanceMatrix.needsUpdate = true; }
         }
+    }
+
+    /**
+     * How much bigger than the part its ink shell is drawn, along one axis.
+     *
+     * `size * 1.06 + over` as a ratio: a proportional term so a big part's shell does not look
+     * pinched, plus a constant so the line reads as one weight all over a figure. The floor is what
+     * keeps a thinned line honest -- subtracting a constant from a small part can take its shell
+     * inside the part and turn it inside out -- and it is branched out rather than always taken,
+     * because only one of the six looks thins anything and the other five are the hot path.
+     */
+    shellGrowth(size: number): number {
+        const g = 1.06 + this.over / size;
+        return this.thinned ? Math.max(g, (1.06 + SHELL_OVER / size) * SHELL_FLOOR) : g;
+    }
+
+    /**
+     * Wear a rendering direction, or `null`/`current` to go back to the shipped one.
+     *
+     * An absent field means **as shipped**, never "as it currently is": the inspector switches
+     * looks repeatedly in one session, and reading absence as "leave alone" would make every look a
+     * one-way door and `current` a no-op. So the shipped materials are kept and restored rather
+     * than rebuilt.
+     */
+    dress(look: Look | null): void {
+        const weight = look?.inkWeight ?? 0;
+        // No floor here: the floor belongs to the whole grown length, not to the clearance alone,
+        // which is what `shellGrowth` applies. Flooring both would thin the line by less than asked.
+        this.over = SHELL_OVER + weight;
+        this.thinned = weight < 0;
+        for (let i = 0; i < this.bodies.length; i++) {
+            const mesh = this.bodies[i];
+            const want = look?.body?.({ color: 0xffffff, vertexColors: false }) ?? this.shipped[i];
+            if (mesh.material === want) continue;
+            // Only ever dispose what a look made: the shipped material is the pool's own and is put
+            // back by the next `current`.
+            if (mesh.material !== this.shipped[i]) (mesh.material as THREE.Material).dispose();
+            mesh.material = want;
+        }
+        for (const shell of this.shells) {
+            (shell.material as THREE.MeshBasicMaterial).color.setHex(look?.inkColour ?? INK_LINE);
+        }
+        this.setInk(look?.inkOn ?? true);
     }
 }
 
