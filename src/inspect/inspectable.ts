@@ -17,13 +17,18 @@
  * worse than no turntable.
  */
 import type * as THREE from 'three';
+import type { Family } from '../entity.ts';
 import type { Look } from '../render/look.ts';
 
 /**
- * Which shelf a kind of entity sits on. Grouping for the picker, and a home for what comes next --
- * the shell branches on none of them.
+ * Which shelf a kind of entity sits on -- the taxonomy's own family, not a second word for it.
+ *
+ * Grouping for the picker is all the shell does with it, and it branches on none of them. It was
+ * declared here with a vocabulary of its own once (`agent`, `path-furniture`, `structure`), which
+ * was two names for one axis; `entity.ts` is where it lives now. Re-exported because every entity
+ * file already imports it from here.
  */
-export type Family = 'agent' | 'path-furniture' | 'kiosk' | 'structure';
+export type { Family };
 
 /**
  * One control an entity declares. Three kinds render every panel there is, and each one maps to a

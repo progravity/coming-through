@@ -165,7 +165,7 @@ export class Panel {
         this.ctl.appendChild(title);
 
         // The picker is grouped by family so a new shelf of entities has somewhere to appear.
-        const order: Record<string, number> = { agent: 0, kiosk: 1, 'path-furniture': 2, structure: 3 };
+        const order: Record<string, number> = { person: 0, kiosk: 1, furniture: 2, building: 3 };
         const ids = ENTITIES.slice()
             .sort((a, b) => (order[a.family] ?? 9) - (order[b.family] ?? 9))
             .map(e => e.id);

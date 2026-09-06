@@ -105,7 +105,7 @@ class FurnitureCast implements Cast {
 
 export const FURNITURE: Inspectable = {
     id: 'furniture',
-    family: 'path-furniture',
+    family: 'furniture',
     title: 'Furniture',
     controls: [{
         kind: 'enum', id: 'kind', label: 'kind',

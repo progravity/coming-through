@@ -183,7 +183,7 @@ class PersonCast implements Cast {
 
 export const PERSON: Inspectable = {
     id: 'person',
-    family: 'agent',
+    family: 'person',
     title: 'Person',
     controls: [
         { kind: 'enum', id: 'arch', label: 'archetype', options: ARCH_OPTIONS, value: 'seed', key: 't', rebuilds: true },

@@ -12,6 +12,7 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { test } from 'node:test';
 import { join, relative } from 'node:path';
 import { PROPERTIES, entityMeta, hasProperty } from '../src/entity.ts';
+import { ENTITIES } from '../src/inspect/registry.ts';
 import type { Property } from '../src/entity.ts';
 
 const SRC = new URL('../src/', import.meta.url).pathname;
@@ -39,6 +40,7 @@ test('the vocabulary is declared in exactly one place', () => {
     // and it is not a second entity taxonomy. So the family check looks for the taxonomy's own
     // members instead, which is what a duplicate would actually have to copy.
     const decls = [
+        /export type Family = [^\n]*'kiosk'/,
         /export const PROPERTIES\b/,
         /export type Placement\b/,
     ];
@@ -83,4 +85,11 @@ test('a property outside the vocabulary cannot be declared', () => {
     // term not in the list fails to build wherever it is written. This pins the derivation.
     const every: Property[] = [...PROPERTIES];
     assert.equal(every.length, PROPERTIES.length);
+});
+
+test('the inspector shelves entities by the same family the game files them under', () => {
+    // One axis, one vocabulary. The inspector had words of its own for this -- agent,
+    // path-furniture, structure -- which is two names for one concept, and the thing this removes.
+    const shelves = ENTITIES.map(e => `${e.id}:${e.family}`).sort();
+    assert.deepEqual(shelves, ['furniture:furniture', 'kiosk:kiosk', 'person:person']);
 });

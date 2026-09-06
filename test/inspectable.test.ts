@@ -103,7 +103,7 @@ test('an axis override reaches the cast and nothing else does', () => {
  * genuinely all it takes to be inspectable.
  */
 const FAKE: Inspectable = {
-    id: 'gate', family: 'structure', title: 'Gate',
+    id: 'gate', family: 'building', title: 'Gate',
     controls: [
         { kind: 'enum', id: 'style', label: 'style', options: ['seed', 'arch', 'post'], value: 'seed', key: 'y', rebuilds: true },
         { kind: 'toggle', id: 'open', label: 'open', value: false, key: 'u' },
