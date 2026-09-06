@@ -454,6 +454,32 @@ test('the ink switch and the look are two statements in the URL, and both surviv
     assert.equal(queryOf(bare, person).get('ink'), '0');
 });
 
+test('the ink overlay is reconciled by choosing a look and by nothing else', () => {
+    // Read rather than run, because the thing that went wrong is not reachable from node:
+    // `syncInk`, `dressAll` and `rebuild` are closures inside `startInspector`, which wants a
+    // canvas. That unreachability is part of why the bug survived, so the shell is read here the
+    // same way the import guards above read it, and the two properties the bug broke are pinned.
+    const shell = readFileSync(new URL('../src/inspect/index.ts', import.meta.url).pathname, 'utf8');
+
+    // One: the reconcile happens where a look is *chosen* and nowhere else. Called from `rebuild`
+    // it takes the ink away from anyone who pressed `o` and then stepped the seed or the kind.
+    const calls = shell.split('\n').filter(l => l.includes('syncInk()') && !l.includes('function syncInk'));
+    assert.equal(calls.length, 1, `syncInk() is called ${calls.length} times; exactly one call, from patch, is the rule`);
+    assert.ok(calls[0].includes('p.look !== undefined'),
+        `syncInk() is called from \`${calls[0].trim()}\`, which is not the look branch of patch`);
+
+    // Two: a rebuild dresses and then puts the buttons back over the top. Dressing alone sets the
+    // ink to what the look asks for, and four of the six ask for the shipped line.
+    const from = shell.indexOf('function dressAll');
+    assert.ok(from > 0, 'the shell no longer has a dressAll to check');
+    const body = shell.slice(from, from + shell.slice(from).indexOf('\n    }'));
+    assert.ok(body.includes('cast.dress('), 'dressAll stopped dressing');
+    assert.ok(body.indexOf('cast.dress(') < body.indexOf('cast.overlays(state.overlays)'),
+        'dressAll must assert the overlays *after* dressing, or a rebuild puts the ink back on');
+    assert.ok(!body.includes('toggleOverlay'),
+        'dressAll must not move a button: a rebuild calls it, and a rebuild is not a look change');
+});
+
 test('every cast can wear a look, including the ones made of edge pieces', () => {
     for (const entity of ENTITIES) {
         const cast = entity.mount(new THREE.Scene());
