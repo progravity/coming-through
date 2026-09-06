@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Look } from '../render/look.ts';
 import { buildEdge } from './kit.ts';
 import type { EdgeLayer } from './kit.ts';
 import { buildGround } from './ground.ts';
@@ -29,6 +30,13 @@ export interface World {
      * touches is reachable from the simulation.
      */
     animate(t: number): void;
+    /**
+     * Wear a rendering direction, or `null` for the shipped one.
+     *
+     * One call for the same reason `setInk` is one call: the loop should not have to keep a list of
+     * which layers happen to be restylable this week. The ground joins the other two here.
+     */
+    dress(look: Look | null): void;
 }
 
 /**
@@ -57,5 +65,6 @@ export function buildWorld(): World {
         scene, ground, props, edge,
         setInk: (on: boolean): void => { ground.setInk(on); edge.setInk(on); },
         animate: (t: number): void => { props.wheel.rotation.z = t * 0.15; edge.animate(t); },
+        dress: (look: Look | null): void => { props.dress(look); edge.dress(look); },
     };
 }

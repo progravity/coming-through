@@ -14,6 +14,10 @@ import { join } from 'node:path';
 import * as THREE from 'three';
 import { LOOKS, LOOK_NAMES, SHELL_FLOOR, SHELL_OVER, inkClearance, lookNamed } from '../src/render/look.ts';
 import { PartPools } from '../src/render/pools.ts';
+import { buildEdge } from '../src/world/kit.ts';
+import { edgePlans } from '../src/world/plan.ts';
+import { worldToon } from '../src/world/material.ts';
+import { buildProps } from '../src/world/props.ts';
 
 test('the six are one list, named once, in the order their panels print', () => {
     assert.deepEqual(LOOK_NAMES, ['current', 'toon-bare', 'soft-ink', 'soft', 'soft-thin', 'matcap']);
@@ -157,4 +161,34 @@ test('nothing outside the comparator depends on the comparator', () => {
         checked++;
     }
     assert.ok(checked > 20, `only scanned ${checked} files under src/`);
+});
+
+test('the edge layer restyles without disposing the material every cart shares', () => {
+    const scene = new THREE.Scene();
+    const edge = buildEdge(scene, [edgePlans()]);
+    const shared = worldToon(0xffffff);
+    let disposed = 0;
+    shared.addEventListener('dispose', () => { disposed++; });
+
+    edge.dress(lookNamed('soft'));
+    // The cache is keyed by colour and every batch draws through the same white material. Disposing
+    // it guts every other surface that asked for white -- a bug this repo has already found once.
+    assert.equal(disposed, 0, 'a look disposed the shared world material');
+    assert.equal(worldToon(0xffffff), shared, 'the cache handed back a different object');
+
+    edge.dress(lookNamed('current'));
+    assert.equal(disposed, 0);
+});
+
+test('the props take a look, keeping the colour each one carries', () => {
+    const scene = new THREE.Scene();
+    const props = buildProps(scene);
+    const before = scene.children.filter((c): c is THREE.Mesh => c instanceof THREE.Mesh)
+        .map(m => (m.material as THREE.MeshToonMaterial).color.getHex());
+    props.dress(lookNamed('soft'));
+    const after = scene.children.filter((c): c is THREE.Mesh => c instanceof THREE.Mesh)
+        .map(m => (m.material as THREE.MeshStandardMaterial).color.getHex());
+    // A prop's colour is in its material, not on the instance, so a look that forgot to ask for it
+    // would repaint the whole skyline white.
+    assert.deepEqual(after, before, 'a prop lost its colour under a look');
 });

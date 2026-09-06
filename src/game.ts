@@ -157,6 +157,7 @@ async function applyLook(name: string): Promise<void> {
         console.warn(`?look=${name} is not a rendering look. Try one of: ${LOOK_NAMES.join(', ')}`);
         return;
     }
+    world.dress(look);
     pools.dress(look);
     // dress() may have turned the shells off; the world's line and the button both have to agree
     // with what is actually drawn, and toggling afterwards works from there.

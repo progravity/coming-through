@@ -12,6 +12,8 @@
  */
 import * as THREE from 'three';
 import { INK_LINE } from '../render/materials.ts';
+import { inkClearance } from '../render/look.ts';
+import type { Look } from '../render/look.ts';
 import type { Bar, EdgePlan, Shape, Standing } from './edge.ts';
 import { worldToon } from './material.ts';
 import { PATH, newPathFrame, newWorldPoint, pathPlace } from './path.ts';
@@ -117,17 +119,21 @@ export function barMatrix(curve: PathCurve, b: Bar, out: THREE.Matrix4): THREE.M
  * post into a solid black stick. The colour is the crowd's own line, so the whole world carries one.
  */
 const INK_OVER = 0.02, INK_MOST = 0.3;
-const grow = (size: number): number => (size + 2 * Math.min(INK_OVER, INK_MOST * size)) / size;
+const grow = (size: number, over: number): number => (size + 2 * Math.min(over, INK_MOST * size)) / size;
 
 /**
  * The shell for a piece whose matrix is already composed: the same box grown outward along its own
  * three axes. A matrix column is an axis times that axis's scale, so growing it is three multiplies
  * rather than a second composition -- which is what makes re-shelling a spinning pinwheel every
  * frame cost nothing worth measuring.
+ *
+ * `over` is the clearance a look is currently asking for rather than the shipped constant, which is
+ * what lets `dress` thin or restore every shell without anyone having stored a piece's size a second
+ * time -- the un-grown matrix in `Batch.mats` already carries it, one axis's column length at a time.
  */
-function shellOf(m: THREE.Matrix4, sx: number, sy: number, sz: number, out: THREE.Matrix4): THREE.Matrix4 {
+function shellOf(m: THREE.Matrix4, sx: number, sy: number, sz: number, over: number, out: THREE.Matrix4): THREE.Matrix4 {
     out.copy(m);
-    const e = out.elements, gx = grow(sx), gy = grow(sy), gz = grow(sz);
+    const e = out.elements, gx = grow(sx, over), gy = grow(sy, over), gz = grow(sz, over);
     e[0] *= gx; e[1] *= gx; e[2] *= gx;
     e[4] *= gy; e[5] *= gy; e[6] *= gy;
     e[8] *= gz; e[9] *= gz; e[10] *= gz;
@@ -174,12 +180,12 @@ class Kit {
         if (b === undefined) { b = { shape, mats: [], cols: [], ink: [] }; this.batches.set(shape, b); }
         b.mats.push(m.clone());
         b.cols.push(colour);
-        b.ink.push(shellOf(m, sx, sy, sz, new THREE.Matrix4()));
+        b.ink.push(shellOf(m, sx, sy, sz, INK_OVER, new THREE.Matrix4()));
         return { batch: b, index: b.mats.length - 1 };
     }
 
     /** Every batch as a pair of meshes under one group, and the switch that hides the shells. */
-    build(): { group: THREE.Group; setInk: (on: boolean) => void } {
+    build(): { group: THREE.Group; setInk: (on: boolean) => void; batches: Batch[] } {
         const group = new THREE.Group();
         const shells: THREE.InstancedMesh[] = [];
         const tint = new THREE.Color();
@@ -197,11 +203,11 @@ class Kit {
             shells.push(ink);
             b.mesh = mesh; b.inkMesh = ink;
         }
-        return { group, setInk: (on: boolean): void => { for (const s of shells) s.visible = on; } };
+        return { group, setInk: (on: boolean): void => { for (const s of shells) s.visible = on; }, batches: [...this.batches.values()] };
     }
 }
 
-/** What the edge layer gives back to the game: the two things about it that can change. */
+/** What the edge layer gives back to the game: the things about it that can change. */
 export interface EdgeLayer {
     /** Show or hide the drawn outline, so the edge carries whatever line the crowd is carrying. */
     setInk(on: boolean): void;
@@ -213,6 +219,8 @@ export interface EdgeLayer {
      * the same at the same `t` whatever happened in between.
      */
     animate(t: number): void;
+    /** Wear a rendering direction, or `null` for the shipped one -- ironwork and carts together. */
+    dress(look: Look | null): void;
 }
 
 /** One piece that has to be re-placed every frame, and where its matrices live. */
@@ -247,21 +255,61 @@ export function buildEdge(parent: THREE.Object3D, plans: readonly EdgePlan[], cu
     }
     const built = kit.build();
     parent.add(built.group);
+    const batches = built.batches;
 
     // Only the batches something actually moves in are re-uploaded, and only when there is one.
     const touched = [...new Set(movers.map(mv => mv.batch))];
     const shell = new THREE.Matrix4();
+    let over = INK_OVER;
     const animate = movers.length === 0 ? (): void => {} : (t: number): void => {
         for (const mv of movers) {
             const { st } = mv;
             standingMatrix(curve.frameAt(st.s, frame), st, m, t);
             mv.batch.mesh?.setMatrixAt(mv.index, m);
-            mv.batch.inkMesh?.setMatrixAt(mv.index, shellOf(m, st.across, st.up, st.along, shell));
+            // `over` rather than `INK_OVER`: a moved piece re-writes its shell every frame, and a
+            // closure holding the constant would snap exactly the bobbing and spinning pieces back
+            // to the shipped line the moment a thinning look was on.
+            mv.batch.inkMesh?.setMatrixAt(mv.index, shellOf(m, st.across, st.up, st.along, over, shell));
         }
         for (const b of touched) {
             if (b.mesh !== undefined) b.mesh.instanceMatrix.needsUpdate = true;
             if (b.inkMesh !== undefined) b.inkMesh.instanceMatrix.needsUpdate = true;
         }
     };
-    return { setInk: built.setInk, animate };
+    /**
+     * Wear a rendering direction. An absent field means **as shipped**, so `current` puts the
+     * ironwork back rather than leaving it on whatever the last look chose.
+     *
+     * The shells are re-grown here rather than per frame: a weight is a constant in the growth, and
+     * the un-grown matrices are already kept in the batch, so a column's own length is the size to
+     * grow it from.
+     */
+    const dress = (look: Look | null): void => {
+        over = inkClearance(INK_OVER, look?.inkWeight ?? 0);
+        for (const b of batches) {
+            const body = b.mesh, ink = b.inkMesh;
+            if (body !== undefined) {
+                const want = look?.body?.({ color: 0xffffff, vertexColors: false }) ?? worldToon(0xffffff);
+                const had = body.material as THREE.Material;
+                if (had !== want) {
+                    // Never dispose the cache's own: it is shared with every other white surface.
+                    if (had.userData.shared !== true) had.dispose();
+                    body.material = want;
+                }
+            }
+            if (ink !== undefined) {
+                (ink.material as THREE.MeshBasicMaterial).color.setHex(look?.inkColour ?? INK_LINE);
+                for (let i = 0; i < b.mats.length; i++) {
+                    const e = b.mats[i].elements;
+                    shellOf(b.mats[i],
+                        Math.hypot(e[0], e[1], e[2]), Math.hypot(e[4], e[5], e[6]), Math.hypot(e[8], e[9], e[10]),
+                        over, b.ink[i]);
+                    ink.setMatrixAt(i, b.ink[i]);
+                }
+                ink.instanceMatrix.needsUpdate = true;
+                ink.visible = look?.inkOn ?? true;
+            }
+        }
+    };
+    return { setInk: built.setInk, animate, dress };
 }

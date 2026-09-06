@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import type { Look } from '../render/look.ts';
 import { slab } from './ground.ts';
 import { DOORS, L, SHOP } from './layout.ts';
 import { worldToon } from './material.ts';
@@ -10,6 +11,8 @@ const _w = newWorldPoint(), _f = newPathFrame();
 export interface Props {
     /** Ferris wheel; rotated by the main loop. */
     wheel: THREE.Mesh;
+    /** Wear a rendering direction. Props have no ink, so only a look's body material reaches them. */
+    dress(look: Look | null): void;
 }
 
 /**
@@ -28,18 +31,36 @@ export interface Props {
  * on the same width-aware interval rule as the benches and the bins.
  */
 export function buildProps(scene: THREE.Scene): Props {
+    const built: THREE.Mesh[] = [];
     DOORS.forEach((d, i) => {
         const edge = PATH.halfWidth(d.s);
-        slab(scene, d.s, d.side * (edge + SHOP.inset + SHOP.across / 2), SHOP.across, SHOP.height, SHOP.along, 0xf2ead8, SHOP.height / 2);
-        slab(scene, d.s, d.side * (edge + 0.9), SHOP.across + 0.4, 0.5, 2, SHOPC[i], SHOP.height - 0.6);
+        built.push(slab(scene, d.s, d.side * (edge + SHOP.inset + SHOP.across / 2), SHOP.across, SHOP.height, SHOP.along, 0xf2ead8, SHOP.height / 2));
+        built.push(slab(scene, d.s, d.side * (edge + 0.9), SHOP.across + 0.4, 0.5, 2, SHOPC[i], SHOP.height - 0.6));
     });
     const WHEEL_S = -(L + 40), WHEEL_N = -24;
     const p = pathPlace(PATH.frameAt(WHEEL_S, _f), WHEEL_N, 11, _w);
     const wheel = new THREE.Mesh(new THREE.TorusGeometry(9, 0.5, 8, 24), worldToon(0xd9534f));
     // Turned to face the path; the main loop spins it about its own z, which stays in its plane.
     wheel.position.set(p.x, p.y, p.z); wheel.rotation.y = PATH.yawAt(WHEEL_S); scene.add(wheel);
-    slab(scene, WHEEL_S, WHEEL_N, 0.8, 11, 0.8, 0x5d5a52, 5.5);
-    for (let i = 0; i < 7; i++) slab(scene, -(L + 38), 12 + i * 3.5, 3, 1 + i * 2.2, 3, 0x4a7fb5, (1 + i * 2.2) / 2);
-    slab(scene, -(L + 60), 40, 14, 20, 14, 0x9a8f7a, 10);
-    return { wheel };
+    built.push(wheel);
+    built.push(slab(scene, WHEEL_S, WHEEL_N, 0.8, 11, 0.8, 0x5d5a52, 5.5));
+    for (let i = 0; i < 7; i++) built.push(slab(scene, -(L + 38), 12 + i * 3.5, 3, 1 + i * 2.2, 3, 0x4a7fb5, (1 + i * 2.2) / 2));
+    built.push(slab(scene, -(L + 60), 40, 14, 20, 14, 0x9a8f7a, 10));
+
+    const shipped = built.map(m => m.material as THREE.Material);
+    return {
+        wheel,
+        dress: (look: Look | null): void => {
+            for (let i = 0; i < built.length; i++) {
+                const mesh = built[i], had = mesh.material as THREE.Material;
+                // Each prop asks for its own colour, because `worldToon` bakes it in rather than
+                // carrying it per instance the way the crowd and the edge layer do.
+                const want = look?.body?.({ color: (shipped[i] as THREE.MeshToonMaterial).color.getHex(), vertexColors: false })
+                    ?? shipped[i];
+                if (had === want) continue;
+                if (had.userData.shared !== true) had.dispose();
+                mesh.material = want;
+            }
+        },
+    };
 }

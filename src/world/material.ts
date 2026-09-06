@@ -30,6 +30,10 @@ export function worldToon(color: number): THREE.MeshToonMaterial {
     if (m === undefined) {
         gradient ??= makeToonGradient();
         m = new THREE.MeshToonMaterial({ color, gradientMap: gradient });
+        // Said out loud because it is the thing that goes wrong: this material is handed to every
+        // surface that asks for this colour, so whoever swaps it for a look's own must put it back
+        // rather than dispose it.
+        m.userData.shared = true;
         byColour.set(color, m);
     }
     return m;
