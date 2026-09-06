@@ -132,6 +132,39 @@ test('a look that turns the ink off is visible in inkOn, so the world and the UI
     assert.equal(pools.inkOn, true, 'current did not bring the ink back');
 });
 
+test('setInk clears a shell on a real transition but leaves one alone on a same-state call', () => {
+    // The shell meshes are the pools' own `InstancedMesh`es, told apart from the body meshes the
+    // same way the dressing test above tells them apart -- by their back-face ink material.
+    const scene = new THREE.Scene();
+    const pools = new PartPools(scene);
+    const shells = scene.children.filter(
+        (c): c is THREE.InstancedMesh => c instanceof THREE.InstancedMesh && (c.material as THREE.Material).side === THREE.BackSide,
+    );
+    assert.ok(shells.length > 0, 'the pools put no shell meshes in the scene');
+    const shell = shells[0];
+    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+
+    // off -> on must still clear: a matrix left over from before ink went off is the stale-shell
+    // bug the clear exists to prevent, and the guard must never skip this edge.
+    pools.setInk(false);
+    const stale = new THREE.Matrix4().makeTranslation(9, 9, 9);
+    shell.setMatrixAt(0, stale);
+    pools.setInk(true);
+    const afterTransition = new THREE.Matrix4();
+    shell.getMatrixAt(0, afterTransition);
+    assert.ok(afterTransition.equals(zero), 'an off-to-on setInk did not clear a stale shell');
+
+    // on -> on must be inert: ink is already on, so a second setInk(true) is not a transition and
+    // must not touch a shell that `put` is already maintaining -- that is the blank frame the guard
+    // removes, and the behaviour the guard changed.
+    const kept = new THREE.Matrix4().makeTranslation(1, 2, 3);
+    shell.setMatrixAt(0, kept);
+    pools.setInk(true);
+    const afterNoop = new THREE.Matrix4();
+    shell.getMatrixAt(0, afterNoop);
+    assert.ok(afterNoop.equals(kept), 'a same-state setInk cleared a shell it should have left alone');
+});
+
 /** Every `.ts` file under `src/`, recursively. */
 function sources(dir: string, out: string[] = []): string[] {
     for (const name of readdirSync(dir)) {
