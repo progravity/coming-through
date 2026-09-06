@@ -2,7 +2,7 @@
 
 A small three.js crowd game: get from the blue pad to the green pad without bumping into anyone.
 `npm run dev` is the only command needed to play. `npm test` type-checks, runs the Math.random
-check and the determinism test. `npm run lint` is the first two on their own.
+check, and then runs everything under `test/`. `npm run lint` is the first two on their own.
 
 ## Layout
 
@@ -46,8 +46,24 @@ check and the determinism test. `npm run lint` is the first two on their own.
 - `test/determinism.test.ts` — headless run with a fixed seed and scripted input, hashed against
   `test/determinism.expected.json`, which stores two values: `hash` (whole state) and `identity`
   (the crowd a seed produces). See "Two hashes" below.
+- `test/purity.test.ts` — that the simulation reaches no renderer and no DOM, walking the
+  **transitive** closure of `src/sim/` rather than its own import list: nobody writes `THREE` into
+  `sim/agent.ts`, but the simulation reads `world/plan.ts`, and half of `world/` imports three.js
+  quite legitimately. It is checked rather than trusted because a breach here fails nothing else —
+  three.js loads happily under `node` with no GL context, so a renderer dragged in would go green
+  all the way and be found only by whoever next tried to run the sim without a canvas.
 - `test/inspect.test.ts` — proves a turntable person is byte-identical to the crowd's agent,
   guarding `Subject` against `Agent` specifically.
+- `test/attachment.test.ts` — where equipment meets the body, all of it measured off the drawn
+  parts: that nothing a person stands or rides on sinks through the ground, that it holds still
+  while the body bobs through a stride — a grip placed at the bobbing hand height rather than its
+  rest height drives a cane through the pavement twice a step — that overlapping boxes are buried
+  inside each other rather than left flush, and that a pram body sits on its wheels.
+- `test/elbow.test.ts` — which way an elbow bends. A held pose is two absolute pitches and nothing
+  in that pair says which of them has to be further forward, so the invariant is read back off the
+  arm cylinders rather than off the constants: no elbow is forward of the shoulder-to-wrist line by
+  more than a real one hyperextends, in any pose, and a handle out in front of the body is reached
+  with a bent arm rather than a straight one.
 - `test/inspectable.test.ts` — that the inspector's shell depends only on the interface: its
   imports reach no entity, a hypothetical entity nobody has written is driven through the shell's
   state, URL and keymap, every person URL that worked before still works and nothing a cast writes
@@ -76,6 +92,11 @@ check and the determinism test. `npm run lint` is the first two on their own.
   ink weight folds into a part's shell growth exactly as the per-frame sweep it replaced used to;
   that every surface dresses and undresses without disposing a material it did not create; and
   that nothing outside `src/compare/` reaches into it, which is what keeps the comparator optional.
+- `test/compare.test.ts` — the structural figure a comparator panel prints beside each look, which
+  is the one number on a card claimed as exact rather than measured: each pool draws its shell as a
+  second mesh, so the ink is exactly half of what a person costs, in draw calls and in instances
+  alike. The looks themselves and their `?look=` names are guarded in `test/look.test.ts`, being
+  data in `src/render/look.ts` rather than anything in that directory.
 
 ## Seeds and restarting
 
@@ -467,7 +488,8 @@ exaggerated on purpose.
 Cotton candy (a seven-ball blob on a paper cone), hot dog (a sausage sitting on a bun, lengthways),
 drinks (a tapered cup, banded, domed lid, angled straw), balloons (six on strings, bobbing), ice
 cream (a cone stood on its point under two scoops and a cherry), popcorn (a striped box heaped
-over), pinwheels (a rack of three two-colour spinners). Three of the seven wear an awning.
+over), pinwheels (a rack of three two-colour spinners). The hot dog and the drinks cart wear an
+awning; the other five do not.
 
 Three of them were rebuilt after looking at them from the path, and the reasons are worth keeping:
 

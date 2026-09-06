@@ -317,12 +317,16 @@ export function buildEdge(parent: THREE.Object3D, plans: readonly EdgePlan[], cu
             }
             if (ink !== undefined) {
                 (ink.material as THREE.MeshBasicMaterial).color.setHex(look?.inkColour ?? INK_LINE);
-                for (let i = 0; i < b.mats.length; i++) {
-                    const e = b.mats[i].elements;
-                    shellOf(b.mats[i],
+                // `j`, not `i`: the loop above is over the batches and holds the index `shipped`
+                // is read by. Shadowing it here happened to be harmless only because nothing
+                // after this block wanted the batch again -- and this block is exactly where the
+                // next per-batch concern would be written.
+                for (let j = 0; j < b.mats.length; j++) {
+                    const e = b.mats[j].elements;
+                    shellOf(b.mats[j],
                         Math.hypot(e[0], e[1], e[2]), Math.hypot(e[4], e[5], e[6]), Math.hypot(e[8], e[9], e[10]),
-                        over, b.ink[i]);
-                    ink.setMatrixAt(i, b.ink[i]);
+                        over, b.ink[j]);
+                    ink.setMatrixAt(j, b.ink[j]);
                 }
                 ink.instanceMatrix.needsUpdate = true;
                 ink.visible = look?.inkOn ?? true;
