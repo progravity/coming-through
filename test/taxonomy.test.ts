@@ -18,10 +18,12 @@ import { PROPERTIES, entityMeta, hasProperty } from '../src/entity.ts';
 import { ENTITIES } from '../src/inspect/registry.ts';
 import { FURNITURE_ENTITIES } from '../src/world/furniture.ts';
 import { KIOSK_ARCHETYPES, KIOSK_TYPES, kiosks } from '../src/world/kiosks.ts';
+import { SHOP_ARCHETYPES, SHOP_TYPES, shops } from '../src/world/shops.ts';
 import { edgePlans } from '../src/world/plan.ts';
 import { railingPlan } from '../src/world/railings.ts';
 import { PATH } from '../src/world/path.ts';
 import type { Property } from '../src/entity.ts';
+import type { PlacedEntity } from '../src/world/edge.ts';
 
 const SRC = new URL('../src/', import.meta.url).pathname;
 
@@ -99,7 +101,7 @@ test('the inspector shelves entities by the same family the game files them unde
     // One axis, one vocabulary. The inspector had words of its own for this -- agent,
     // path-furniture, structure -- which is two names for one concept, and the thing this removes.
     const shelves = ENTITIES.map(e => `${e.id}:${e.family}`).sort();
-    assert.deepEqual(shelves, ['furniture:furniture', 'kiosk:kiosk', 'person:person']);
+    assert.deepEqual(shelves, ['furniture:furniture', 'kiosk:kiosk', 'person:person', 'shop:building']);
 });
 
 test('every person declares themselves a crowd-spawned, mobile, bump-relevant person', () => {
@@ -166,21 +168,34 @@ test('every piece of furniture declares itself immobile, solid and placed', () =
     }
 });
 
-test('every solid in the plan belongs to an entity that declares itself one', () => {
-    // The join the simulation makes: a collider is a reading of an entity, and the piece id is what
-    // ties them. A solid with no entity would be a thing you walk into that nothing can describe.
+test('every solid in the plan belongs to an entity that can describe it', () => {
+    // The join the simulation makes: a footprint is a reading of an entity, and the piece id is
+    // what ties them. A solid with no entity would be a thing with a shape that nothing can
+    // describe -- neither the renderer nor the simulation could say what it was.
     const plan = edgePlans();
     const byPiece = new Map(plan.entities.map(e => [e.piece, e]));
     assert.ok(plan.solids.length > 0);
     for (const so of plan.solids) {
-        const e = byPiece.get(so.piece);
-        assert.ok(e !== undefined, `solid on piece ${so.piece} belongs to no entity`);
-        assert.ok(hasProperty(e.meta, 'static-obstacle'), `piece ${so.piece} is solid without saying so`);
+        assert.ok(byPiece.has(so.piece), `solid on piece ${so.piece} belongs to no entity`);
     }
     // And every piece id is unique across the merged layers, which is what mergePlans' renumbering
     // is for: two layers each numbering from one would have a bench and a cart both claiming piece
     // 3, and the join above would answer with the wrong object.
     assert.equal(byPiece.size, plan.entities.length);
+});
+
+test('a footprint is a collider exactly when its entity says static-obstacle', () => {
+    // The distinction the whole filter exists for, and it is no longer hypothetical: the shops have
+    // footprints -- a building is solid -- and decline the property, because nothing can reach one
+    // behind the railings and a 3 m capsule in the fixed grid would break `grid.reach` besides.
+    // So "has a shape" and "is a wall" are now two different questions with two different answers,
+    // which is exactly what a taxonomy is for.
+    const plan = edgePlans();
+    const byPiece = new Map(plan.entities.map(e => [e.piece, e]));
+    const walls = plan.solids.filter(so => hasProperty((byPiece.get(so.piece) as PlacedEntity).meta, 'static-obstacle'));
+    assert.ok(walls.length > 0, 'something is still solid');
+    assert.ok(walls.length < plan.solids.length, 'and something has a footprint that is not a wall');
+    assert.equal(buildObstacles().length, walls.length);
 });
 
 test('the railings are scenery and contribute no entities', () => {
@@ -194,18 +209,23 @@ test('the railings are scenery and contribute no entities', () => {
     assert.deepEqual(rail.entities, []);
 });
 
-test('a collider comes from an entity that says it is a static obstacle', () => {
-    // Behaviour-preserving today, because everything with a footprint declares the property: the
-    // filter drops nothing and the obstacle list is exactly what it always was.
-    assert.equal(buildObstacles().length, edgePlans().solids.length);
+test('the shops are the entities with a footprint and no collider', () => {
+    // Named rather than merely counted, because *which* things are exempt is the interesting half.
+    // A shop is off the walkway behind the railings: the crowd and the player are both fenced
+    // inside `halfWidth`, so nothing can reach one, and a bench's rule -- "furniture is solid with
+    // no exception to remember" -- does not extend to a building the size of a house.
+    const soft = edgePlans().entities.filter(e => !hasProperty(e.meta, 'static-obstacle'));
+    assert.deepEqual(new Set(soft.map(e => e.meta.family)), new Set(['building']));
+    assert.equal(soft.length, shops().length);
 });
 
-test('a footprint belonging to an entity that is not a static obstacle is not a collider', () => {
-    // What the filter is actually for, shown on a plan the game does not draw. Nothing in the game
-    // is an entity with a footprint that is not a wall -- a vendor's counter customers may reach
-    // across would be one -- so this is the only place the branch can be exercised at all.
+test('softening any entity drops exactly its own footprints', () => {
+    // The filter itself, exercised on a plan the game does not draw, so it is the *branch* being
+    // tested rather than today's population of it. It used to be the only way to reach this at all;
+    // it is kept now that the shops reach it for real, because the shops only ever exercise it in
+    // one direction and a filter has two.
     const plan = edgePlans();
-    const one = plan.entities[0];
+    const one = plan.entities.find(e => hasProperty(e.meta, 'static-obstacle')) as PlacedEntity;
     const softened = {
         ...plan,
         entities: plan.entities.map(e => e.piece !== one.piece ? e
@@ -213,7 +233,7 @@ test('a footprint belonging to an entity that is not a static obstacle is not a 
     };
     const dropped = plan.solids.filter(so => so.piece === one.piece).length;
     assert.ok(dropped > 0, 'the entity chosen to soften has no footprint to drop');
-    assert.equal(obstaclesFrom(softened, PATH).length, plan.solids.length - dropped);
+    assert.equal(obstaclesFrom(softened, PATH).length, obstaclesFrom(plan, PATH).length - dropped);
 });
 
 test('everyone the player can bump into says they are bump-relevant', () => {
@@ -252,11 +272,25 @@ test('nothing is stationed yet', () => {
     for (const e of edgePlans().entities) assert.ok(!hasProperty(e.meta, 'stationed'), `piece ${e.piece}`);
 });
 
-test('the building family is declared and empty', () => {
-    // The other seam. Buildings are the same problem as the kiosks at a different size and reuse
-    // world/structure.ts; the family exists so that adding them is additive.
+test('the building family is populated by the shops', () => {
+    // The seam, closed. Buildings were always the same problem as the kiosks at a different size,
+    // and the shops are built by the same `world/structure.ts` -- which is what made filling this
+    // family additive rather than a rewrite.
     const families = new Set(edgePlans().entities.map(e => e.meta.family));
-    assert.deepEqual([...families].sort(), ['furniture', 'kiosk']);
+    assert.deepEqual([...families].sort(), ['building', 'furniture', 'kiosk']);
+});
+
+test('every shop declares itself an immobile, placed building that serves people', () => {
+    assert.deepEqual([...SHOP_TYPES], ['candy', 'souvenir', 'toy', 'clothing', 'drinks']);
+    for (const type of SHOP_TYPES) {
+        const meta = SHOP_ARCHETYPES[type].entity;
+        assert.equal(meta.family, 'building', `${type} is not filed as a building`);
+        assert.equal(meta.type, type, `${type} calls itself '${meta.type}'`);
+        assert.equal(meta.placement, 'placed-with-requirements');
+        // No `static-obstacle`: it has a footprint and is not a wall. And no `bump-relevant`, which
+        // is a person's property and could not be reached here anyway.
+        assert.deepEqual(new Set(meta.properties), new Set(['immobile', 'vendor']));
+    }
 });
 
 test('only vendors carry vendor data', () => {

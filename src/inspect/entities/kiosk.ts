@@ -10,113 +10,38 @@
  * The seed is the **colour re-roll**: `rollKiosk` is the same call the promenade makes, off the same
  * constant-seeded stream, so every colour still comes out of the archetype's own curated set and no
  * roll here can be seen by either determinism hash.
+ *
+ * What is left in this file is only what is true of carts and not of shopfronts. Everything else --
+ * building the exhibits, staging them, the vendor's spots, the ink and the overlays -- is
+ * `StructureCast`, which the shops drive too.
  */
-import * as THREE from 'three';
-import { hashString } from '../../core/rng.ts';
-import type { Look } from '../../render/look.ts';
-import type { EdgePlan } from '../../world/edge.ts';
+import type * as THREE from 'three';
 import { KIOSK_ARCHETYPES, KIOSK_N, KIOSK_TYPES, rollKiosk } from '../../world/kiosks.ts';
 import type { KioskType } from '../../world/kiosks.ts';
 import { PATH } from '../../world/path.ts';
-import { SLOTS, placeStructure } from '../../world/structure.ts';
-import type { Paint, Placed, StructureArchetype } from '../../world/structure.ts';
-import { INK } from '../inspectable.ts';
-import type { Cast, Controls, DrawnPart, Inspectable, Readout } from '../inspectable.ts';
-import { EDGE_OVERLAYS, EdgeExhibit, spotMarker } from './edge.ts';
+import { SLOTS } from '../../world/structure.ts';
+import type { Cast, Inspectable, Readout } from '../inspectable.ts';
+import { EDGE_OVERLAYS } from './edge.ts';
+import { POINTS_OVERLAY, StructureCast, n2, spotRows } from './structure.ts';
+import type { Instance } from './structure.ts';
 
-const POINTS = 'points';
-const SERVICE_C = 0x7ad17a, STAFF_C = 0xd17a9c;
-
-interface Cart { type: KioskType; arch: StructureArchetype; paint: Paint; placed: Placed }
-
-class KioskCast implements Cast {
-    private readonly scene: THREE.Scene;
-    private exhibits: EdgeExhibit[] = [];
-    private carts: Cart[] = [];
-    private active: ReadonlySet<string> = new Set();
-
-    // Not a parameter property: `erasableSyntaxOnly` is on, so those are a compile error here.
-    constructor(scene: THREE.Scene) { this.scene = scene; }
-
-    rebuild(seed: number, count: number, c: Controls): void {
-        for (const e of this.exhibits) e.dispose();
-        this.exhibits = [];
-        this.carts = [];
-        const pinned = String(c.type);
-        for (let i = 0; i < count; i++) {
-            const type: KioskType = pinned !== 'seed' ? (pinned as KioskType)
-                : count > 1 ? KIOSK_TYPES[i]
-                : KIOSK_TYPES[hashString(`inspect:kiosk:${i}`, seed) % KIOSK_TYPES.length];
-            const arch = KIOSK_ARCHETYPES[type];
-            const { paint, phase } = rollKiosk(arch, `inspect:${seed}:${i}`);
-            // Standing where the promenade stands one: on the +n edge, its counter looking back at
-            // the centreline, at the clearance that is really setting the corridor behind it.
-            const s = 0;
-            const n = PATH.halfWidth(s) - KIOSK_N;
-            const facing: -1 = -1;
-            const placed = placeStructure(arch, paint, { s, n, facing, phase }, 1);
-            const plan: EdgePlan = {
-                standing: placed.standing, bars: [], solids: [placed.solid],
-                entities: [{ piece: 1, meta: arch.entity, vendor: placed.vendor }],
-            };
-            const ex = new EdgeExhibit(this.scene, plan, facing);
-            const points = new THREE.Group();
-            if (placed.vendor !== undefined) {
-                points.add(spotMarker(placed.vendor.service, SERVICE_C), spotMarker(placed.vendor.staff, STAFF_C));
-            }
-            ex.addOverlay(POINTS, points);
-            this.exhibits.push(ex);
-            this.carts.push({ type, arch, paint, placed });
-        }
-        this.apply();
-        // No re-dressing here: the shell dresses the whole cast on the line after this returns, so
-        // a look kept a second time would only be a look applied twice -- which under a look with a
-        // body means one material built and thrown away per batch, on every keypress that rebuilds.
-    }
-
-    /** Nothing on a cart moves under its own steam; the bobbing and the spinning are `draw`'s. */
-    step(): void {}
-
-    draw(t: number, xs: readonly number[], yaw: number): void {
-        for (let i = 0; i < this.exhibits.length; i++) this.exhibits[i].draw(t, xs[i] ?? 0, yaw);
-    }
-
-    parts(i: number): readonly DrawnPart[] { return this.exhibits[i]?.parts ?? []; }
-
-    overlays(active: ReadonlySet<string>): void { this.active = active; this.apply(); }
-
-    private apply(): void {
-        for (const e of this.exhibits) { e.setInk(this.active.has(INK)); e.applyOverlays(this.active); }
-    }
-
-    dress(look: Look | null): void {
-        for (const e of this.exhibits) e.dress(look);
-    }
-
-    readout(i: number, top: number): Readout {
-        const k = this.carts[i];
-        const sol = k.placed.solid;
-        const n = (v: number, d = 2): string => v.toFixed(d);
-        const solid = k.arch.parts.filter(p => p.solid === true).length;
-        const v = k.placed.vendor;
-        const spots: (readonly [string, string])[] = v === undefined ? []
-            : [['service', `s ${n(v.service.s)} · n ${n(v.service.n)}`],
-                ['staff', `s ${n(v.staff.s)} · n ${n(v.staff.n)}`]];
-        return {
-            title: k.arch.name,
-            sub: `${k.type} · ${this.parts(i).length} parts`,
-            rows: [
-                ['form', 'fixed by the archetype'],
-                ['height', `${n(top)} m`],
-                ['collider', `capsule · half ${n(sol.half)} · r ${n(sol.r)}`],
-                ['from', `${solid} solid part${solid === 1 ? '' : 's'} of ${k.arch.parts.length}`],
-                ['stands at', `s ${n(sol.s)} · n ${n(sol.n)}`],
-                ...spots,
-            ],
-            swatches: SLOTS.map(slot => [slot, k.paint[slot]] as const),
-            line: `${k.type} · ${n(top)}m`,
-        };
-    }
+function readout(k: Instance<KioskType>, top: number, parts: number): Readout {
+    const sol = k.placed.solid;
+    const solid = k.arch.parts.filter(p => p.solid === true).length;
+    return {
+        title: k.arch.name,
+        sub: `${k.type} · ${parts} parts`,
+        rows: [
+            ['form', 'fixed by the archetype'],
+            ['height', `${n2(top)} m`],
+            ['collider', `capsule · half ${n2(sol.half)} · r ${n2(sol.r)}`],
+            ['from', `${solid} solid part${solid === 1 ? '' : 's'} of ${k.arch.parts.length}`],
+            ['stands at', `s ${n2(sol.s)} · n ${n2(sol.n)}`],
+            ...spotRows(k.placed),
+        ],
+        swatches: SLOTS.map(slot => [slot, k.paint[slot]] as const),
+        line: `${k.type} · ${n2(top)}m`,
+    };
 }
 
 export const KIOSK: Inspectable = {
@@ -127,9 +52,18 @@ export const KIOSK: Inspectable = {
         kind: 'enum', id: 'type', label: 'cart',
         options: ['seed', ...KIOSK_TYPES], value: 'seed', key: 'k', rebuilds: true,
     }],
-    overlays: [...EDGE_OVERLAYS, { id: POINTS, label: 'service points', key: 'p' }],
+    overlays: [...EDGE_OVERLAYS, POINTS_OVERLAY],
     /** The seed is the paint: the form is the archetype's and never rolls. */
     stepping: 'seed',
     row: KIOSK_TYPES.length,
-    mount: (scene: THREE.Scene): Cast => new KioskCast(scene),
+    mount: (scene: THREE.Scene): Cast => new StructureCast<KioskType>(scene, {
+        control: 'type',
+        types: KIOSK_TYPES,
+        archetypes: KIOSK_ARCHETYPES,
+        roll: rollKiosk,
+        // On the +n edge, counter looking back at the centreline, at the clearance that is really
+        // setting the corridor behind it.
+        site: (s: number) => ({ n: PATH.halfWidth(s) - KIOSK_N, facing: -1 }),
+        readout,
+    }),
 };

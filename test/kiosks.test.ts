@@ -36,9 +36,10 @@ import { furniturePlan } from '../src/world/furniture.ts';
 import { KIOSK_ARCHETYPES, KIOSK_PLACEMENTS, KIOSK_TYPES, kioskPlan, kiosks } from '../src/world/kiosks.ts';
 import type { Kiosk } from '../src/world/kiosks.ts';
 import { standingMatrix } from '../src/world/kit.ts';
-import { PAD_SPANS, SHOP_SPANS, W } from '../src/world/layout.ts';
+import { PAD_SPANS, W } from '../src/world/layout.ts';
 import { PATH, PathCurve, newPathFrame, newWorldPoint, pathPlace } from '../src/world/path.ts';
 import type { Along, PathRun } from '../src/world/path.ts';
+import { SHOP_SPANS } from '../src/world/shops.ts';
 import { SLOTS, footprintOf, placeStructure, structurePaint } from '../src/world/structure.ts';
 import type { Paint, Slot, StructureArchetype } from '../src/world/structure.ts';
 // `KIOSK` is already taken in this file -- it is the palette's kiosk colours.

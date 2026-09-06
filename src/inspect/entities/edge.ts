@@ -11,6 +11,7 @@
  * The overlays live in the inner group, so they are turned with the object and cannot drift off it.
  */
 import * as THREE from 'three';
+import { hasProperty } from '../../entity.ts';
 import type { Look } from '../../render/look.ts';
 import type { EdgePlan, Solid, Standing } from '../../world/edge.ts';
 import { barMatrix, buildEdge, standingMatrix } from '../../world/kit.ts';
@@ -21,11 +22,19 @@ import type { DrawnPart, OverlayDef } from '../inspectable.ts';
 export const COLLIDER = 'collider';
 export const FACING = 'facing';
 
-/** The two overlays every path-placed thing offers. A kiosk adds its own on top. */
-export const EDGE_OVERLAYS: readonly OverlayDef[] = [
-    { id: COLLIDER, label: 'collider', key: 'c' },
-    { id: FACING, label: 'orientation', key: 'r' },
-];
+/**
+ * The overlays a path-placed thing offers, declared one at a time because not every one of them
+ * offers both.
+ *
+ * A shopfront has a footprint and no collider -- nothing can reach it behind the railings -- so it
+ * declares `EDGE_FACING` alone. Offering `EDGE_COLLIDER` and drawing nothing would be a button that
+ * lies; drawing the footprint under the collider's own name would be worse, because a picture of a
+ * collider that does not exist is exactly the kind of thing a tool like this is trusted not to do.
+ */
+export const EDGE_COLLIDER: OverlayDef = { id: COLLIDER, label: 'collider', key: 'c' };
+export const EDGE_FACING: OverlayDef = { id: FACING, label: 'orientation', key: 'r' };
+/** Both, for the things that walk into you. */
+export const EDGE_OVERLAYS: readonly OverlayDef[] = [EDGE_COLLIDER, EDGE_FACING];
 
 /** How far off the surface the flat overlays are drawn, so they do not z-fight it. */
 const LIFT = 0.02;
@@ -132,10 +141,17 @@ function disposeTree(root: THREE.Object3D): void {
  * exactly where each part is drawn: the same arithmetic three.js is doing, not a second guess at it.
  *
  * It assumes an object is **one** solid and that its face looks straight across the path: it stands
- * on `solids[0]` and turns by a `front` of `1` or `-1`. Both are true of every bench, bin, lamp and
- * cart there is, and buildings are what will break them -- a shopfront has a footprint that is not
- * one capsule and a face that need not be square to the centreline. Generalising either before
- * there is a building to generalise for would be guessing at the shape of the answer.
+ * on `solids[0]` and turns by a `front` of `1` or `-1`. Both are still true of every bench, bin,
+ * lamp, cart and shopfront there is -- a shop is a rectangle square to the centreline, so its
+ * footprint is one capsule and its face is square, and the buildings turned out not to break either
+ * assumption after all. What they did break is the assumption underneath: that a footprint and a
+ * collider are the same thing. So the collider loop is drawn **only when the object's entity says
+ * it is a static obstacle**, which is the same question `sim/obstacles.ts` asks, asked here so the
+ * tool cannot draw a wall the simulation does not have.
+ *
+ * A shopfront that ever stops being a rectangle -- an L-plan, or one set at an angle to the path --
+ * is what will break the first two, and generalising for it before it exists would still be
+ * guessing at the shape of the answer.
  */
 export class EdgeExhibit {
     private readonly outer = new THREE.Group();
@@ -175,7 +191,8 @@ export class EdgeExhibit {
             this.raw.push(barMatrix(PATH, b, new THREE.Matrix4()));
             this.parts.push({ matrix: new THREE.Matrix4(), color: b.colour });
         }
-        this.addOverlay(COLLIDER, colliderLoop(solid));
+        const wall = plan.entities.some(e => e.piece === solid.piece && hasProperty(e.meta, 'static-obstacle'));
+        if (wall) this.addOverlay(COLLIDER, colliderLoop(solid));
         this.addOverlay(FACING, facingArrows(solid, front));
     }
 

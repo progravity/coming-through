@@ -1,11 +1,10 @@
 import * as THREE from 'three';
 import type { Look } from '../render/look.ts';
 import { slab } from './ground.ts';
-import { DOORS, L, SHOP } from './layout.ts';
+import { L } from './layout.ts';
 import { worldToon } from './material.ts';
 import { PATH, newPathFrame, newWorldPoint, pathPlace } from './path.ts';
 
-const SHOPC = [0xe37f3c, 0x3fb5a8, 0xd9534f, 0x8a6fd1];
 const _w = newWorldPoint(), _f = newPathFrame();
 
 export interface Props {
@@ -16,27 +15,21 @@ export interface Props {
 }
 
 /**
- * The shops behind the doorways and a distant skyline: the landmarks, as opposed to the edge layer.
+ * The distant skyline: the landmarks too far away to belong to any layer with a plan.
  *
  * Everything here is placed in path coordinates, the landmarks past the ends included: `s` beyond
- * the path extrapolates along the end run, so the skyline stays behind the goal however the
- * walkway is shaped. Anything standing just off the walkway is offset from `halfWidth` at its own
- * `s` rather than from a fixed width, so the shopfronts keep their clearance from a path that
- * widens, and their heights are heights above the surface rather than world y.
+ * the path extrapolates along the end run, so the skyline stays behind the goal however the walkway
+ * is shaped, and heights are heights above the surface rather than world y.
  *
- * The shop blocks take their size from `SHOP` in `layout.ts` rather than from numbers written here,
- * because the railings and the furniture route around the same figures: a building that moves or
- * grows takes its gap in the edge with it. They are still nondescript cubes -- their own layer
- * comes later -- and the lamp posts that used to live here are now part of that edge layer, placed
- * on the same width-aware interval rule as the benches and the bins.
+ * What is **no longer** here is the shops. They were four nondescript cubes drawn as loose meshes,
+ * because there was nothing else for a building to be; they are now `world/shops.ts` -- real
+ * archetypes built by the structure pattern, drawn through the shared instanced kit, and carrying
+ * entity metadata the simulation can read. The lamp posts left the same way and for the same
+ * reason. What is left in here is the set dressing that has no gameplay meaning at all and never
+ * will: a wheel on the horizon and some blocks behind it.
  */
 export function buildProps(scene: THREE.Scene): Props {
     const built: THREE.Mesh[] = [];
-    DOORS.forEach((d, i) => {
-        const edge = PATH.halfWidth(d.s);
-        built.push(slab(scene, d.s, d.side * (edge + SHOP.inset + SHOP.across / 2), SHOP.across, SHOP.height, SHOP.along, 0xf2ead8, SHOP.height / 2));
-        built.push(slab(scene, d.s, d.side * (edge + 0.9), SHOP.across + 0.4, 0.5, 2, SHOPC[i], SHOP.height - 0.6));
-    });
     const WHEEL_S = -(L + 40), WHEEL_N = -24;
     const p = pathPlace(PATH.frameAt(WHEEL_S, _f), WHEEL_N, 11, _w);
     const wheel = new THREE.Mesh(new THREE.TorusGeometry(9, 0.5, 8, 24), worldToon(0xd9534f));

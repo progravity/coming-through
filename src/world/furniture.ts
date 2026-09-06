@@ -23,10 +23,11 @@ import type { EntityMeta } from '../entity.ts';
 import { clearOf } from './edge.ts';
 import type { EdgePlan, PlacedEntity, Solid, Standing } from './edge.ts';
 import { KIOSK_SPANS } from './kiosks.ts';
-import { L, PAD_SPANS, SHOP_SPANS } from './layout.ts';
+import { L, PAD_SPANS } from './layout.ts';
 import type { EdgeSpan } from './layout.ts';
 import { PATH } from './path.ts';
 import type { PathCurve } from './path.ts';
+import { SHOP_SPANS } from './shops.ts';
 
 /** The three things this file stands along the edge. */
 export type FurnitureKind = 'bench' | 'lamp' | 'bin';

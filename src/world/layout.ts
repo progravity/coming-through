@@ -37,20 +37,26 @@ export const EXIT_S = L + 4;
 /** How far past each end the player may drift. */
 export const ROAM_S = L + 1;
 
-/** A shop doorway in the railings: which side of the path it is on, and where along it it sits. */
+/**
+ * A doorway people walk on and off the promenade through, rather than from its ends.
+ *
+ * **This is a simulation input, and its contents and its order are load-bearing.** `spawner.ts`
+ * draws `where.pick(DOORS)` off the `spawn` stream, so adding an entry, removing one or reordering
+ * the list changes which doorway a given spawn event selects -- which moves `identityHash()` and
+ * makes agent N in spawn order a different person standing somewhere else.
+ *
+ * That is why it is **not** derived from `SHOP_PLACEMENTS`, tempting though it is: the shops are a
+ * layer of the world, and a layer of the world must be able to grow without changing who walks onto
+ * the promenade. The determinism rules already say no flag or setting may change how many values a
+ * fork draws or in what order; this is the same principle one step further out -- nor may a
+ * decorative layer change what a draw *selects*.
+ *
+ * Every doorway still has a shop behind it, which `test/shops.test.ts` pins. The converse is not
+ * required: a shop added later stands on the promenade without becoming a place people appear from,
+ * and giving it one is a deliberate change to the crowd with a hash regeneration to match.
+ */
 export interface Door { side: 1 | -1; s: number; }
 export const DOORS: readonly Door[] = [{ side: -1, s: -14 }, { side: -1, s: 18 }, { side: 1, s: 4 }, { side: 1, s: -28 }];
-
-/**
- * The nondescript block standing behind a doorway, as the room it takes up rather than as a mesh:
- * `along` the path, `across` it starting `inset` out from the path's own edge, and how tall.
- *
- * It is here rather than in `props.ts` because two layers need the same numbers. The shop draws
- * itself from them, and the edge layer routes its railings and its furniture around them -- so a
- * building that moves takes its gap in the railings with it, and nobody hand-authors a second copy
- * of where the gaps go. Their own layer comes later; today they are cubes.
- */
-export const SHOP = { along: 7, across: 6, inset: 0.2, height: 3.2 } as const;
 
 /**
  * A stretch of the path's edge that nothing may stand in. `side` names one railing; omitted, the
@@ -62,17 +68,15 @@ export const SHOP = { along: 7, across: 6, inset: 0.2, height: 3.2 } as const;
  */
 export interface EdgeSpan { sMin: number; sMax: number; side?: 1 | -1; }
 
-/** Clearance kept either side of a building, so the railings stop short of it rather than at it. */
-const SHOP_CLEAR = 0.6;
-/** And either side of a pad, so nothing is standing where a run starts or ends. */
+/**
+ * Clearance kept either side of a pad, so nothing is standing where a run starts or ends.
+ *
+ * The shops' equivalent lives with the shops, in `world/shops.ts`, along with where they stand and
+ * how big they are. It used to be here because two layers needed the same numbers and the shops
+ * were cubes with no layer of their own; now that they have one, the layer owns its own
+ * interruptions exactly as `kiosks.ts` owns `KIOSK_SPANS`.
+ */
 const PAD_CLEAR = 1.5;
-
-/** Where the shop blocks meet the edge: the stretch each one takes out of the railings. */
-export const SHOP_SPANS: readonly EdgeSpan[] = DOORS.map(d => ({
-    side: d.side,
-    sMin: d.s - SHOP.along / 2 - SHOP_CLEAR,
-    sMax: d.s + SHOP.along / 2 + SHOP_CLEAR,
-}));
 
 /** The two pads, on both sides. Railings run past them; furniture does not stand on them. */
 export const PAD_SPANS: readonly EdgeSpan[] = [START_S, GOAL_S].map(s => ({

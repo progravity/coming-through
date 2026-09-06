@@ -1,8 +1,9 @@
 import { ARCH } from './archetypes.ts';
 import type { Crowd } from './sim/crowd.ts';
 import type { Player } from './sim/player.ts';
-import { EXIT_S, GOAL_S, L, PAD_LENGTH, SHOP_SPANS, START_S } from './world/layout.ts';
+import { EXIT_S, GOAL_S, L, PAD_LENGTH, START_S } from './world/layout.ts';
 import { PATH, newWorldPoint } from './world/path.ts';
+import { SHOP_SPANS } from './world/shops.ts';
 
 export interface DebugStats { fps: number; drawCalls: number; }
 

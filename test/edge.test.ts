@@ -22,9 +22,10 @@ import type { Bar, EdgePlan, PlacedEntity, Solid, Standing } from '../src/world/
 import { barMatrix, standingMatrix } from '../src/world/kit.ts';
 import { bench, bin, furniturePlan, lamp } from '../src/world/furniture.ts';
 import { KIOSK_SPANS } from '../src/world/kiosks.ts';
-import { L, PAD_SPANS, SHOP_SPANS, W } from '../src/world/layout.ts';
+import { L, PAD_SPANS, W } from '../src/world/layout.ts';
 import type { EdgeSpan } from '../src/world/layout.ts';
 import { railingPlan } from '../src/world/railings.ts';
+import { SHOP_SPANS } from '../src/world/shops.ts';
 import { PATH, PathCurve, newPathFrame, newWorldPoint, pathPlace } from '../src/world/path.ts';
 import type { Along, PathRun } from '../src/world/path.ts';
 

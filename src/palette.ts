@@ -457,3 +457,160 @@ export const KIOSK = {
         mix(PALETTE[22], PALETTE[0], 0.2),
     ],
 } as const;
+
+/**
+ * A **livery**: one coordinated combination of colours a built thing is decorated in.
+ *
+ * The building-scale sibling of `Outfit`, and it exists for the same reason. A person dressed from
+ * four independent rolls reads as an assembly of parts; so does a shopfront, only worse, because a
+ * shop has nine or so painted surfaces rather than four. So a shop rolls one livery and fills its
+ * roles from it, and what varies between two shops of a type is which livery they wear rather than
+ * nine unrelated colours.
+ *
+ * Three roles, and they are not three slots by another name -- they are a *hierarchy*. `primary` is
+ * the wall, which is most of what you see, so it is one colour rather than a set: a livery is
+ * recognisable by its wall. `secondary` is the joinery -- plinth, cornice, pilasters, window frames
+ * -- and `accent` is the one saturated note, on the door, the sign and the awning's second band.
+ * Two entries each, so a livery still has room to vary between the shops wearing it.
+ */
+export interface Livery {
+    /** For readouts and test failures; never drawn. */
+    name: string;
+    primary: number;
+    secondary: readonly number[];
+    accent: readonly number[];
+}
+
+/**
+ * The eight liveries a shopfront can be painted in.
+ *
+ * Quieter than the kiosks and for the opposite reason. A cart is a landmark standing *on* the
+ * walkway that you are meant to spot from down the path and walk toward; a shop is a 6 x 7 m wall
+ * standing behind the railings, and a wall that shouts at that size is the only thing on screen.
+ * So every primary is heavily diluted toward off-white -- painted render rather than enamel -- and
+ * the saturation is spent on the door, the sign and the awning, which are the parts small enough to
+ * carry it.
+ *
+ * Every primary is distinct, and that is load-bearing rather than incidental: `liveryFor` names a
+ * shop's livery back from its wall colour, which is what lets the inspector report which one was
+ * rolled without a second draw or a field threaded through `Paint`.
+ */
+export const SHOP_LIVERY: readonly Livery[] = [
+    {
+        name: 'Chalk & Slate', primary: mix(PALETTE[0], PALETTE[4], 0.12),
+        secondary: [mix(PALETTE[4], PALETTE[0], 0.25), mix(PALETTE[5], PALETTE[0], 0.3)],
+        accent: [mix(PALETTE[19], PALETTE[18], 0.3), mix(PALETTE[16], PALETTE[17], 0.3)],
+    },
+    {
+        name: 'Oat & Brick', primary: mix(PALETTE[1], PALETTE[0], 0.4),
+        secondary: [mix(PALETTE[23], PALETTE[15], 0.35), mix(PALETTE[3], PALETTE[1], 0.3)],
+        accent: [mix(PALETTE[19], PALETTE[23], 0.25), mix(PALETTE[10], PALETTE[5], 0.3)],
+    },
+    {
+        name: 'Seafoam', primary: mix(PALETTE[0], PALETTE[11], 0.18),
+        secondary: [mix(PALETTE[10], PALETTE[0], 0.3), mix(PALETTE[2], PALETTE[10], 0.25)],
+        accent: [mix(PALETTE[17], PALETTE[18], 0.3), mix(PALETTE[19], PALETTE[18], 0.25)],
+    },
+    {
+        name: 'Harbour', primary: mix(PALETTE[0], PALETTE[9], 0.2),
+        secondary: [mix(PALETTE[6], PALETTE[0], 0.25), mix(PALETTE[7], PALETTE[0], 0.3)],
+        accent: [mix(PALETTE[16], PALETTE[17], 0.25), mix(PALETTE[18], PALETTE[19], 0.3)],
+    },
+    {
+        name: 'Sage & Teak', primary: mix(PALETTE[0], PALETTE[13], 0.2),
+        secondary: [mix(PALETTE[23], PALETTE[15], 0.3), mix(PALETTE[12], PALETTE[4], 0.3)],
+        accent: [mix(PALETTE[16], PALETTE[15], 0.2), mix(PALETTE[19], PALETTE[18], 0.3)],
+    },
+    {
+        name: 'Rosewater', primary: mix(PALETTE[0], PALETTE[21], 0.16),
+        secondary: [mix(PALETTE[20], PALETTE[0], 0.3), mix(PALETTE[4], PALETTE[20], 0.3)],
+        accent: [mix(PALETTE[10], PALETTE[0], 0.2), mix(PALETTE[16], PALETTE[17], 0.25)],
+    },
+    {
+        name: 'Marigold', primary: mix(PALETTE[0], PALETTE[16], 0.22),
+        secondary: [mix(PALETTE[23], PALETTE[17], 0.3), mix(PALETTE[3], PALETTE[15], 0.3)],
+        accent: [mix(PALETTE[6], PALETTE[5], 0.2), mix(PALETTE[19], PALETTE[23], 0.25)],
+    },
+    {
+        name: 'Plum & Bone', primary: mix(PALETTE[0], PALETTE[1], 0.5),
+        secondary: [mix(PALETTE[20], PALETTE[5], 0.35), mix(PALETTE[4], PALETTE[0], 0.2)],
+        accent: [mix(PALETTE[22], PALETTE[20], 0.3), mix(PALETTE[11], PALETTE[0], 0.25)],
+    },
+];
+
+/**
+ * The shops: what is sold, and the glass it is sold behind.
+ *
+ * The livery dresses the building; these dress the **symbol**, and they are curated per product for
+ * exactly the reason `KIOSK.candy` is. A shop is identified by an oversized emblem of what it
+ * sells and by nothing else -- there is no text anywhere on it -- so a roll that leaves the emblem
+ * unreadable has taken the shop's whole identity with it. There is no rule that could enforce
+ * "a sweet is not olive"; there is only a sweet set with no olive in it.
+ *
+ * The drinks shop reuses `KIOSK.cup` outright rather than curating a set beside it. The cart and
+ * the shop sell the same thing and the shop's cup is deliberately the cart's cup at building scale,
+ * so a second set would be a second answer to one question.
+ */
+export const SHOP = {
+    /**
+     * Window glass. One literal, never rolled: glass is what it is made of, like a lamp's globe or
+     * a wafer, and a window whose panes changed colour with the paint would read as painted board.
+     * Pale blue let down toward navy -- dark enough to read as a pane rather than as a hole.
+     */
+    glass: mix(PALETTE[9], PALETTE[6], 0.42),
+    /** A sweet wrapper's twisted ends: cellophane, so barely a colour at all. */
+    wrapper: mix(PALETTE[0], PALETTE[9], 0.15),
+    /** A wrapped sweet. Barely diluted -- this is the one part of a shop that is allowed to shout. */
+    sweet: [
+        mix(PALETTE[21], PALETTE[20], 0.25),
+        mix(PALETTE[19], PALETTE[18], 0.25),
+        mix(PALETTE[16], PALETTE[17], 0.3),
+        mix(PALETTE[22], PALETTE[21], 0.3),
+        mix(PALETTE[11], PALETTE[0], 0.2),
+    ],
+    /** Wrapping paper on a gift box. */
+    gift: [
+        mix(PALETTE[19], PALETTE[18], 0.3),
+        mix(PALETTE[8], PALETTE[6], 0.25),
+        mix(PALETTE[13], PALETTE[12], 0.3),
+        mix(PALETTE[16], PALETTE[17], 0.25),
+        mix(PALETTE[20], PALETTE[21], 0.3),
+    ],
+    /**
+     * Toy blocks: primary-school brights, and nothing a sweet would be.
+     *
+     * Only the bottom block rolls. The two above it are literals, the way a wafer and a cherry are,
+     * and for a reason that only showed up on the stage: a stack whose other two blocks took the
+     * shop's own trim and accent came out as one muddy lump on any livery whose accent sat near the
+     * rolled colour, which is most of them. Three blocks that are always three *different* colours
+     * is what makes it read as a toy rather than as masonry -- so two of them are fixed, and the
+     * rolled one is drawn from a set with no blue in it, because the fixed pair already has one.
+     */
+    block: [
+        mix(PALETTE[19], PALETTE[18], 0.2),
+        mix(PALETTE[16], PALETTE[17], 0.2),
+        mix(PALETTE[13], PALETTE[14], 0.25),
+        mix(PALETTE[20], PALETTE[21], 0.25),
+    ],
+    /** The other two blocks in the stack: one cool, one pale, against whatever the first rolls. */
+    blockB: mix(PALETTE[8], PALETTE[9], 0.2),
+    blockC: mix(PALETTE[0], PALETTE[15], 0.22),
+    /**
+     * A hat. Felt, so deeper and less saturated than the other four -- a bright disc on a stalk is
+     * a lollipop, and it is the band and the brim that say hat.
+     *
+     * **Mid-tone, though, not dark**, which was the correction. The first set here mixed every
+     * entry *toward charcoal* and the whole hat came out a black dome: the toon ramp drops a
+     * curved surface's lower half to its darkest band, so a colour that starts dark has nowhere
+     * left to go and the crown, the band and the brim all land on one value. There is no shape in a
+     * silhouette that dark. Diluted the other way instead -- toward off-white -- the shaded half is
+     * still recognisably the same hue and the hat reads as three parts.
+     */
+    felt: [
+        mix(PALETTE[23], PALETTE[15], 0.35),
+        mix(PALETTE[6], PALETTE[0], 0.28),
+        mix(PALETTE[19], PALETTE[18], 0.2),
+        mix(PALETTE[10], PALETTE[0], 0.25),
+        mix(PALETTE[20], PALETTE[0], 0.25),
+    ],
+} as const;

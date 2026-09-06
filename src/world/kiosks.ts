@@ -30,10 +30,11 @@ import type { Vendor } from '../entity.ts';
 import { EDGE, INK, KIOSK } from '../palette.ts';
 import { clearOf } from './edge.ts';
 import type { EdgePlan, Solid, Standing } from './edge.ts';
-import { L, PAD_SPANS, SHOP_SPANS } from './layout.ts';
+import { L, PAD_SPANS } from './layout.ts';
 import type { EdgeSpan } from './layout.ts';
 import { PATH } from './path.ts';
 import type { PathCurve } from './path.ts';
+import { SHOP_SPANS } from './shops.ts';
 import { placeStructure, structurePaint } from './structure.ts';
 import type { Paint, Prim, Slot, StructureArchetype } from './structure.ts';
 

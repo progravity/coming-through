@@ -13,6 +13,7 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { hasProperty } from '../src/entity.ts';
 import { Agent } from '../src/sim/agent.ts';
 import { SpatialGrid } from '../src/sim/grid.ts';
 import { buildObstacles, insideFurniture, pushOutOf, reachOf } from '../src/sim/obstacles.ts';
@@ -21,6 +22,7 @@ import { createPlayer, updatePlayer } from '../src/sim/player.ts';
 import { OBSTACLE_ROOM } from '../src/sim/steering.ts';
 import { IDLE_COMMAND, Simulation } from '../src/sim/simulation.ts';
 import type { StepCommand } from '../src/sim/simulation.ts';
+import type { Solid } from '../src/world/edge.ts';
 import { furniturePlan } from '../src/world/furniture.ts';
 import { edgePlans } from '../src/world/plan.ts';
 import { W } from '../src/world/layout.ts';
@@ -57,10 +59,23 @@ function penetration(obstacles: readonly Obstacle[], x: number, z: number, r: nu
 
 // ---------- the colliders themselves ----------
 
+/**
+ * The footprints in a plan that are really colliders, in the plan's own order.
+ *
+ * Not every footprint is one, and pairing them off positionally stopped being safe when the shops
+ * arrived: a shopfront presents a footprint and declines `static-obstacle`, so `buildObstacles`
+ * skips it and every collider after it would be compared against the wrong object. Selecting by the
+ * property is also the honest version of the check -- it is the join `obstaclesFrom` itself makes.
+ */
+function colliderSolids(plan = edgePlans()): Solid[] {
+    const walls = new Set(plan.entities.filter(e => hasProperty(e.meta, 'static-obstacle')).map(e => e.piece));
+    return plan.solids.filter(so => walls.has(so.piece));
+}
+
 test('a collider is the thing it is derived from, placed through the same frame', () => {
     // Every layer that has footprints, not just the furniture: the kiosks are solid through the
     // same path and a collider that only the drawing side knew about would be invisible here.
-    const solids = edgePlans().solids, obstacles = buildObstacles();
+    const solids = colliderSolids(), obstacles = buildObstacles();
     assert.equal(obstacles.length, solids.length, 'one collider per solid, in order');
     assert.ok(solids.length > 20, 'there is furniture to collide with');
     for (let i = 0; i < solids.length; i++) {
@@ -123,7 +138,7 @@ test('colliders follow a walkway that bends, widens and climbs', () => {
     const WIDENING: Along = (s: number) => W + s * 0.04;
     const HILL: Along = (s: number) => s * s * 0.004;
     const varied = new PathCurve(BEND, WIDENING, HILL);
-    const solids = edgePlans(varied).solids, obstacles = buildObstacles(varied);
+    const solids = colliderSolids(edgePlans(varied)), obstacles = buildObstacles(varied);
     assert.ok(obstacles.length > 20, 'the stub walkway is furnished');
     let turned = 0;
     for (let i = 0; i < solids.length; i++) {

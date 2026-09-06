@@ -24,10 +24,11 @@
 import { EDGE } from '../palette.ts';
 import { freeRuns } from './edge.ts';
 import type { Bar, EdgePlan, Standing } from './edge.ts';
-import { L, SHOP_SPANS } from './layout.ts';
+import { L } from './layout.ts';
 import type { EdgeSpan } from './layout.ts';
 import { PATH } from './path.ts';
 import type { PathCurve } from './path.ts';
+import { SHOP_SPANS } from './shops.ts';
 
 /** How far past each end of the path the railings run. */
 const RAIL_END = L + 8;

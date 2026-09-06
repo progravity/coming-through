@@ -6,7 +6,11 @@
  * kiosks there was only one layer with footprints in it, so both sides could name `furniturePlan`
  * and stay honest by accident. With two there is a real chance of a layer being drawn and not being
  * solid, or the reverse -- so the list lives here, in the one place, and adding the next layer of
- * props is a single entry that both readers pick up at once.
+ * props is a single entry that both readers pick up at once. The shops were exactly that entry.
+ *
+ * A plan's footprints are not automatically colliders, and the shops are why that distinction is
+ * now load-bearing rather than theoretical: they present a footprint and decline `static-obstacle`,
+ * so `sim/obstacles.ts` draws nothing from them while `world/index.ts` draws all of them.
  *
  * Pure by construction, which is what lets the simulation import it: the plans are functions of the
  * curve, and none of them has ever touched three.js.
@@ -18,6 +22,7 @@ import { kioskPlan } from './kiosks.ts';
 import { PATH } from './path.ts';
 import type { PathCurve } from './path.ts';
 import { railingPlan } from './railings.ts';
+import { shopPlan } from './shops.ts';
 
 /**
  * Every edge layer, with `piece` ids renumbered unique across the lot.
@@ -28,5 +33,5 @@ import { railingPlan } from './railings.ts';
  * asking.
  */
 export function edgePlans(curve: PathCurve = PATH): EdgePlan {
-    return mergePlans([railingPlan(curve), furniturePlan(curve), kioskPlan(curve)]);
+    return mergePlans([railingPlan(curve), furniturePlan(curve), kioskPlan(curve), shopPlan(curve)]);
 }

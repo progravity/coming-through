@@ -23,6 +23,7 @@
  * why `sim/obstacles.ts` can read a kiosk's footprint without a renderer arriving behind it.
  */
 import { fromList } from '../palette.ts';
+import type { Livery } from '../palette.ts';
 import type { Rng } from '../core/rng.ts';
 import type { EntityMeta, PathSpot, Vendor } from '../entity.ts';
 import type { Motion, Shape, Solid, Standing } from './edge.ts';
@@ -110,6 +111,25 @@ export interface StructureArchetype {
     vendor?: { service: Spot; staff: Spot };
     colours: Record<Slot, readonly number[]>;
     /**
+     * Curate the slots **jointly** rather than independently: a set of liveries, one of which the
+     * structure wears.
+     *
+     * Four independent slot rolls are right for a cart, which has a body, an awning and a topper --
+     * three surfaces, and a clash between two of them is a cart with a loud awning. A shopfront has
+     * nine: a wall, a plinth, a cornice, two pilasters, a door, two window frames, a sign and an
+     * awning. Rolled independently those do not read as a decorated building, they read as nine
+     * things that happen to be next to each other, and no amount of curating the four sets fixes it
+     * because the clash is *between* the slots rather than inside any one of them.
+     *
+     * So a livery names a primary, a secondary and an accent that were chosen together, and the
+     * slots take their sets from it. `topper` is deliberately left alone: it is the identity -- a
+     * sweet, a hat, a cup -- and it comes from the archetype's own curated product set, so no
+     * livery can roll a sweet that stops reading as a sweet.
+     *
+     * It costs no extra draw. See `structurePaint`.
+     */
+    livery?: readonly Livery[];
+    /**
      * Slots that must not come out the same colour as one another.
      *
      * For the archetypes whose slots draw from **one** set on purpose: an ice cream is two scoops
@@ -162,10 +182,19 @@ export function footprintOf(arch: StructureArchetype): { dn: number; da: number;
  */
 export function structurePaint(arch: StructureArchetype, rng: Rng): Paint {
     const rolls = SLOTS.map(() => rng.next());
+    // A livery costs no extra draw: the **first** roll picks it, and because a livery's primary is
+    // a single colour rather than a set, that same roll then selects `base` from a one-entry list
+    // and cannot land anywhere else. So the sequence is what it always was -- four rolls, taken up
+    // front, unconditionally, in `SLOTS` order -- and an archetype without a livery takes exactly
+    // the code path it took before this existed.
+    const worn = arch.livery === undefined ? undefined : fromList(arch.livery, rolls[0]);
+    const sets: Record<Slot, readonly number[]> = worn === undefined ? arch.colours : {
+        ...arch.colours, base: [worn.primary], trim: worn.secondary, accent: worn.accent,
+    };
     const paint = {} as Paint;
     const taken: number[] = [];
     SLOTS.forEach((slot, i) => {
-        const set = arch.colours[slot];
+        const set = sets[slot];
         let c = fromList(set, rolls[i]);
         if (arch.distinct?.includes(slot) === true) {
             // Walk this slot's own set from where its roll landed, to the first colour no other
@@ -178,6 +207,18 @@ export function structurePaint(arch: StructureArchetype, rng: Rng): Paint {
         paint[slot] = c;
     });
     return paint;
+}
+
+/**
+ * Which livery a paint came out of, named back from the wall it painted.
+ *
+ * A lookup rather than a second roll, and it is exact because every primary in a livery set is
+ * distinct: the wall colour *is* the livery's name. That is what lets a readout say which one was
+ * worn without `Paint` growing a field it would then carry everywhere for the sake of one panel --
+ * `Paint` is `Record<Slot, number>` and every reader of it wants exactly that.
+ */
+export function liveryFor(arch: StructureArchetype, paint: Paint): Livery | undefined {
+    return arch.livery?.find(l => l.primary === paint.base);
 }
 
 // ---------- placing one ----------

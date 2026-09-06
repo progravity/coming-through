@@ -10,9 +10,10 @@
 import { FURNITURE } from './entities/furniture.ts';
 import { KIOSK } from './entities/kiosk.ts';
 import { PERSON } from './entities/person.ts';
+import { SHOP } from './entities/shop.ts';
 import type { Controls, Inspectable } from './inspectable.ts';
 
-export const ENTITIES: readonly Inspectable[] = [PERSON, KIOSK, FURNITURE];
+export const ENTITIES: readonly Inspectable[] = [PERSON, KIOSK, FURNITURE, SHOP];
 
 /** What `?inspect=1` means with no `entity` named. Every URL written before this existed. */
 export const DEFAULT_ENTITY = 'person';
@@ -27,6 +28,10 @@ export const ALIASES: Readonly<Record<string, { entity: string; controls: Contro
     bench: { entity: 'furniture', controls: { kind: 'bench' } },
     lamp: { entity: 'furniture', controls: { kind: 'lamp' } },
     bin: { entity: 'furniture', controls: { kind: 'bin' } },
+    // The family's name as a name for its only member, so `?entity=building` works the way someone
+    // reading `entity.ts` would expect it to. It pins nothing: a shop is what the building family
+    // has, and the day it has two this is the line that has to choose.
+    building: { entity: 'shop', controls: {} },
 };
 
 export const byId = (id: string): Inspectable | undefined => ENTITIES.find(e => e.id === id);
