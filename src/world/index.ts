@@ -65,6 +65,6 @@ export function buildWorld(): World {
         scene, ground, props, edge,
         setInk: (on: boolean): void => { ground.setInk(on); edge.setInk(on); },
         animate: (t: number): void => { props.wheel.rotation.z = t * 0.15; edge.animate(t); },
-        dress: (look: Look | null): void => { props.dress(look); edge.dress(look); },
+        dress: (look: Look | null): void => { ground.dress(look); props.dress(look); edge.dress(look); },
     };
 }

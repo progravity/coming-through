@@ -18,6 +18,7 @@ import { buildEdge } from '../src/world/kit.ts';
 import { edgePlans } from '../src/world/plan.ts';
 import { worldToon } from '../src/world/material.ts';
 import { buildProps } from '../src/world/props.ts';
+import { buildGround } from '../src/world/ground.ts';
 
 test('the six are one list, named once, in the order their panels print', () => {
     assert.deepEqual(LOOK_NAMES, ['current', 'toon-bare', 'soft-ink', 'soft', 'soft-thin', 'matcap']);
@@ -191,4 +192,28 @@ test('the props take a look, keeping the colour each one carries', () => {
     // A prop's colour is in its material, not on the instance, so a look that forgot to ask for it
     // would repaint the whole skyline white.
     assert.deepEqual(after, before, 'a prop lost its colour under a look');
+});
+
+test('the ground takes a look and keeps its grain', () => {
+    const scene = new THREE.Scene();
+    const ground = buildGround(scene);
+    const surface = scene.children.find(
+        (c): c is THREE.Mesh => c instanceof THREE.Mesh && (c.material as THREE.Material).type === 'MeshToonMaterial',
+    );
+    assert.ok(surface !== undefined, 'no ground surface in the scene');
+    const shipped = surface.material as THREE.Material;
+    // Compared against a *fresh* material of the type the look produces, not against
+    // `Material.prototype.onBeforeCompile` -- three.js defines that as a no-op on every material, so
+    // an assertion against it passes whether or not the grain was ever patched on.
+    const bare = new THREE.MeshStandardMaterial();
+
+    ground.dress(lookNamed('soft'));
+    const soft = surface.material as THREE.MeshStandardMaterial;
+    assert.equal(soft.type, 'MeshStandardMaterial', 'the ground ignored the look');
+    // The bands are per-vertex, and the grain rides on whatever material the look chose.
+    assert.equal(soft.vertexColors, true, 'the ground lost its band colours');
+    assert.notEqual(soft.onBeforeCompile, bare.onBeforeCompile, 'the ground lost its grain under a look');
+
+    ground.dress(lookNamed('current'));
+    assert.equal(surface.material, shipped, 'the shipped ground material did not come back');
 });

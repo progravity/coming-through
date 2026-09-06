@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { GROUND } from '../palette.ts';
 import { INK_LINE, makeToonGradient } from '../render/materials.ts';
+import type { Look } from '../render/look.ts';
 import { box } from './box.ts';
 import { GOAL_S, L, PAD_LENGTH, START_S } from './layout.ts';
 import { PATH, newPathFrame, newWorldPoint, pathPlace } from './path.ts';
@@ -255,12 +256,17 @@ const GRAIN: number = 0.18, GRAIN_BROAD = 2.6, GRAIN_FINE = 0.85;
 const GRAIN_NEAR = 18, GRAIN_FAR = 55;
 
 /**
- * The ground's toon material, with a grain patched into its fragment shader.
+ * Patch the surface grain onto a material. See the note below on why it is per fragment.
  *
- * Deliberately *not* a new material: it is the same `MeshToonMaterial` on the same three-step ramp
- * the crowd is shaded by, with one multiply added to the diffuse colour after the vertex colour has
- * been applied. Nothing about how the ground takes light changes, so it still reads as the same
- * world; only the shade it starts from wobbles.
+ * Takes the material rather than making one, because a look may hand the ground a standard or a
+ * matcap material and the grain has to ride on whichever it is: the chunks this injects --
+ * `<common>`, `<project_vertex>`, `<color_fragment>` -- are in all three shaders, so nothing here
+ * was ever toon-specific but the type.
+ *
+ * Deliberately not swapped for a new material: it is whatever `MeshToonMaterial`/`MeshStandardMaterial`
+ * /`MeshMatcapMaterial` the caller built, on its own lighting, with one multiply added to the
+ * diffuse colour after the vertex colour has been applied. Nothing about how the ground takes light
+ * changes, so it still reads as the same world; only the shade it starts from wobbles.
  *
  * Two decisions inside the shader are the load-bearing ones:
  *
@@ -271,8 +277,7 @@ const GRAIN_NEAR = 18, GRAIN_FAR = 55;
  *   crawls as the camera moves and it aliases into moire at range. Past `GRAIN_FAR` the surface is
  *   flat again, which is also where the fog has taken it.
  */
-function grainy(gradientMap: THREE.DataTexture, depth: { value: number }): THREE.MeshToonMaterial {
-    const m = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap });
+function grainy<T extends THREE.Material>(m: T, depth: { value: number }): T {
     if (GRAIN === 0) return m;
     m.onBeforeCompile = (shader): void => {
         // A uniform rather than a baked constant, so the tier can take the grain off a weak GPU
@@ -315,6 +320,13 @@ export interface Ground {
     setInk(on: boolean): void;
     /** Turn the surface grain off. It is the ground's only per-pixel cost, so it is the tier's to spend. */
     setGrain(on: boolean): void;
+    /**
+     * Wear a rendering direction, or `null` for the shipped one.
+     *
+     * The ground's line is a *drawn strip*, not a shell -- a ribbon has no centre to grow away
+     * from -- so a look's colour reaches it and a look's weight cannot.
+     */
+    dress(look: Look | null): void;
 }
 
 /**
@@ -329,17 +341,31 @@ export function buildGround(scene: THREE.Scene): Ground {
     const samples = samplesAlong();
     const frames = samples.map(s => PATH.frameAt(s, newPathFrame()));
     const depth = { value: GRAIN };
-    const surface = new THREE.Mesh(
+    const surface: THREE.Mesh = new THREE.Mesh(
         ribbon(sectionAt, samples, frames),
-        grainy(makeToonGradient(), depth),
+        grainy(new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: makeToonGradient() }), depth),
     );
     const ink = new THREE.Mesh(
         ribbon(inkSectionAt, samples, frames),
         new THREE.MeshBasicMaterial({ color: INK_LINE }),
     );
     scene.add(surface); scene.add(ink);
+    const shipped = surface.material as THREE.Material;
     return {
         setInk: (on: boolean): void => { ink.visible = on; },
         setGrain: (on: boolean): void => { depth.value = on ? GRAIN : 0; },
+        dress: (look: Look | null): void => {
+            const want = look?.body === undefined
+                ? shipped
+                : grainy(look.body({ color: 0xffffff, vertexColors: true }), depth);
+            if (surface.material !== want) {
+                if (surface.material !== shipped) (surface.material as THREE.Material).dispose();
+                surface.material = want;
+            }
+            // The ground's line is a *drawn strip*, not a shell -- a ribbon has no centre to grow
+            // away from -- so a look's colour reaches it and a look's weight cannot.
+            (ink.material as THREE.MeshBasicMaterial).color.setHex(look?.inkColour ?? INK_LINE);
+            ink.visible = look?.inkOn ?? true;
+        },
     };
 }
