@@ -82,7 +82,8 @@ export function railingPlan(curve: PathCurve = PATH, spans: readonly EdgeSpan[] 
             }
         }
     }
-    // No solids: the railings are the walkway's edge, and the crowd and the player are already
-    // fenced by `halfWidth`. A collider here would be a second, slightly different railing.
-    return { standing, bars, solids: [] };
+    // No solids and no entities: the railings are the walkway's edge, and the crowd and the player
+    // are already fenced by `halfWidth`. A collider here would be a second, slightly different
+    // railing -- and a thing with no gameplay property at all is scenery, which is what these are.
+    return { standing, bars, solids: [], entities: [] };
 }

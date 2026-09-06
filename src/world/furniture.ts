@@ -21,7 +21,7 @@ import { EDGE } from '../palette.ts';
 import { entityMeta } from '../entity.ts';
 import type { EntityMeta } from '../entity.ts';
 import { clearOf } from './edge.ts';
-import type { EdgePlan, Solid, Standing } from './edge.ts';
+import type { EdgePlan, PlacedEntity, Solid, Standing } from './edge.ts';
 import { KIOSK_SPANS } from './kiosks.ts';
 import { L, PAD_SPANS, SHOP_SPANS } from './layout.ts';
 import type { EdgeSpan } from './layout.ts';
@@ -130,6 +130,7 @@ export function bench(curve: PathCurve, s: number, side: 1 | -1, piece: number):
         ],
         bars: [],
         solids: [{ piece, s, n: side * (edge - BENCH_MID), half: BENCH_HALF, r: BENCH_R }],
+        entities: [{ piece, meta: FURNITURE_ENTITIES.bench }],
     };
 }
 
@@ -141,6 +142,7 @@ export function bin(curve: PathCurve, s: number, side: 1 | -1, piece: number): E
         standing: [round(EDGE.bin, BIN_H / 2, BIN_D, BIN_H), round(EDGE.iron, BIN_H + RIM_T / 2, RIM_D, RIM_T)],
         bars: [],
         solids: [{ piece, s, n, half: 0, r: RIM_D / 2 }],
+        entities: [{ piece, meta: FURNITURE_ENTITIES.bin }],
     };
 }
 
@@ -157,6 +159,7 @@ export function lamp(curve: PathCurve, s: number, side: 1 | -1, piece: number): 
         // the rule is "furniture is solid" with no exception to remember, and so a lamp moved onto
         // the walkway is already something you walk round.
         solids: [{ piece, s, n, half: 0, r: LAMP_T / 2 }],
+        entities: [{ piece, meta: FURNITURE_ENTITIES.lamp }],
     };
 }
 
@@ -167,14 +170,16 @@ export function lamp(curve: PathCurve, s: number, side: 1 | -1, piece: number): 
  * swept along a walkway the game has never drawn and measured back off the frame there.
  */
 export function furniturePlan(curve: PathCurve = PATH, spans: readonly EdgeSpan[] = [...SHOP_SPANS, ...PAD_SPANS]): EdgePlan {
-    const standing: Standing[] = [], solids: Solid[] = [];
+    const standing: Standing[] = [], solids: Solid[] = [], entities: PlacedEntity[] = [];
     // The carts interrupt what stands *inside* the railings and nothing else. A lamp post is on the
     // far side of them, where a cart can never reach it, so charging the lamps for the kiosks would
     // punch six holes in a rhythm that has nothing to do with them. This is the one interruption
     // the two loops do not share, and it is a fact about where the things stand rather than a tweak.
     const inside = [...spans, ...KIOSK_SPANS];
     let piece = 0;
-    const add = (p: EdgePlan): void => { standing.push(...p.standing); solids.push(...p.solids); };
+    const add = (p: EdgePlan): void => {
+        standing.push(...p.standing); solids.push(...p.solids); entities.push(...p.entities);
+    };
 
     for (const side of [-1, 1] as const) {
         const benches = everyAlong(inside, side, BENCH_STEP, side === 1 ? 0 : BENCH_STEP / 2, BENCH_LEN);
@@ -193,5 +198,5 @@ export function furniturePlan(curve: PathCurve = PATH, spans: readonly EdgeSpan[
             add(lamp(curve, s, side, ++piece));
         }
     }
-    return { standing, bars: [], solids };
+    return { standing, bars: [], solids, entities };
 }

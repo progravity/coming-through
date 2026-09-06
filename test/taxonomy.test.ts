@@ -16,6 +16,8 @@ import { PROPERTIES, entityMeta, hasProperty } from '../src/entity.ts';
 import { ENTITIES } from '../src/inspect/registry.ts';
 import { FURNITURE_ENTITIES } from '../src/world/furniture.ts';
 import { KIOSK_ARCHETYPES, KIOSK_TYPES, kiosks } from '../src/world/kiosks.ts';
+import { edgePlans } from '../src/world/plan.ts';
+import { railingPlan } from '../src/world/railings.ts';
 import type { Property } from '../src/entity.ts';
 
 const SRC = new URL('../src/', import.meta.url).pathname;
@@ -159,4 +161,32 @@ test('every piece of furniture declares itself immobile, solid and placed', () =
         // No vendor: a bench serves nobody, and the property is what says so.
         assert.ok(!hasProperty(meta, 'vendor'), `${kind} claims to be a vendor`);
     }
+});
+
+test('every solid in the plan belongs to an entity that declares itself one', () => {
+    // The join the simulation makes: a collider is a reading of an entity, and the piece id is what
+    // ties them. A solid with no entity would be a thing you walk into that nothing can describe.
+    const plan = edgePlans();
+    const byPiece = new Map(plan.entities.map(e => [e.piece, e]));
+    assert.ok(plan.solids.length > 0);
+    for (const so of plan.solids) {
+        const e = byPiece.get(so.piece);
+        assert.ok(e !== undefined, `solid on piece ${so.piece} belongs to no entity`);
+        assert.ok(hasProperty(e.meta, 'static-obstacle'), `piece ${so.piece} is solid without saying so`);
+    }
+    // And every piece id is unique across the merged layers, which is what mergePlans' renumbering
+    // is for: two layers each numbering from one would have a bench and a cart both claiming piece
+    // 3, and the join above would answer with the wrong object.
+    assert.equal(byPiece.size, plan.entities.length);
+});
+
+test('the railings are scenery and contribute no entities', () => {
+    // The classification rule as a fact rather than a paragraph. What stops you at the railings is
+    // the path's own halfWidth, not a collider -- so they carry no gameplay property, and a thing
+    // with no gameplay property is scenery. They are still drawn, by the layer that also carries
+    // the benches, which is why the boundary is a property of the thing and not of the file.
+    const rail = railingPlan();
+    assert.ok(rail.standing.length > 0, 'the railings should still be drawn');
+    assert.deepEqual(rail.solids, []);
+    assert.deepEqual(rail.entities, []);
 });

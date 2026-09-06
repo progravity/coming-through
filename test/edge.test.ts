@@ -18,7 +18,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
 import { clearOf, freeRuns } from '../src/world/edge.ts';
-import type { Bar, EdgePlan, Solid, Standing } from '../src/world/edge.ts';
+import type { Bar, EdgePlan, PlacedEntity, Solid, Standing } from '../src/world/edge.ts';
 import { barMatrix, standingMatrix } from '../src/world/kit.ts';
 import { bench, bin, furniturePlan, lamp } from '../src/world/furniture.ts';
 import { KIOSK_SPANS } from '../src/world/kiosks.ts';
@@ -46,7 +46,10 @@ const NEAR = 1e-9;
 const pieces = (p: EdgePlan): Standing[] => p.standing;
 const both = (curve: PathCurve): EdgePlan => {
     const r = railingPlan(curve), f = furniturePlan(curve);
-    return { standing: [...r.standing, ...f.standing], bars: [...r.bars, ...f.bars], solids: [...r.solids, ...f.solids] };
+    return {
+        standing: [...r.standing, ...f.standing], bars: [...r.bars, ...f.bars],
+        solids: [...r.solids, ...f.solids], entities: [...r.entities, ...f.entities],
+    };
 };
 
 /** Every place a piece names on the path, standing or bar end, as (s, n) pairs. */
@@ -241,12 +244,16 @@ test('the per-object builders are what the furniture plan is made of', () => {
     // if they ever stop composing back into it, one of the two is drawing something the other is
     // not, which is exactly the drift the whole tool exists to make impossible.
     const plan = furniturePlan(PATH);
-    const rebuilt = { standing: [] as Standing[], bars: [] as Bar[], solids: [] as Solid[] };
+    const rebuilt = {
+        standing: [] as Standing[], bars: [] as Bar[], solids: [] as Solid[],
+        entities: [] as PlacedEntity[],
+    };
     let piece = 0;
     const add = (p: EdgePlan): void => {
         rebuilt.standing.push(...p.standing);
         rebuilt.bars.push(...p.bars);
         rebuilt.solids.push(...p.solids);
+        rebuilt.entities.push(...p.entities);
     };
     for (const side of [-1, 1] as const) {
         const benches = benchPlaces(side);

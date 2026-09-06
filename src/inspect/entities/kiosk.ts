@@ -55,7 +55,10 @@ class KioskCast implements Cast {
             const n = PATH.halfWidth(s) - KIOSK_N;
             const facing: -1 = -1;
             const placed = placeStructure(arch, paint, { s, n, facing, phase }, 1);
-            const plan: EdgePlan = { standing: placed.standing, bars: [], solids: [placed.solid] };
+            const plan: EdgePlan = {
+                standing: placed.standing, bars: [], solids: [placed.solid],
+                entities: [{ piece: 1, meta: arch.entity, vendor: placed.vendor }],
+            };
             const ex = new EdgeExhibit(this.scene, plan, facing);
             const points = new THREE.Group();
             if (placed.vendor !== undefined) {

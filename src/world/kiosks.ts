@@ -420,5 +420,10 @@ export function kiosks(curve: PathCurve = PATH, spans: readonly EdgeSpan[] = [..
 /** The carts as an edge plan: what to draw, what to walk round, and what each of them is. */
 export function kioskPlan(curve: PathCurve = PATH, spans?: readonly EdgeSpan[]): EdgePlan {
     const all = kiosks(curve, spans);
-    return { standing: all.flatMap(k => k.standing), bars: [], solids: all.map(k => k.solid) };
+    return {
+        standing: all.flatMap(k => k.standing),
+        bars: [],
+        solids: all.map(k => k.solid),
+        entities: all.map(k => ({ piece: k.piece, meta: k.arch.entity, vendor: k.vendor })),
+    };
 }

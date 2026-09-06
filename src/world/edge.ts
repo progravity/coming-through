@@ -19,6 +19,7 @@
  *   not the same height. So a bar is built from its two frame-placed ends and leans however it has
  *   to in order to meet them.
  */
+import type { EntityMeta, Vendor } from '../entity.ts';
 import type { EdgeSpan } from './layout.ts';
 
 /**
@@ -114,10 +115,25 @@ export interface Bar {
 export interface Solid { piece: number; s: number; n: number; half: number; r: number; }
 
 /**
- * What one layer of the edge contributes: the pieces it stands, the bars it strings, and the
- * footprints anything walking into them has to go round.
+ * One placed entity: which piece it is, what kind of thing it is, and any capability data it has.
+ *
+ * Keyed by the same `piece` id that already ties a collider to the parts it is a collider for, so a
+ * plan's lists are several readings of one object rather than several lists to keep in step. This
+ * is how the taxonomy reaches the simulation -- `sim/obstacles.ts` asks an entity whether it is a
+ * `static-obstacle` rather than assuming that anything with a footprint is one -- and it is where a
+ * vendor's spots finally land somewhere both readers of the plan can see them, `placeStructure`
+ * having always computed them and `kioskPlan` having always thrown them away.
+ *
+ * One entry per **entity**, not per part and not per collider. The railings contribute none: what
+ * stops you there is the path's own width, so they carry no gameplay property and are scenery.
  */
-export interface EdgePlan { standing: Standing[]; bars: Bar[]; solids: Solid[]; }
+export interface PlacedEntity { piece: number; meta: EntityMeta; vendor?: Vendor; }
+
+/**
+ * What one layer of the edge contributes: the pieces it stands, the bars it strings, the footprints
+ * anything walking into them has to go round, and what kind of thing each of those objects is.
+ */
+export interface EdgePlan { standing: Standing[]; bars: Bar[]; solids: Solid[]; entities: PlacedEntity[]; }
 
 // ---------- skip ranges ----------
 
@@ -162,9 +178,13 @@ export function freeRuns(spans: readonly EdgeSpan[], side: number, from: number,
  * no bigger than the thing you can see would be measuring one object against another's parts. Each
  * plan is offset past the highest id used so far instead, which costs one pass and makes the
  * merged plan answer that question correctly for every layer at once.
+ *
+ * The entities are renumbered by the same offset and for the same reason: an entity is found by the
+ * `piece` id its collider carries, so the two have to move together or the join finds another
+ * layer's object.
  */
 export function mergePlans(plans: readonly EdgePlan[]): EdgePlan {
-    const out: EdgePlan = { standing: [], bars: [], solids: [] };
+    const out: EdgePlan = { standing: [], bars: [], solids: [], entities: [] };
     let base = 0;
     for (const plan of plans) {
         let top = base;
@@ -176,6 +196,10 @@ export function mergePlans(plans: readonly EdgePlan[]): EdgePlan {
         for (const so of plan.solids) {
             out.solids.push({ ...so, piece: so.piece + base });
             top = Math.max(top, so.piece + base);
+        }
+        for (const e of plan.entities) {
+            out.entities.push({ ...e, piece: e.piece + base });
+            top = Math.max(top, e.piece + base);
         }
         base = top;
     }
