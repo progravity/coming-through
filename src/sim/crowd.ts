@@ -1,5 +1,6 @@
 import type { Streams } from '../core/rng.ts';
 import { stepsFor } from '../core/time.ts';
+import { hasProperty } from '../entity.ts';
 import { MAX } from '../world/layout.ts';
 import { Agent } from './agent.ts';
 import { SpatialGrid } from './grid.ts';
@@ -93,7 +94,12 @@ export class Crowd {
             if (d2 >= R * R || d2 < 1e-6) return;
             const d = Math.sqrt(d2), nx = ex / d, nz = ez / d;
             player.x += nx * (R - d); player.z += nz * (R - d);
-            if (bumpsCount && a.bumpCd <= 0) {
+            // A bump is player-versus-person contact, and the entity is what says whether it
+            // counts -- rather than the fact that this collision took the agent code path. Everyone
+            // in the crowd is bump-relevant; the furniture is not, and reports a scrape of its own
+            // that is counted nowhere. The push-out above happens either way: being moved out of
+            // someone is contact resolution, not scoring.
+            if (bumpsCount && hasProperty(a.A.entity, 'bump-relevant') && a.bumpCd <= 0) {
                 a.bumpCd = 1.2; a.stopUntil = a.t + 0.8; a.vx = -nx * 0.6; a.vz = -nz * 0.6;
                 player.vx += nx * 1.5; player.vz += nz * 1.5;
                 onBump({ agent: a, nx, nz });

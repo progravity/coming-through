@@ -12,12 +12,14 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { test } from 'node:test';
 import { join, relative } from 'node:path';
 import { ARCH, ARCH_KEYS } from '../src/archetypes.ts';
+import { buildObstacles, obstaclesFrom } from '../src/sim/obstacles.ts';
 import { PROPERTIES, entityMeta, hasProperty } from '../src/entity.ts';
 import { ENTITIES } from '../src/inspect/registry.ts';
 import { FURNITURE_ENTITIES } from '../src/world/furniture.ts';
 import { KIOSK_ARCHETYPES, KIOSK_TYPES, kiosks } from '../src/world/kiosks.ts';
 import { edgePlans } from '../src/world/plan.ts';
 import { railingPlan } from '../src/world/railings.ts';
+import { PATH } from '../src/world/path.ts';
 import type { Property } from '../src/entity.ts';
 
 const SRC = new URL('../src/', import.meta.url).pathname;
@@ -189,4 +191,36 @@ test('the railings are scenery and contribute no entities', () => {
     assert.ok(rail.standing.length > 0, 'the railings should still be drawn');
     assert.deepEqual(rail.solids, []);
     assert.deepEqual(rail.entities, []);
+});
+
+test('a collider comes from an entity that says it is a static obstacle', () => {
+    // Behaviour-preserving today, because everything with a footprint declares the property: the
+    // filter drops nothing and the obstacle list is exactly what it always was.
+    assert.equal(buildObstacles().length, edgePlans().solids.length);
+});
+
+test('a footprint belonging to an entity that is not a static obstacle is not a collider', () => {
+    // What the filter is actually for, shown on a plan the game does not draw. Nothing in the game
+    // is an entity with a footprint that is not a wall -- a vendor's counter customers may reach
+    // across would be one -- so this is the only place the branch can be exercised at all.
+    const plan = edgePlans();
+    const one = plan.entities[0];
+    const softened = {
+        ...plan,
+        entities: plan.entities.map(e => e.piece !== one.piece ? e
+            : { ...e, meta: { ...e.meta, properties: new Set<Property>(['immobile']) } }),
+    };
+    const dropped = plan.solids.filter(so => so.piece === one.piece).length;
+    assert.ok(dropped > 0, 'the entity chosen to soften has no footprint to drop');
+    assert.equal(obstaclesFrom(softened, PATH).length, plan.solids.length - dropped);
+});
+
+test('everyone the player can bump into says they are bump-relevant', () => {
+    // The score has exactly one definition -- player-versus-person contact -- and the property is
+    // now what says so, rather than the fact that the collision took the agent code path.
+    for (const key of ARCH_KEYS) assert.ok(hasProperty(ARCH[key].entity, 'bump-relevant'), key);
+    // And nothing you walk into is: hitting the furniture is a scrape, counted nowhere.
+    for (const e of edgePlans().entities) {
+        assert.ok(!hasProperty(e.meta, 'bump-relevant'), `piece ${e.piece} would score a bump`);
+    }
 });

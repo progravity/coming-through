@@ -8,6 +8,12 @@
  * readings of one number: move a bench, lengthen it, widen the path under it, and the thing you walk
  * into moves with the thing you see. There is no second list to keep in step.
  *
+ * *Which* of a plan's footprints become colliders is the entity's own statement rather than an
+ * assumption here: an object is walked into because it declares `static-obstacle`, not because it
+ * happens to have a footprint at all. Everything with one declares it today, so nothing is dropped
+ * -- but a counter customers may reach across is a footprint that is not a wall, and that is a fact
+ * about the object rather than one this file should be deciding.
+ *
  * It reads `edgePlans`, which is the same list `world/index.ts` draws, so a layer cannot end up
  * drawn without being solid or solid without being drawn.
  *
@@ -22,6 +28,8 @@
  * you can walk into. And they draw no random numbers -- the furniture layout is a function of the
  * path, identical in every run.
  */
+import { hasProperty } from '../entity.ts';
+import type { EdgePlan } from '../world/edge.ts';
 import { edgePlans } from '../world/plan.ts';
 import { PATH, newPathFrame, newWorldPoint, pathPlace } from '../world/path.ts';
 import type { PathCurve } from '../world/path.ts';
@@ -49,15 +57,17 @@ export interface Obstacle extends GridItem {
 export const reachOf = (o: Obstacle): number => o.half + o.r;
 
 /**
- * The furniture's colliders, in world space.
+ * The colliders one plan presents: the footprints of the entities that say they are static
+ * obstacles, turned into world space through the curve.
  *
- * Read once when a `Crowd` is built and never rebuilt: the walkway does not move. Taking `curve`
- * rather than reaching for `PATH` is what lets the test place the furniture and the carts on a
- * walkway that bends, widens and climbs and check the colliders followed them.
+ * Split out from `buildObstacles` so the filter can be exercised on a plan the game does not draw.
+ * Nothing in the game today is an entity with a footprint that is not a wall, which is exactly why
+ * the branch needs a plan of its own to be tested against.
  */
-export function buildObstacles(curve: PathCurve = PATH): Obstacle[] {
+export function obstaclesFrom(plan: EdgePlan, curve: PathCurve): Obstacle[] {
     const frame = newPathFrame(), at = newWorldPoint();
-    return edgePlans(curve).solids.map(s => {
+    const solid = new Set(plan.entities.filter(e => hasProperty(e.meta, 'static-obstacle')).map(e => e.piece));
+    return plan.solids.filter(s => solid.has(s.piece)).map(s => {
         const f = curve.frameAt(s.s, frame);
         pathPlace(f, s.n, 0, at);
         // The axis is the tangent flattened into the walking plane, because the simulation is
@@ -67,6 +77,15 @@ export function buildObstacles(curve: PathCurve = PATH): Obstacle[] {
         return { cx: at.x, cz: at.z, dead: false as const, ax: f.tx / len, az: f.tz / len, half: s.half, r: s.r };
     });
 }
+
+/**
+ * The furniture's colliders, in world space.
+ *
+ * Read once when a `Crowd` is built and never rebuilt: the walkway does not move. Taking `curve`
+ * rather than reaching for `PATH` is what lets the test place the furniture and the carts on a
+ * walkway that bends, widens and climbs and check the colliders followed them.
+ */
+export const buildObstacles = (curve: PathCurve = PATH): Obstacle[] => obstaclesFrom(edgePlans(curve), curve);
 
 /** Where the capsule's segment comes closest to (x, z). Writes into `out` to stay allocation-free. */
 export interface Near { x: number; z: number; }
