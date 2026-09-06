@@ -1,10 +1,16 @@
 import type { Rng } from './core/rng.ts';
+import { entityMeta } from './entity.ts';
+import type { EntityMeta } from './entity.ts';
 import type { OutfitKey } from './palette.ts';
 import type { Range } from './util.ts';
 
 // ---------- archetypes: behavior + look constraints in one place ----------
 // Colour itself lives in palette.ts; a Look names a *family of outfits* rather than a list of hex.
-export type ArchKey = 'tourist' | 'dave' | 'mary' | 'kyle' | 'linda' | 'family' | 'timmy';
+// Each archetype also declares what kind of thing it is -- see entity.ts. Everyone here is a
+// mobile, bump-relevant person who arrives with the crowd; the axes are stated separately
+// because a shop assistant is the same kind of person standing still, and there has to be
+// somewhere to say so without inventing a second archetype.
+export type ArchKey = 'tourist' | 'dave' | 'mary' | 'kyle' | 'linda' | 'johnsons' | 'timmy';
 export type HatType = 'none' | 'cap' | 'brim' | 'cone' | 'beanie' | 'bucket';
 export type Accessory = 'none' | 'backpack' | 'balloon' | 'stroller' | 'phone' | 'camera';
 
@@ -87,37 +93,52 @@ export interface Archetype {
     spacing?: number;
     /** Spawns alongside a parent of this type. */
     parentType?: ArchKey;
+    /**
+     * What kind of thing this is, on all four taxonomy axes.
+     *
+     * Written out per archetype rather than defaulted from a shared constant: a default is a weld,
+     * and the first archetype that needs to be `stationed` and `immobile` -- the shop staff -- is
+     * the one a default would stand in the way of.
+     */
+    entity: EntityMeta;
     look: Look;
 }
 
 export const ARCH: Record<ArchKey, Archetype> = {
     tourist: { name: 'Tourist', weight: 6, color: 0x4a7fb5, desc: 'walks normally',
+        entity: entityMeta('person', 'tourist', ['bump-relevant', 'mobile'], 'crowd-spawned'),
         speed: [1.2, 1.5], radius: 0.32, sepR: 1.4, sepW: 2.5, wander: 0.3, wanderEvery: [2, 4], avoidPlayer: 1, accel: 6,
         look: { h: [0.85, 1.0], palette: 'any', hat: 0.4, acc: ['none', 'none', 'backpack', 'balloon'],
             age: [0.07, 0.14, 0.58, 0.21], bag: 0.25 } },
     dave: { name: 'Dave', weight: 2, color: 0xff8c2b, desc: 'fast, cuts across',
+        entity: entityMeta('person', 'dave', ['bump-relevant', 'mobile'], 'crowd-spawned'),
         speed: [2.2, 2.6], radius: 0.3, sepR: 0.9, sepW: 1.2, wander: 1.6, wanderEvery: [0.8, 1.6], avoidPlayer: 0.6, accel: 9,
         look: { h: [0.95, 1.03], w: 0.85, palette: 'orange', hat: 0.1, acc: ['none'], stride: 1.3, cadence: 1.1,
             age: [0, 0.22, 0.74, 0.04], aid: { cane: 0, wheelchair: 0.035, scooter: 0 }, beard: 0.3, shorts: 0.4, bag: 0.1 } },
     mary: { name: 'Mary', weight: 2, color: 0xd94f8c, desc: 'slow, pushes a stroller',
+        entity: entityMeta('person', 'mary', ['bump-relevant', 'mobile'], 'crowd-spawned'),
         speed: [0.7, 0.9], radius: 0.62, colOffset: 0.6, sepR: 2.0, sepW: 3, wander: 0.1, wanderEvery: [4, 7], avoidPlayer: 1, accel: 3,
         look: { h: [0.86, 0.95], palette: 'pink', hat: 0.3, acc: ['stroller'], stride: 0.6, bob: 0.4,
             age: [0, 0.08, 0.88, 0.04], aid: { cane: 0, wheelchair: 0, scooter: 0 }, ponytail: 0.35, bag: 0.3 } },
     kyle: { name: 'Kyle', weight: 2, color: 0x7fd0ff, desc: 'on his phone, avoids no one',
+        entity: entityMeta('person', 'kyle', ['bump-relevant', 'mobile'], 'crowd-spawned'),
         speed: [0.9, 1.1], radius: 0.32, sepR: 0.5, sepW: 0.3, wander: 0.5, wanderEvery: [2, 4], avoidPlayer: 0.1, accel: 4,
         look: { h: [0.89, 1.0], palette: 'blue', hat: 0.2, acc: ['phone'], headPitch: 0.55, stride: 0.7, cadence: 1.2,
             age: [0.02, 0.38, 0.56, 0.04], aid: { cane: 0.01, wheelchair: 0.025, scooter: 0.005 },
             glasses: 0.3, shorts: 0.4, bag: 0.25 } },
     linda: { name: 'Linda', weight: 2, color: 0xffd54f, desc: 'stops dead for photos',
+        entity: entityMeta('person', 'linda', ['bump-relevant', 'mobile'], 'crowd-spawned'),
         speed: [1.1, 1.3], radius: 0.32, sepR: 1.4, sepW: 2.5, wander: 0.4, wanderEvery: [2, 4], avoidPlayer: 1, accel: 6, stopEvery: [4, 8], stopFor: [1.5, 3],
         look: { h: [0.83, 0.93], palette: 'yellow', hat: 0.9, hatType: 'brim', acc: ['camera'],
             age: [0, 0.05, 0.58, 0.37], aid: { cane: 0.05, wheelchair: 0.03, scooter: 0.03 },
             glasses: 0.35, jacket: 0.35, bag: 0.35 } },
-    family: { name: 'The Johnsons', weight: 1, color: 0x59b25f, desc: 'walk four abreast',
+    johnsons: { name: 'The Johnsons', weight: 1, color: 0x59b25f, desc: 'walk four abreast',
+        entity: entityMeta('person', 'johnsons', ['bump-relevant', 'mobile'], 'crowd-spawned'),
         speed: [0.9, 1.1], radius: 0.34, sepR: 1.2, sepW: 1.5, wander: 0, wanderEvery: [9, 9], avoidPlayer: 0.7, accel: 5, group: [3, 4], spacing: 0.9,
         look: { h: [0.85, 1.0], palette: 'green', sameOutfit: true, hat: 0.5, acc: ['none', 'backpack'],
             age: [0.32, 0.16, 0.42, 0.1], shorts: 0.4 } },
     timmy: { name: 'Timmy', weight: 2, color: 0xab47bc, desc: 'small, fast, unpredictable',
+        entity: entityMeta('person', 'timmy', ['bump-relevant', 'mobile'], 'crowd-spawned'),
         speed: [2.0, 2.8], radius: 0.22, sepR: 0.8, sepW: 1.0, wander: 3, wanderEvery: [0.5, 1.2], avoidPlayer: 0.2, accel: 12, parentType: 'tourist',
         // Height is given as the adult range every archetype uses; the forced child age is what
         // makes Timmy small, so his proportions stay consistent with every other child in the crowd.

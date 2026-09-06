@@ -11,6 +11,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { test } from 'node:test';
 import { join, relative } from 'node:path';
+import { ARCH, ARCH_KEYS } from '../src/archetypes.ts';
 import { PROPERTIES, entityMeta, hasProperty } from '../src/entity.ts';
 import { ENTITIES } from '../src/inspect/registry.ts';
 import type { Property } from '../src/entity.ts';
@@ -92,4 +93,24 @@ test('the inspector shelves entities by the same family the game files them unde
     // path-furniture, structure -- which is two names for one concept, and the thing this removes.
     const shelves = ENTITIES.map(e => `${e.id}:${e.family}`).sort();
     assert.deepEqual(shelves, ['furniture:furniture', 'kiosk:kiosk', 'person:person']);
+});
+
+test('every person declares themselves a crowd-spawned, mobile, bump-relevant person', () => {
+    for (const key of ARCH_KEYS) {
+        const meta = ARCH[key].entity;
+        assert.equal(meta.family, 'person', `${key} is not filed as a person`);
+        // The metadata names the archetype the game already files it under, rather than inventing a
+        // second identity that could drift from the first.
+        assert.equal(meta.type, key, `${key} calls itself '${meta.type}'`);
+        assert.equal(meta.placement, 'crowd-spawned');
+        assert.deepEqual(new Set(meta.properties), new Set(['bump-relevant', 'mobile']));
+    }
+});
+
+test('the archetype keys are what they always were, in the order they always were', () => {
+    // Both determinism hashes store `ARCH_KEYS.indexOf(a.type)`, so the *position* of every key is
+    // load-bearing and its spelling is not. Renaming `family` to `johnsons` -- it collided with the
+    // name of a taxonomy axis -- is safe precisely because it kept its place.
+    assert.deepEqual(ARCH_KEYS, ['tourist', 'dave', 'mary', 'kyle', 'linda', 'johnsons', 'timmy']);
+    assert.equal(ARCH.johnsons.name, 'The Johnsons');
 });
