@@ -7,6 +7,9 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
 ## Layout
 
 - `src/core/` — `rng.ts` (seeded RNG and named streams), `time.ts` (`SIM_DT`), `hash.ts` (state hashing).
+- `src/entity.ts` — the entity taxonomy: the four axes every entity declares itself on, and the
+  whole property vocabulary. Imports nothing, so `sim/`, `world/`, `archetypes.ts` and `inspect/`
+  can all read it without any of them dragging a dependency in behind them.
 - `src/palette.ts` — every colour in the game, as one 24-entry palette plus named families, and the
   ground tones blended out of it.
 - `src/archetypes.ts` — who exists: behaviour numbers and look constraints per archetype.
@@ -82,7 +85,7 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
   frame there, then checks the gaps are read off where the buildings are.
 - `test/kiosks.test.ts` — that an archetype fixes a cart's form completely and only colour rolls,
   that a roll cannot leave the curated set, that a collider is the cart and never the topper, that
-  the service and attendant points land on the right sides of it, and that a cart is solid without
+  the service and staff points land on the right sides of it, and that a cart is solid without
   ever being a bump.
 - `test/obstacles.test.ts` — that the furniture is solid and that being solid never touches the
   score: colliders match the drawn objects, the crowd goes round them, the player is stopped by
@@ -97,6 +100,82 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
   second mesh, so the ink is exactly half of what a person costs, in draw calls and in instances
   alike. The looks themselves and their `?look=` names are guarded in `test/look.test.ts`, being
   data in `src/render/look.ts` rather than anything in that directory.
+
+## The entity taxonomy
+
+Every entity in the game states what kind of thing it is, on four axes kept **independent of one
+another**. The vocabulary is `src/entity.ts` and nothing else; a second copy of it would compile,
+break nothing and be found by nobody, which is why `test/taxonomy.test.ts` reads the source and
+fails on one.
+
+- **family** — the structural kind: `person`, `kiosk`, `building`, `furniture`.
+- **type** — the archetype: the fixed form and identity. **Type fixes form; the recipe rolls only
+  colour**, which is the rule `makeRecipe` and `structurePaint` already keep.
+- **properties** — the traits *behaviour queries*: `bump-relevant`, `mobile`, `immobile`,
+  `static-obstacle`, `vendor`, `stationed`. Small, closed and positive; a vocabulary that grows a
+  term per entity is a type field wearing a disguise.
+- **placement** — `crowd-spawned` or `placed-with-requirements`.
+
+**The axes must not be welded, and the one that matters is type against the other two.** A shop
+assistant is the same person, with the same appearance and the same archetype, whether they are
+stationed behind a counter or walking in the crowd — so `EntityMeta` is a plain record of four
+independent fields and **there is deliberately no function that maps a type to its properties**. A
+`propertiesFor(type)` helper is the weld this exists to prevent; its absence is the principle, and
+the test that constructs one `shop-staff` type twice, with different properties and placements, is
+what pins it. For the same reason the seven people write their metadata out one archetype at a time
+rather than sharing a constant: a default is a weld, and the first archetype that needs to be
+`stationed` and `immobile` is the one it would stand in the way of.
+
+**Behaviour asks the property, not the type.** Two sites do, and both used to assume:
+
+- `sim/obstacles.ts` builds a collider from an entity declaring `static-obstacle`, rather than from
+  every footprint in the plan.
+- `sim/crowd.ts` scores a bump on contact with a `bump-relevant` entity, rather than on the fact
+  that the collision took the agent code path.
+
+Both drop nothing today, because every entity carries the property its site now checks — which is
+what makes the taxonomy a representation of the game rather than a change to it. **Neither hash
+moved.** `obstaclesFrom` is split out of `buildObstacles` so the filter can be exercised on a plan
+the game does not draw, there being nothing in the game that has a footprint and is not a wall.
+
+**`mobile`/`immobile` is declared everywhere and read nowhere, on purpose.** The spatial grid's two
+layers — rebuilt every step against set once — are already that decision at the only site that makes
+it, and `if (!mobile) continue` in the agent loop would guard behaviour no entity has. So the two
+tags are pinned consistent by a test and the branch arrives with the first entity that needs one.
+`stationed` is the same kind of seam one step further out: in the vocabulary, carried by nobody, and
+asserted empty.
+
+**`vendor` is a capability, and it crosses families.** A vendor is an entity with the `vendor`
+property, which has a **service spot** and a **staff spot** — where a customer stands, and where
+staff stand. The kiosks have it; the buildings will, and a shopfront's service spot is the same
+question as a cart's, which is why it is a property carrying data rather than two fields that could
+only ever be a fact about carts. The spots are authored in the structure's own cross-section and
+turned into path coordinates by `placeStructure`, so they turn with the thing. Nothing places staff.
+
+**How the metadata reaches the simulation.** `EdgePlan` has a fourth list, `entities`, beside the
+parts it draws, the bars it strings and the footprints it presents — one entry per **object**, keyed
+by the same `piece` id that already ties a collider to its parts, and renumbered by `mergePlans` the
+same way and for the same reason. One list because there are two readers and they must not be able
+to disagree, exactly as in `plan.ts`.
+
+**Entity, scenery, effect** is the classification rule, applied by hand at placement rather than
+built as three categories:
+
+- An **entity** has gameplay properties — something in the simulation asks it a question.
+- **Scenery** is visual only. The railings are the case worth knowing: what stops you there is the
+  path's own `halfWidth`, not a collider, so they carry no gameplay property and declare no
+  metadata — although they are drawn by the same edge layer that carries the benches, which is why
+  the boundary is a property of the thing and not of the file it lives in.
+- An **effect** is transient. Nothing is one yet.
+
+**Seams left open, deliberately unbuilt.** The `building` family has no members; `world/structure.ts`
+is already the pattern they are built by, and a shopfront is the same problem as a cart at a
+different size. `shop-staff` is a person archetype nobody has written; `stationed` and the vendor's
+staff spot are what it will need, and both exist. And the **world/composition layer** — which places
+entities by resolving what they require — is the planned consumer of all of this:
+`placed-with-requirements` is a label today, and the requirements themselves are still the
+`EdgeSpan` lists, the clearances and `KIOSK_N`, where they have always been. The metadata exists to
+be read by worlds later; do not build the resolver before the things it resolves are real.
 
 ## Seeds and restarting
 
@@ -342,6 +421,9 @@ the kiosks and renumbers their `piece` ids unique across the lot; `world/index.t
 and `sim/obstacles.ts` takes the footprints out of it. One list because there are two readers and
 they must not be able to disagree -- a layer that were drawn but not solid, or solid but not drawn,
 is exactly the bug two call sites would eventually produce. The next layer of props is one entry.
+A plan's fourth list is its `entities` — what each object *is*, keyed by the same `piece` id — which
+is how `sim/obstacles.ts` knows a footprint is something to walk into rather than merely something
+with a footprint. The railings contribute none: they are scenery.
 
 **A piece may be turned inside the frame.** `Standing.lean` rotates it about the tangent (an awning
 sloping over the walkway, a cart wheel's axle across it, an ice-cream cone stood on its point) and
@@ -377,7 +459,10 @@ parts it draws, sharing a `piece` id with them; `buildObstacles` reads `edgePlan
 the renderer draws -- and turns those through the same `frameAt` the visuals go through. So the thing that stops you and the thing you can see are two
 readings of one number -- move a bench, lengthen it, widen the path under it, and both move
 together. `test/obstacles.test.ts` measures the capsule against the bounding box of the parts
-carrying its `piece` id, so a collider that outgrew its object fails.
+carrying its `piece` id, so a collider that outgrew its object fails. Which of those footprints
+becomes a collider is now the object's own statement rather than an assumption: `buildObstacles`
+takes the solids of entities declaring `static-obstacle`, and everything with a footprint declares
+it, so it drops nothing. See "The entity taxonomy" above.
 
 The shape is a **capsule**: a segment `2 * half` long swollen by `r`. A bin and a lamp are `half = 0`,
 which is a circle; a bench is a long thin one lying along the path. One primitive covers both, the
@@ -426,7 +511,8 @@ is there to create.
 **Hitting furniture is never a bump.** The score has exactly one definition -- player-versus-person
 contact -- and the cause is not part of it: a person shoved into the player by a crowd bunched
 behind a bench is the same bump as one the player walked into. Furniture reports a *scrape* through
-`Simulation.onScrape`, which is counted nowhere. The player is **blocked** rather than pushed: the
+`Simulation.onScrape`, which is counted nowhere. That rule now has a name: a bump needs a
+`bump-relevant` entity, which every person is and no piece of furniture is. The player is **blocked** rather than pushed: the
 candidate position is pushed out of whatever it landed inside, re-fenced by the path, and if that
 still leaves it inside something the move is refused and the player stays where they were. Refusing
 is what makes it a wall; a push-out alone could shunt them past a bench or wedge them behind one.
@@ -517,7 +603,7 @@ pins that the carts cost no benches. The spans name one side, and the *lamp post
 they stand outside the railings where a cart can never reach them.
 
 **`KIOSK_N`, the clearance from the path's edge, is really setting the corridor behind the cart.** A
-kiosk does not back onto the railings, because an attendant stands there; so there is always a gap,
+kiosk does not back onto the railings, because staff stand there; so there is always a gap,
 and a gap the crowd can enter and not leave is a trap. At 1.5 m the corridor was 1.01 m -- wider than
 most bodies and narrower than a stroller's 1.24 m circle -- and strollers walked in, could not get
 past and were held there: 1.45% of agent-steps inside the furniture against a 1% bar. At 2.3 m the
@@ -526,12 +612,12 @@ to 9.21 m beside a cart. Measured across three seeds at a full crowd: 0.42-0.51%
 5% of the throughput. **If this ever moves, `KIOSK_N - r` is the corridor and it has to stay
 comfortably over the widest collision circle the crowd produces.**
 
-Each cart also carries two points nothing reads yet: a **service point** just outside the serving
-face, where a customer would stand, and an **attendant point** behind the counter. Both are derived
-from the placement and the facing through the frame, so they turn with the cart -- captured now
-precisely so the mechanics that want them later are not a third list to keep in step. There is no
-visiting, no queueing and no attendant agent, and the attendant waits on the people-collider
-fairness fix (see "Known gap" above).
+Each cart also carries the **vendor capability**: a **service point** just outside the serving face,
+where a customer would stand, and a **staff point** behind the counter. Both are derived from the
+placement and the facing through the frame, so they turn with the cart, and both reach the edge plan
+on the cart's `PlacedEntity` -- captured now precisely so the mechanics that want them later are not
+a third list to keep in step. There is no visiting, no queueing and no staff agent, and the staff
+agent waits on the people-collider fairness fix (see "Known gap" above).
 
 The layer draws no random numbers into the simulation: the paint comes from a stream seeded by a
 **constant**, so the promenade is painted identically in every run, exactly as the ground is grained
@@ -548,6 +634,9 @@ does around benches -- and left `identityHash()` byte-identical.
   one turns agent N into a different person.
 - **Nothing in a recipe may reach the `spawn` or `behavior` streams.** Appearance, proportions,
   gait, and the movement profile a mobility aid brings with it are all downstream of `recipe`.
+
+An archetype also declares what kind of thing it is -- see "The entity taxonomy" above. That is
+metadata about the *kind* rather than a roll: it reads no stream and moves neither hash.
 
 Proportions come from two axes, not from independent rolls: a height axis and a build axis feed
 height, width, head radius and shoulder width together, so a body reads as one person. An age axis
@@ -770,7 +859,7 @@ Four things about that interface are load-bearing:
 turns through `drawPerson`'s own `yaw`; an edge object has no such parameter, so `entities/edge.ts`
 puts it on the real `PATH`, at its real offset from the real edge, inside an inner group that
 brings its own place to the origin and an outer group that carries it to the stage anchor and turns
-it. The collider, the orientation arrows and a kiosk's service and attendant points live in that
+it. The collider, the orientation arrows and a kiosk's service and staff points live in that
 inner group, so they cannot drift off the thing they describe. A collider is drawn flat, because
 the collider *is* flat: the crowd walks in the x/z plane and is draped onto the surface at render
 time.
@@ -787,8 +876,9 @@ stage being re-framed under it, and it goes in the address bar beside the angle 
 cannot reload is a close look you cannot compare against. The wheel zooms about the pointer, a
 shift-drag or a right-drag pans, and `0` puts it back.
 
-The four families are `agent` (people), `kiosk`, `path-furniture` (benches, lamps, bins) and
-`structure` — the last of which has no members yet and is where buildings go.
+The families are the taxonomy's own, imported from `entity.ts` rather than declared here: `person`,
+`kiosk`, `furniture` (benches, lamps, bins) and `building` — the last of which has no members yet
+and is where buildings go.
 
 **Adding an entity is two steps.** Write `src/inspect/entities/<thing>.ts` exporting an
 `Inspectable` whose `Cast` builds through the game's own assembler and reports its parts, then add
@@ -941,6 +1031,11 @@ decisions, on any machine and at any frame rate. Everything below exists to keep
 - Positions on the walkway are path coordinates, not world x/z: see "Path coordinates" above. A
   conversion that is exact today is exact because the centreline is one straight run through the
   origin; never add an offset to `s` or move the anchor without regenerating `hash()` on purpose.
+- Taxonomy metadata is a statement about a kind of thing, not a draw. It reads no stream, is
+  identical in every run, and moves neither hash. Behaviour rewired to read a property must give the
+  same answer the assumption it replaced gave, or it is a behaviour change wearing a representation
+  change's clothes. Archetype *keys* may be renamed but never reordered: both hashes store
+  `ARCH_KEYS.indexOf(a.type)`, so a key's position is load-bearing and its spelling is not.
 - Anything that iterates over agents in a way that affects outcomes must iterate in a stable order
   (spawn order, which is `crowd.agents` order, or slot order), never in hash-map or Set insertion
   order that could vary.

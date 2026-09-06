@@ -47,7 +47,7 @@ import type { Paint, Prim, Slot, StructureArchetype } from './structure.ts';
  * widens carries its carts out with it. The number itself was measured rather than chosen, and what
  * it is really setting is **the corridor behind the cart**.
  *
- * A kiosk does not back onto the railings: an attendant has to stand behind it, so there is always a
+ * A kiosk does not back onto the railings: staff have to stand behind it, so there is always a
  * gap there, and a gap the crowd can enter but not leave is a trap. At 1.5 m the corridor came out
  * at 1.01 m, which is wider than most bodies and narrower than a stroller's 1.24 m collision circle
  * -- so strollers walked in behind a cart, could not get past, and were held there by the lateral
