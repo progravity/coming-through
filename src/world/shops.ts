@@ -233,7 +233,7 @@ const TOY_SYMBOL: readonly Prim[] = [
  *
  * A row rather than one object, and that is the point of it -- what says *clothes shop* is a
  * display, and three of a thing is the smallest number that reads as one. The staggering does the
- * rest of the work: the three tops climb 4.98, 5.26, 6.04, so no hat's outline is swallowed by its
+ * rest of the work: the three tops climb 4.98, 5.28, 6.04, so no hat's outline is swallowed by its
  * neighbour's and the group has a shape of its own rather than being a flat band.
  *
  * The three are chosen to differ in *outline* and not merely in trim, since colour is the first
@@ -248,11 +248,19 @@ const TOY_SYMBOL: readonly Prim[] = [
  *   the band is as tall as the dome's lower half and swallows it exactly, and what shows is a
  *   straight wall ending in a hard horizontal line.
  *
- *   But the band must **not stick out past the crown**, which is the correction after that one. A
- *   disc wider than the dome is a brim, and a brim all the way round is a bowler -- the one thing a
- *   cap is defined by *not* having. So the band clears the dome by 30 mm, which is enough to stop
- *   the two surfaces interpenetrating at the seam and far too little to read as a brim, and the
- *   peak is then the only thing on the whole hat that protrudes.
+ *   The band must **not stick out past the crown**, which is the correction after that one. A disc
+ *   wider than the dome is a brim, and a brim all the way round is a bowler -- the one thing a cap
+ *   is defined by *not* having. So the peak is the only thing on the whole hat that protrudes.
+ *
+ *   And the band goes **under** the dome rather than the dome sitting on the band, which is the
+ *   correction after *that* one and is `drawPerson`'s rule about sealed joints arriving here
+ *   unchanged: the narrower part is the one that gets buried, so a flat cap of a cylinder is never
+ *   the silhouette. A band even slightly the wider of the two leaves its top face showing as a
+ *   ledge, and the ledge is ragged as well as wrong -- the band is a 12-gon and the dome a 10-gon,
+ *   so their outlines cross each other around the seam and the step changes width as it goes round.
+ *   The band is 50 mm inside the dome's waist instead, and its top is far enough below that waist
+ *   that the dome is wider than it at every angle, tessellation included. What you see is a
+ *   straight wall that swells into a dome, with no seam at all.
  *
  *   And the peak points **along the path rather than at the walkway**: aimed at the viewer it is a
  *   disc seen end-on, so the cap read as a beanie from the only angle anybody sees it from. It
@@ -278,8 +286,8 @@ const CLOTHING_SYMBOL: readonly Prim[] = [
     { shape: 'cyl', colour: 'accent', dn: PLINTH_N, dy: 4.58, da: -HAT_APART, across: 1.06, up: 0.12, along: 1.06 },
     { shape: 'ball', colour: 'topper', dn: PLINTH_N, dy: 4.7, da: -HAT_APART, across: 1, up: 0.56, along: 1 },
     // Cap: a band the dome's lower half sits inside, the dome, and a peak dipping out of one side.
-    { shape: 'cyl', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.75, da: 0, across: 1.08, up: 0.34, along: 1.08 },
-    { shape: 'ball', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.92, da: 0, across: 1.02, up: 0.68, along: 1.02 },
+    { shape: 'cyl', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.72, da: 0, across: 0.94, up: 0.28, along: 0.94 },
+    { shape: 'ball', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.93, da: 0, across: 1.04, up: 0.7, along: 1.04 },
     { shape: 'cyl', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.66, da: -0.44, across: 0.88, up: 0.12, along: 0.88, tilt: -0.16 },
     // Top hat: narrow brim, band, tall crown standing on the shelf's high end.
     { shape: 'cyl', colour: SHOP.felt, dn: PLINTH_N, dy: 4.69, da: HAT_APART, across: 1.35, up: 0.15, along: 1.35 },
