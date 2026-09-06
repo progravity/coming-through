@@ -18,6 +18,8 @@
  * walkway reads as a corridor of furniture; half an interval of offset is the whole fix.
  */
 import { EDGE } from '../palette.ts';
+import { entityMeta } from '../entity.ts';
+import type { EntityMeta } from '../entity.ts';
 import { clearOf } from './edge.ts';
 import type { EdgePlan, Solid, Standing } from './edge.ts';
 import { KIOSK_SPANS } from './kiosks.ts';
@@ -25,6 +27,27 @@ import { L, PAD_SPANS, SHOP_SPANS } from './layout.ts';
 import type { EdgeSpan } from './layout.ts';
 import { PATH } from './path.ts';
 import type { PathCurve } from './path.ts';
+
+/** The three things this file stands along the edge. */
+export type FurnitureKind = 'bench' | 'lamp' | 'bin';
+
+/**
+ * What each of them is, on all four taxonomy axes.
+ *
+ * A table rather than a field on an archetype, because these three are builder functions rather
+ * than an archetype table -- but it is still the one place each kind's facts are written down, and
+ * the builders below hand it to the plan, so the simulation reads the same declaration the
+ * inspector does. All three are the same kind of thing: they do not move, and you walk into them.
+ *
+ * A lamp post is a static obstacle although nothing can reach it -- it stands outside the railings,
+ * where both the crowd and the player are fenced out -- because "furniture is solid" with no
+ * exception to remember is worth more than the exception.
+ */
+export const FURNITURE_ENTITIES: Record<FurnitureKind, EntityMeta> = {
+    bench: entityMeta('furniture', 'bench', ['immobile', 'static-obstacle'], 'placed-with-requirements'),
+    lamp: entityMeta('furniture', 'lamp', ['immobile', 'static-obstacle'], 'placed-with-requirements'),
+    bin: entityMeta('furniture', 'bin', ['immobile', 'static-obstacle'], 'placed-with-requirements'),
+};
 
 /** How far past each end of the path furniture is placed. Short of the railings: the path ends here. */
 const FURN_END = L;

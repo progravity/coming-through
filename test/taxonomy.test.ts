@@ -14,6 +14,7 @@ import { join, relative } from 'node:path';
 import { ARCH, ARCH_KEYS } from '../src/archetypes.ts';
 import { PROPERTIES, entityMeta, hasProperty } from '../src/entity.ts';
 import { ENTITIES } from '../src/inspect/registry.ts';
+import { FURNITURE_ENTITIES } from '../src/world/furniture.ts';
 import { KIOSK_ARCHETYPES, KIOSK_TYPES, kiosks } from '../src/world/kiosks.ts';
 import type { Property } from '../src/entity.ts';
 
@@ -143,5 +144,19 @@ test('a vendor is an entity with the vendor property, which has a service spot a
         assert.ok(k.vendor !== undefined, `${k.type} was placed without its vendor spots`);
         assert.equal(typeof k.vendor.service.s, 'number');
         assert.equal(typeof k.vendor.staff.n, 'number');
+    }
+});
+
+test('every piece of furniture declares itself immobile, solid and placed', () => {
+    const kinds = Object.keys(FURNITURE_ENTITIES) as (keyof typeof FURNITURE_ENTITIES)[];
+    assert.deepEqual(kinds, ['bench', 'lamp', 'bin']);
+    for (const kind of kinds) {
+        const meta = FURNITURE_ENTITIES[kind];
+        assert.equal(meta.family, 'furniture', `${kind} is not filed as furniture`);
+        assert.equal(meta.type, kind, `${kind} calls itself '${meta.type}'`);
+        assert.equal(meta.placement, 'placed-with-requirements');
+        assert.deepEqual(new Set(meta.properties), new Set(['immobile', 'static-obstacle']));
+        // No vendor: a bench serves nobody, and the property is what says so.
+        assert.ok(!hasProperty(meta, 'vendor'), `${kind} claims to be a vendor`);
     }
 });
