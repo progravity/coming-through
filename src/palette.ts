@@ -596,20 +596,41 @@ export const SHOP = {
     blockB: mix(PALETTE[8], PALETTE[9], 0.2),
     blockC: mix(PALETTE[0], PALETTE[15], 0.22),
     /**
-     * A t-shirt. Dyed cotton, so these are garment colours -- the same kind of thing the crowd is
-     * wearing, which is the point of a clothes shop.
+     * The sun hat on the clothes shop's rack -- the one of its three hats whose colour rolls.
      *
      * **Mid-tone, not dark.** The toon ramp drops a surface's shaded half to its darkest band, so a
-     * colour that starts dark has nowhere left to go and the body, the sleeves and the collar all
-     * land on one value -- and a silhouette with no internal edges is a blob whatever shape it
-     * really is. Every entry here is diluted toward off-white rather than toward charcoal, so the
-     * shaded half is still recognisably the same hue and the shirt reads as its parts.
+     * colour that starts dark has nowhere left to go and brim, band and crown all land on one
+     * value -- and a silhouette with no internal edges is a blob whatever shape it really is. Every
+     * entry here is diluted toward off-white rather than toward charcoal, so the shaded half is
+     * still recognisably the same hue.
+     *
+     * The other two hats do not roll: see `felt`. Three hats that are always three *different*
+     * colours is most of what makes a rack of them read as a display rather than as clutter, which
+     * is the same call `block` makes and for the same reason.
      */
-    shirt: [
-        mix(PALETTE[7], PALETTE[0], 0.22),
+    hat: [
         mix(PALETTE[19], PALETTE[18], 0.2),
         mix(PALETTE[10], PALETTE[0], 0.25),
         mix(PALETTE[16], PALETTE[17], 0.22),
         mix(PALETTE[22], PALETTE[0], 0.22),
     ],
+    /**
+     * The top hat, which is the one colour in this game that is allowed to be nearly black.
+     *
+     * The mid-tone rule above is about *reading shape inside a silhouette*, and a top hat has no
+     * inside to read: it is a cylinder on a disc, and both edges are against the sky. What it does
+     * need is to be the colour a top hat is, because that is half of what identifies it -- so it is
+     * charcoal warmed with a little brown, which is felt rather than ironwork.
+     */
+    felt: mix(PALETTE[5], PALETTE[23], 0.22),
+    /**
+     * The cap, which is fixed for the same reason the top hat is: three hats on one shelf have to
+     * be three colours, and only one of them can be the one that rolls.
+     *
+     * Denim, and `hat` above has no blue left in it so the rolled sun hat can never land on top of
+     * it. Taking the shop's own accent instead was tried and is the thing this replaces -- on any
+     * livery whose accent sat near the rolled colour the cap and the sun hat came out as two blobs
+     * of one colour, which is exactly what a rack of different hats must not look like.
+     */
+    canvas: mix(PALETTE[7], PALETTE[9], 0.3),
 } as const;

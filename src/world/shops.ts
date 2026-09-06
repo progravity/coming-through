@@ -229,34 +229,50 @@ const TOY_SYMBOL: readonly Prim[] = [
 ];
 
 /**
- * An oversized t-shirt: a body, two sleeves dropping away from the shoulders, and a collar band.
+ * A hat rack: a shelf with three hats on stands, each a different kind, at three different heights.
  *
- * **The T is the whole read.** What identifies a shirt at distance is the outline and nothing
- * inside it -- a wide horizontal span at the top over a narrower body, with the corners under the
- * sleeves cut away. So the sleeves reach well past the body on both sides and the body is a good
- * deal narrower than they are; a shirt drawn as one rectangle is a sign board, and one whose
- * sleeves only just clear the body is a cross.
+ * A row rather than one object, and that is the point of it -- what says *clothes shop* is a
+ * display, and three of a thing is the smallest number that reads as one. The staggering does the
+ * rest of the work: the three tops climb 4.98, 5.29, 6.04, so no hat's outline is swallowed by its
+ * neighbour's and the group has a shape of its own rather than being a flat band.
  *
- * The sleeves **drop** rather than sticking straight out, which is what says cloth rather than
- * signage. `tilt` turns a part about the frame's normal, tipping it along the path, and the two
- * sides take opposite signs: a part's `+along` end goes *down* under a positive tilt, so the sleeve
- * out at `+da` wants a positive one and its mirror a negative. Both flip together with the facing,
- * so a shop on the far edge of the path hangs its shirt the same way up.
+ * The three are chosen to differ in *outline* and not merely in trim, since colour is the first
+ * thing distance takes away:
  *
- * It faces the walkway, being a flat-ish thing, and that is the right way round rather than a
- * compromise: its face is square to the path's normal, so it is broadside exactly when a walker is
- * level with the shop, and it turns to meet them as they come. It keeps 0.62 m of depth so that it
- * still has mass in the oblique view rather than thinning to a line.
+ * - **A sun hat** is a wide flat disc with a shallow dome on it -- much wider than it is tall.
+ * - **A cap** is a dome with a peak out of one side only. The peak is a disc pushed out until its
+ *   back edge is buried in the dome, which is what leaves a half-disc showing without a half-disc
+ *   primitive existing. It points **along the path rather than at the walkway**, which is the one
+ *   correction this symbol needed: a peak aimed at the viewer is a disc seen end-on, so the cap
+ *   read as a beanie from the only angle anybody sees it from. Sideways it is a profile, and a
+ *   profile is what a cap is recognised by -- which is also how the other two are read here.
+ * - **A top hat** is a tall cylinder on a narrow brim, and it is the tallest thing on the shelf.
  *
- * The collar sits **mostly inside the body**, with only a fifth of it standing above the shoulder
- * line. Centred on the shoulders it read as a luggage tag: a band around a neck hole is a ring you
- * see the near side of, so most of it has to be below the edge it is cut into.
+ * **Only the sun hat's colour rolls.** The top hat is `SHOP.felt` -- a top hat is black, and a roll
+ * that made it lime would throw away half of what identifies it -- and the cap is `SHOP.canvas`.
+ * The cap took the shop's own accent at first, and on any livery whose accent landed near the
+ * rolled colour it and the sun hat came out as two blobs of one colour, which is the one thing a
+ * rack of different hats must not look like. Two fixed and one rolled is the same call the toy
+ * shop's blocks make, and it is made for the same reason.
  */
+const HAT_SHELF = 4.0, HAT_APART = 1.7;
 const CLOTHING_SYMBOL: readonly Prim[] = [
-    { shape: 'box', colour: 'topper', dn: PLINTH_N, dy: 4.72, da: 0, across: 0.62, up: 1.85, along: 1.75 },
-    { shape: 'box', colour: 'topper', dn: PLINTH_N, dy: 5.28, da: -1.32, across: 0.62, up: 0.66, along: 1.15, tilt: -0.38 },
-    { shape: 'box', colour: 'topper', dn: PLINTH_N, dy: 5.28, da: 1.32, across: 0.62, up: 0.66, along: 1.15, tilt: 0.38 },
-    { shape: 'box', colour: 'accent', dn: PLINTH_N, dy: 5.6, da: 0, across: 0.66, up: 0.3, along: 0.86 },
+    { shape: 'box', colour: 'trim', dn: PLINTH_N, dy: 3.89, da: 0, across: 0.95, up: 0.22, along: 5.1 },
+    // The stands. Ironwork, like every other slender thing in this world.
+    ...([[-HAT_APART, 0.38], [0, 0.68], [HAT_APART, 0.62]] as const).map(([da, up]): Prim => (
+        { shape: 'cyl', colour: EDGE.iron, dn: PLINTH_N, dy: HAT_SHELF + up / 2, da, across: 0.13, up, along: 0.13 }
+    )),
+    // Sun hat: wide brim, band, shallow dome. The dome's underside is buried in the brim.
+    { shape: 'cyl', colour: 'topper', dn: PLINTH_N, dy: 4.45, da: -HAT_APART, across: 1.45, up: 0.14, along: 1.45 },
+    { shape: 'cyl', colour: 'accent', dn: PLINTH_N, dy: 4.58, da: -HAT_APART, across: 1.06, up: 0.12, along: 1.06 },
+    { shape: 'ball', colour: 'topper', dn: PLINTH_N, dy: 4.7, da: -HAT_APART, across: 1, up: 0.56, along: 1 },
+    // Cap: a dome, and a peak pushed forward far enough that only its front half shows.
+    { shape: 'ball', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.95, da: 0, across: 1.05, up: 0.68, along: 1.05 },
+    { shape: 'cyl', colour: SHOP.canvas, dn: PLINTH_N, dy: 4.68, da: -0.42, across: 0.82, up: 0.12, along: 0.82 },
+    // Top hat: narrow brim, band, tall crown standing on the shelf's high end.
+    { shape: 'cyl', colour: SHOP.felt, dn: PLINTH_N, dy: 4.69, da: HAT_APART, across: 1.35, up: 0.15, along: 1.35 },
+    { shape: 'cyl', colour: 'accent', dn: PLINTH_N, dy: 4.93, da: HAT_APART, across: 0.95, up: 0.2, along: 0.95 },
+    { shape: 'cyl', colour: SHOP.felt, dn: PLINTH_N, dy: 5.36, da: HAT_APART, across: 0.9, up: 1.35, along: 0.9 },
 ];
 
 /** The drinks cart's cup at building scale: tapered body, banded waist, domed lid, angled straw. */
@@ -287,7 +303,7 @@ export const SHOP_ARCHETYPES: Record<ShopType, StructureArchetype> = {
     candy: shop('candy', 'Sweet shop', SHOP.sweet, CANDY_SYMBOL, { striped: true }),
     souvenir: shop('souvenir', 'Souvenirs', SHOP.gift, SOUVENIR_SYMBOL, { striped: true }),
     toy: shop('toy', 'Toy shop', SHOP.block, TOY_SYMBOL),
-    clothing: shop('clothing', 'Clothing', SHOP.shirt, CLOTHING_SYMBOL),
+    clothing: shop('clothing', 'Clothing', SHOP.hat, CLOTHING_SYMBOL),
     drinks: shop('drinks', 'Drinks', KIOSK.cup, DRINKS_SYMBOL, { striped: true }),
 };
 
