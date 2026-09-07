@@ -12,7 +12,7 @@
  *   makes the five comparable: put them side by side and the only thing that differs is the thing
  *   that is supposed to.
  * - **Colour is coordinated by livery rather than rolled per slot.** Nine painted surfaces rolled
- *   independently do not read as a decorated building. See `SHOP_LIVERY` in `palette.ts`, and
+ *   independently do not read as a decorated building. See `BUILDING_LIVERY` in `palette.ts`, and
  *   `StructureArchetype.livery` for how it costs no extra draw.
  * - **They have a footprint and no collider.** A shop is solid -- it is a building -- but nothing
  *   can reach it: the crowd and the player are both fenced inside `halfWidth`, and the railings
@@ -32,8 +32,10 @@
 import { Rng, hashString } from '../core/rng.ts';
 import { entityMeta } from '../entity.ts';
 import type { Vendor } from '../entity.ts';
-import { EDGE, KIOSK, SHOP, SHOP_LIVERY } from '../palette.ts';
+import { BUILDING_LIVERY, EDGE, KIOSK, SHOP } from '../palette.ts';
 import type { EdgePlan, Solid, Standing } from './edge.ts';
+import { PLINTH_N, ball, facade, pedestal, roofOf } from './facade.ts';
+import type { BuildingBox } from './facade.ts';
 import { L } from './layout.ts';
 import type { EdgeSpan } from './layout.ts';
 import { PATH } from './path.ts';
@@ -51,14 +53,12 @@ import type { Paint, Prim, StructureArchetype } from './structure.ts';
  * routes around: `SHOP_SPANS` is derived from `along`, so a shop that grew would take its gap in
  * the railings with it and no bench is ever authored around one by hand.
  */
-export const SHOP_BOX = { along: 7, across: 6, inset: 0.2, height: 3.2 } as const;
+export const SHOP_BOX: BuildingBox = { along: 7, across: 6, inset: 0.2, height: 3.2 } as const;
 
 /** The front face, in the structure's own cross-section: `dn` is toward the walkway. */
 const FRONT = SHOP_BOX.across / 2;
-/** Half the box's length, which every part on the front elevation is placed relative to. */
-const HALF = SHOP_BOX.along / 2;
-/** The wall's top, and the top of the cornice standing on it. */
-const WALL = SHOP_BOX.height, ROOF = WALL + 0.22;
+/** The top of the cornice standing on the wall, which is what a shop's symbol stands on. */
+const ROOF = roofOf(SHOP_BOX);
 
 /**
  * Where a customer stands and where staff stand.
@@ -73,92 +73,6 @@ const WALL = SHOP_BOX.height, ROOF = WALL + 0.22;
 const SERVICE = { dn: FRONT + 0.9, da: 0 };
 const STAFF = { dn: -(FRONT - 1.2), da: 0 };
 
-/**
- * The storefront every shop is: wall, plinth, cornice, two corner pilasters, a centred door in its
- * frame, two framed windows, a blank sign board, and an awning.
- *
- * The front elevation stacks and the stacking is deliberate: door and windows reach 2.40, the
- * awning sits at 2.58 clear above them, and the sign runs 2.73 to 3.23 under the cornice. Written
- * as one function rather than copied five times because the whole claim the shops make is that only
- * the symbol differs -- and a template five archetypes each hold their own copy of is a template
- * that will be five different templates within a year.
- *
- * **The wall is the only `solid` part**, which is what makes the derived footprint the building's
- * plan rather than its decoration: a pilaster or an awning cannot move it, exactly as a cart's
- * topper cannot move a cart's.
- *
- * The sign board is blank. There is no text anywhere in this game and the identity is carried by
- * the symbol, at a size that survives being read from the walkway at an angle with a crowd in
- * front of it -- which is the same finding the kiosks' oversized toppers are.
- */
-function storefront(striped: boolean): Prim[] {
-    const win = (da: number): Prim[] => [
-        { shape: 'box', colour: 'trim', dn: FRONT + 0.01, dy: 1.75, da, across: 0.06, up: 1.5, along: 1.95 },
-        { shape: 'box', colour: SHOP.glass, dn: FRONT + 0.05, dy: 1.75, da, across: 0.06, up: 1.24, along: 1.69 },
-    ];
-    /**
-     * A corner pilaster, standing proud of the wall on **both** the faces it turns.
-     *
-     * It has to wrap the corner rather than stop flush with it, and that is a rendering fact rather
-     * than a stylistic one: flush means its outer face and the wall's end face are the same plane,
-     * two outward quads fighting for the same depth, which shows as the trim tearing into the wall
-     * along the whole height of the corner. Everything here is boxes on a shared grid, so exact
-     * coplanarity is the easy mistake and the one to check for -- and it has to clear the plinth
-     * and the cornice too, which reach further along than the wall does.
-     */
-    const pilaster = (da: number): Prim => (
-        { shape: 'box', colour: 'trim', dn: FRONT - 0.04, dy: WALL / 2, da, across: 0.22, up: WALL, along: 0.4 }
-    );
-    return [
-        { shape: 'box', colour: 'base', dn: 0, dy: WALL / 2, da: 0, across: SHOP_BOX.across, up: WALL, along: SHOP_BOX.along, solid: true },
-        { shape: 'box', colour: 'trim', dn: 0, dy: 0.17, da: 0, across: SHOP_BOX.across + 0.18, up: 0.34, along: SHOP_BOX.along + 0.18 },
-        { shape: 'box', colour: 'trim', dn: 0, dy: WALL + 0.11, da: 0, across: SHOP_BOX.across + 0.3, up: 0.22, along: SHOP_BOX.along + 0.3 },
-        pilaster(-(HALF - 0.15)), pilaster(HALF - 0.15),
-        // The door starts at the plinth's top rather than at the ground, so the step reads as a step.
-        { shape: 'box', colour: 'trim', dn: FRONT + 0.01, dy: 1.37, da: 0, across: 0.06, up: 2.06, along: 1.7 },
-        { shape: 'box', colour: 'accent', dn: FRONT + 0.05, dy: 1.35, da: 0, across: 0.06, up: 1.86, along: 1.42 },
-        { shape: 'ball', colour: EDGE.iron, dn: FRONT + 0.11, dy: 1.3, da: 0.52, across: 0.1, up: 0.1, along: 0.1 },
-        ...win(-2.05), ...win(2.05),
-        { shape: 'box', colour: 'accent', dn: FRONT + 0.06, dy: 2.98, da: 0, across: 0.1, up: 0.5, along: 3.4 },
-        ...awning(striped),
-    ];
-}
-
-/**
- * The awning over the storefront: bands projecting from the wall and leaning down over the walkway.
- *
- * Striped or solid is fixed **by the archetype**, never rolled. `structure.ts`'s rule is that a
- * type fixes form completely and the recipe rolls only colour, and whether a thing has one band or
- * seven is form. So the variety is across the five types rather than between two shops of one, and
- * a player learns "the sweet shop has a striped awning" the same way they learn its silhouette.
- */
-const AWN_Y = 2.58, AWN_N = FRONT + 0.52, AWN_D = 1.05, AWN_T = 0.09, AWN_LEAN = -0.26, AWN_LEN = 6.4;
-const STRIPES = 7;
-function awning(striped: boolean): Prim[] {
-    const band = (colour: Prim['colour'], da: number, along: number): Prim => (
-        { shape: 'box', colour, dn: AWN_N, dy: AWN_Y, da, across: AWN_D, up: AWN_T, along, lean: AWN_LEAN }
-    );
-    if (!striped) return [band('trim', 0, AWN_LEN)];
-    const w = AWN_LEN / STRIPES;
-    return Array.from({ length: STRIPES }, (_, i) =>
-        band(i % 2 === 0 ? 'trim' : 'accent', -AWN_LEN / 2 + w * (i + 0.5), w));
-}
-
-/**
- * The pedestal every symbol stands on, sitting on the cornice and pushed a little toward the path.
- *
- * The symbol needs *something* under it: an emblem floating over a roofline reads as a mistake, and
- * one standing on a plinth reads as a roof sign, which is what it is.
- */
-const PLINTH_N = 0.3;
-const pedestal = (): Prim => (
-    { shape: 'box', colour: 'trim', dn: PLINTH_N, dy: ROOF + 0.18, da: 0, across: 1.9, up: 0.36, along: 2.6 }
-);
-
-/** A ball, which is most of what a symbol is made of. Same helper the carts use. */
-const ball = (colour: Prim['colour'], dy: number, da: number, d: number, dn = PLINTH_N): Prim =>
-    ({ shape: 'ball', colour, dn, dy, da, across: d, up: d, along: d });
-
 // ---------- the five ----------
 
 export const SHOP_TYPES = ['candy', 'souvenir', 'toy', 'clothing', 'drinks'] as const;
@@ -167,13 +81,20 @@ export type ShopType = (typeof SHOP_TYPES)[number];
 /** The along-path axis a wrapper twist or a sausage lies down. Same quarter turn the hot dog takes. */
 const LENGTHWAYS = Math.PI / 2;
 
-/** One archetype: the shared storefront, its own symbol on top, and the liveries it wears. */
+/**
+ * One archetype: the storefront every building in the game wears, its own symbol on the roofline,
+ * and the liveries it can be painted in.
+ *
+ * The frontage comes from `world/facade.ts` rather than from here, because the restaurants wear the
+ * same one -- which is the whole of what makes the two types read as one street rather than as two
+ * unrelated layers that happen to stand along the same walkway.
+ */
 function shop(
     id: ShopType, name: string, product: readonly number[], symbol: readonly Prim[], opt: { striped?: boolean } = {},
 ): StructureArchetype {
     return {
         id, name,
-        parts: [...storefront(opt.striped === true), pedestal(), ...symbol],
+        parts: [...facade(SHOP_BOX, opt.striped === true), pedestal(ROOF), ...symbol],
         /**
          * What every shop is: a building that does not move, that serves people, and that was put
          * where it is by something resolving what it needed.
@@ -187,8 +108,8 @@ function shop(
         vendor: { service: SERVICE, staff: STAFF },
         // `topper` is the product and comes from its own curated set; the other three are the
         // livery's, and the sets named here are what a shop would wear if it had no livery at all.
-        colours: { base: [SHOP_LIVERY[0].primary], trim: SHOP_LIVERY[0].secondary, topper: product, accent: SHOP_LIVERY[0].accent },
-        livery: SHOP_LIVERY,
+        colours: { base: [BUILDING_LIVERY[0].primary], trim: BUILDING_LIVERY[0].secondary, topper: product, accent: BUILDING_LIVERY[0].accent },
+        livery: BUILDING_LIVERY,
     };
 }
 

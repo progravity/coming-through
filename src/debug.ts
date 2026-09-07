@@ -3,7 +3,7 @@ import type { Crowd } from './sim/crowd.ts';
 import type { Player } from './sim/player.ts';
 import { EXIT_S, GOAL_S, L, PAD_LENGTH, START_S } from './world/layout.ts';
 import { PATH, newWorldPoint } from './world/path.ts';
-import { SHOP_SPANS } from './world/shops.ts';
+import { BUILDING_SPANS } from './world/buildings.ts';
 
 export interface DebugStats { fps: number; drawCalls: number; }
 
@@ -86,7 +86,7 @@ export class DebugOverlay {
         // The doorways, drawn as the stretch of edge the railings actually leave open -- the same
         // spans the edge layer routes around, so the overlay cannot claim a gap that is not there.
         ctx.strokeStyle = 'rgba(255,220,120,.9)'; ctx.lineWidth = 2;
-        for (const sp of SHOP_SPANS) {
+        for (const sp of BUILDING_SPANS) {
             const side = sp.side ?? 1;
             ctx.beginPath();
             ctx.moveTo(...at(sp.sMin, side * PATH.halfWidth(sp.sMin)));

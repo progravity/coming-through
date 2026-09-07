@@ -19,7 +19,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { Rng } from '../src/core/rng.ts';
 import { hasProperty } from '../src/entity.ts';
-import { SHOP_LIVERY } from '../src/palette.ts';
+import { BUILDING_LIVERY } from '../src/palette.ts';
 import { buildObstacles } from '../src/sim/obstacles.ts';
 import { clearOf } from '../src/world/edge.ts';
 import { furniturePlan } from '../src/world/furniture.ts';
@@ -168,9 +168,9 @@ test('the livery costs no extra draw, and the draw order is still SLOTS order', 
 test('every livery has a wall of its own, which is what lets one be named back', () => {
     // `liveryFor` finds a livery by its primary, so two liveries sharing a wall colour would make
     // the readout name the wrong one -- silently, and only for some rolls.
-    const walls = SHOP_LIVERY.map(l => l.primary);
+    const walls = BUILDING_LIVERY.map(l => l.primary);
     assert.equal(new Set(walls).size, walls.length);
-    assert.ok(SHOP_LIVERY.length >= 6, 'too few liveries for two shops of a type to differ');
+    assert.ok(BUILDING_LIVERY.length >= 6, 'too few liveries for two shops of a type to differ');
 });
 
 // ---------- taxonomy and the vendor capability ----------

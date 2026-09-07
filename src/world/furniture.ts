@@ -27,7 +27,7 @@ import { L, PAD_SPANS } from './layout.ts';
 import type { EdgeSpan } from './layout.ts';
 import { PATH } from './path.ts';
 import type { PathCurve } from './path.ts';
-import { SHOP_SPANS } from './shops.ts';
+import { BUILDING_SPANS } from './buildings.ts';
 
 /** The three things this file stands along the edge. */
 export type FurnitureKind = 'bench' | 'lamp' | 'bin';
@@ -170,7 +170,7 @@ export function lamp(curve: PathCurve, s: number, side: 1 | -1, piece: number): 
  * Pure, like the railing plan: it reads the curve and returns placements, so the same list can be
  * swept along a walkway the game has never drawn and measured back off the frame there.
  */
-export function furniturePlan(curve: PathCurve = PATH, spans: readonly EdgeSpan[] = [...SHOP_SPANS, ...PAD_SPANS]): EdgePlan {
+export function furniturePlan(curve: PathCurve = PATH, spans: readonly EdgeSpan[] = [...BUILDING_SPANS, ...PAD_SPANS]): EdgePlan {
     const standing: Standing[] = [], solids: Solid[] = [], entities: PlacedEntity[] = [];
     // The carts interrupt what stands *inside* the railings and nothing else. A lamp post is on the
     // far side of them, where a cart can never reach it, so charging the lamps for the kiosks would

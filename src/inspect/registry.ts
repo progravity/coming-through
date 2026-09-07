@@ -10,10 +10,12 @@
 import { FURNITURE } from './entities/furniture.ts';
 import { KIOSK } from './entities/kiosk.ts';
 import { PERSON } from './entities/person.ts';
+import { RESTAURANT } from './entities/restaurant.ts';
 import { SHOP } from './entities/shop.ts';
+import { RESTAURANT_TYPES } from '../world/restaurants.ts';
 import type { Controls, Inspectable } from './inspectable.ts';
 
-export const ENTITIES: readonly Inspectable[] = [PERSON, KIOSK, FURNITURE, SHOP];
+export const ENTITIES: readonly Inspectable[] = [PERSON, KIOSK, FURNITURE, SHOP, RESTAURANT];
 
 /** What `?inspect=1` means with no `entity` named. Every URL written before this existed. */
 export const DEFAULT_ENTITY = 'person';
@@ -28,10 +30,16 @@ export const ALIASES: Readonly<Record<string, { entity: string; controls: Contro
     bench: { entity: 'furniture', controls: { kind: 'bench' } },
     lamp: { entity: 'furniture', controls: { kind: 'lamp' } },
     bin: { entity: 'furniture', controls: { kind: 'bin' } },
-    // The family's name as a name for its only member, so `?entity=building` works the way someone
-    // reading `entity.ts` would expect it to. It pins nothing: a shop is what the building family
-    // has, and the day it has two this is the line that has to choose.
+    // The family's name, kept as a name for the shops now that the family has two members and this
+    // line has had to choose. It chooses the older one, because the only thing an alias owes anybody
+    // is that a URL written before it existed still opens what it opened -- and every
+    // `?entity=building` ever typed meant a shopfront. `?entity=restaurant` is how you ask for the
+    // other one, and `?entity=shop` says the same thing as this without the ambiguity.
     building: { entity: 'shop', controls: {} },
+    // The cuisines, each pinning its own type, exactly as `bench`/`lamp`/`bin` pin a furniture kind.
+    // Read off `RESTAURANT_TYPES` rather than listed again here: a name typed twice is a name that
+    // will one day be spelled two ways, and a cuisine added later should not have to remember this.
+    ...Object.fromEntries(RESTAURANT_TYPES.map(type => [type, { entity: 'restaurant', controls: { type } }])),
 };
 
 export const byId = (id: string): Inspectable | undefined => ENTITIES.find(e => e.id === id);

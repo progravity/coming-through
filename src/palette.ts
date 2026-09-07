@@ -482,7 +482,7 @@ export interface Livery {
 }
 
 /**
- * The eight liveries a shopfront can be painted in.
+ * The eight liveries a building can be painted in -- a shopfront or a restaurant alike.
  *
  * Quieter than the kiosks and for the opposite reason. A cart is a landmark standing *on* the
  * walkway that you are meant to spot from down the path and walk toward; a shop is a 6 x 7 m wall
@@ -495,7 +495,7 @@ export interface Livery {
  * shop's livery back from its wall colour, which is what lets the inspector report which one was
  * rolled without a second draw or a field threaded through `Paint`.
  */
-export const SHOP_LIVERY: readonly Livery[] = [
+export const BUILDING_LIVERY: readonly Livery[] = [
     {
         name: 'Chalk & Slate', primary: mix(PALETTE[0], PALETTE[4], 0.12),
         secondary: [mix(PALETTE[4], PALETTE[0], 0.25), mix(PALETTE[5], PALETTE[0], 0.3)],
@@ -633,4 +633,104 @@ export const SHOP = {
      * of one colour, which is exactly what a rack of different hats must not look like.
      */
     canvas: mix(PALETTE[7], PALETTE[9], 0.3),
+} as const;
+
+/**
+ * The restaurants: what is cooked, and the ware it is served in.
+ *
+ * Same job `SHOP` does for the shops and `KIOSK` does for the carts, and curated by the same rule:
+ * a restaurant is identified by an oversized emblem of its cuisine and by nothing else, so every
+ * option in a set has to leave the emblem still reading as that cuisine. There is no rule that could
+ * enforce "a bun is not violet"; there is only a bun set with no violet in it.
+ *
+ * One set per type rolls -- the bun, the melted cheese, the shell, the bowl -- and everything else
+ * in a symbol is a literal, which is the toy shop's lesson arriving intact: a group of things has to
+ * stay a group of *different* things, and it cannot if more than one of them moves.
+ *
+ * **`noodleBowl` and `saladBowl` are the sharpest constraint in this file**, and they are the reason
+ * the two are curated as opposites rather than as two helpings of one set. Both symbols are a bowl,
+ * which at path distance is one silhouette; what has to tell them apart is warm against green, and
+ * a roll that let either wander toward the other would cost the pair the only cue that survives the
+ * distance. `test/restaurants.test.ts` pins that no colour is in both and that the two sets sit on
+ * opposite sides of the warm/green split.
+ */
+export const RESTAURANT = {
+    // ---- burger: a bun that rolls, and a filling that never does ----
+    /** Bun: baked golds and sands. Nothing pale enough to read as raw, nothing dark enough as burnt. */
+    bun: [
+        mix(PALETTE[15], PALETTE[17], 0.3),
+        mix(PALETTE[16], PALETTE[15], 0.45),
+        mix(PALETTE[17], PALETTE[15], 0.5),
+        mix(PALETTE[15], PALETTE[1], 0.3),
+    ],
+    /** The patty. Brown let down to charcoal -- the one dark note a symbol is allowed, and it is small. */
+    patty: mix(PALETTE[23], PALETTE[5], 0.3),
+    /** A slice of cheese, square so its corners show past the round patty. That is the whole trick. */
+    slice: mix(PALETTE[16], PALETTE[17], 0.25),
+    /** Leaves, wherever a symbol needs something green sticking out from between two other things. */
+    leaf: mix(PALETTE[13], PALETTE[14], 0.4),
+    /** Sesame seeds on a bun top. */
+    seed: mix(PALETTE[0], PALETTE[15], 0.3),
+
+    // ---- pizza ----
+    /** Melted cheese, which is the face of a slice and the thing that rolls. */
+    melt: [
+        mix(PALETTE[16], PALETTE[17], 0.3),
+        mix(PALETTE[16], PALETTE[15], 0.4),
+        mix(PALETTE[17], PALETTE[16], 0.35),
+        mix(PALETTE[15], PALETTE[16], 0.45),
+    ],
+    /** The crust: a shade browner than any cheese, so the rim reads as an edge rather than a halo. */
+    crust: mix(PALETTE[15], PALETTE[23], 0.28),
+    /** Pepperoni. Brick barely diluted -- three red dots are what says pizza and not cheese on toast. */
+    pepperoni: mix(PALETTE[19], PALETTE[18], 0.18),
+
+    // ---- taco ----
+    /** The shell: fried corn, warmer and deeper than a bun so the two are not one colour twice. */
+    shell: [
+        mix(PALETTE[16], PALETTE[15], 0.25),
+        mix(PALETTE[17], PALETTE[16], 0.3),
+        mix(PALETTE[16], PALETTE[17], 0.45),
+        mix(PALETTE[15], PALETTE[16], 0.3),
+    ],
+    /** What is in it: three fixed colours, because filling is a group and a group has to stay mixed. */
+    tomato: mix(PALETTE[19], PALETTE[18], 0.25),
+    cheeseGrate: mix(PALETTE[16], PALETTE[0], 0.3),
+
+    // ---- noodles ----
+    /**
+     * The noodle bowl: reds, terracottas and ambers, and **nothing green**.
+     *
+     * See the note at the top of this block. Warm is half of what tells this bowl from the salad's,
+     * and it is the half that survives being twenty metres away with a crowd in front of it.
+     */
+    noodleBowl: [
+        mix(PALETTE[19], PALETTE[18], 0.3),
+        mix(PALETTE[18], PALETTE[19], 0.3),
+        mix(PALETTE[19], PALETTE[23], 0.3),
+        mix(PALETTE[17], PALETTE[18], 0.35),
+    ],
+    /** The noodles themselves: pale, so the strands read against whatever the bowl rolled. */
+    noodle: mix(PALETTE[0], PALETTE[15], 0.45),
+    /** Chopsticks. Timber, like every other stick in this world. */
+    chopstick: mix(PALETTE[23], PALETTE[15], 0.35),
+
+    // ---- salad ----
+    /**
+     * The salad bowl: greens, and **nothing warm**. The other half of the pair above.
+     *
+     * Mid-tone rather than dark, for the reason `SHOP.hat` gives: the leaves have to read *inside*
+     * the silhouette, and a bowl that starts dark puts bowl and leaves on the same band of the toon
+     * ramp.
+     */
+    saladBowl: [
+        mix(PALETTE[12], PALETTE[4], 0.22),
+        mix(PALETTE[10], PALETTE[12], 0.35),
+        mix(PALETTE[13], PALETTE[12], 0.45),
+        mix(PALETTE[12], PALETTE[13], 0.3),
+    ],
+    /** The leaves: three fixed greens, lighter than any bowl, so a heap of them is not one lump. */
+    leafA: mix(PALETTE[13], PALETTE[14], 0.35),
+    leafB: mix(PALETTE[14], PALETTE[0], 0.25),
+    leafC: mix(PALETTE[13], PALETTE[0], 0.32),
 } as const;

@@ -6,7 +6,8 @@
  * whole edge with the walkway.
  *
  * The pieces are drawn from one instanced mesh per **shape**, with colour carried per instance, so
- * the whole edge -- some five hundred posts, rails, slats, lamps, bins and kiosk parts -- costs two
+ * the whole edge -- some five hundred posts, rails, slats, lamps, bins, cart and building parts --
+ * costs two
  * draw calls per primitive rather than hundreds. Adding a prop is an entry in a plan, never a mesh,
  * and a prop in a colour nothing else uses is now free rather than a draw call.
  */
@@ -147,6 +148,37 @@ interface Batch {
     mesh?: THREE.InstancedMesh; inkMesh?: THREE.InstancedMesh;
 }
 
+/**
+ * A triangular prism: a flat base, two sloping faces, and a ridge running the length of it.
+ *
+ * Written out by hand rather than taken from a three-sided `CylinderGeometry`, for one reason that
+ * matters everywhere else in the tool chain: every unit geometry here **fills its unit cube**, so a
+ * cube under a part's matrix is that part's bounding box -- which is what the inspector's boxes, its
+ * measured heights and its ground shadows are all built on. A three-sided cylinder is a triangle
+ * inscribed in a circle, so it fills neither its width nor its height and would have to be scaled
+ * and shifted back by two magic numbers that only happen to be right for three sides.
+ *
+ * So: base at `y = -0.5` spanning the full width, ridge at `y = +0.5` down the middle, both ends
+ * square, and the extrusion along `z` -- which puts the ridge along the path when the piece is
+ * placed square, exactly where a gable roof's ridge belongs. Eight triangles, vertices duplicated
+ * per face so `computeVertexNormals` leaves the facets flat rather than rounding the ridge off.
+ */
+function prism(): THREE.BufferGeometry {
+    const a = [-0.5, -0.5, -0.5], b = [0.5, -0.5, -0.5], c = [0.5, -0.5, 0.5], d = [-0.5, -0.5, 0.5];
+    const e = [0, 0.5, -0.5], f = [0, 0.5, 0.5];
+    const tris = [
+        a, b, c, a, c, d, // base
+        b, e, f, b, f, c, // the slope facing +x
+        a, d, f, a, f, e, // and the one facing -x
+        a, e, b, // the gable end at -z
+        d, c, f, // and the one at +z
+    ];
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(tris.flat(), 3));
+    geo.computeVertexNormals();
+    return geo;
+}
+
 function unit(shape: Shape): THREE.BufferGeometry {
     if (shape === 'cyl') return new THREE.CylinderGeometry(0.5, 0.5, 1, 12);
     if (shape === 'ball') return new THREE.SphereGeometry(0.5, 10, 8);
@@ -155,6 +187,7 @@ function unit(shape: Shape): THREE.BufferGeometry {
     // A paper cup: wide at the top, narrower at the foot. The taper is part of the primitive rather
     // than a parameter, because a shape a caller can reprofile is a shape that stops batching.
     if (shape === 'taper') return new THREE.CylinderGeometry(0.5, 0.34, 1, 12);
+    if (shape === 'prism') return prism();
     return new THREE.BoxGeometry(1, 1, 1);
 }
 

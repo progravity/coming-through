@@ -18,7 +18,7 @@
  * - **Every run starts and ends on a post**, and the runs come from `freeRuns`, so the railings
  *   stop square against a building's footprint instead of at whichever grid point fell nearest.
  *
- * The gaps are not written down here. They are read off `SHOP_SPANS`, which is derived from where
+ * The gaps are not written down here. They are read off `BUILDING_SPANS`, which is derived from where
  * the buildings actually are, so moving a shop moves the gap in front of it.
  */
 import { EDGE } from '../palette.ts';
@@ -28,7 +28,7 @@ import { L } from './layout.ts';
 import type { EdgeSpan } from './layout.ts';
 import { PATH } from './path.ts';
 import type { PathCurve } from './path.ts';
-import { SHOP_SPANS } from './shops.ts';
+import { BUILDING_SPANS } from './buildings.ts';
 
 /** How far past each end of the path the railings run. */
 const RAIL_END = L + 8;
@@ -63,7 +63,7 @@ function postsIn(s0: number, s1: number): number[] {
  * lets `test/edge.test.ts` sweep the same plan along a walkway that bends, widens and climbs and
  * measure every piece back off the frame there.
  */
-export function railingPlan(curve: PathCurve = PATH, spans: readonly EdgeSpan[] = SHOP_SPANS): EdgePlan {
+export function railingPlan(curve: PathCurve = PATH, spans: readonly EdgeSpan[] = BUILDING_SPANS): EdgePlan {
     const standing: Standing[] = [], bars: Bar[] = [];
     for (const side of [-1, 1] as const) {
         for (const run of freeRuns(spans, side, -RAIL_END, RAIL_END)) {

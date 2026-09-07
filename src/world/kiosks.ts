@@ -402,6 +402,16 @@ export interface Kiosk {
  * clear is dropped rather than overlapped -- the placements are authored clear today and the test
  * checks that none of them are being quietly thrown away.
  */
+/**
+ * Every cart on the walkway, rolled and placed through the curve.
+ *
+ * The spans it routes around are the **shops'** and the pads', deliberately not `BUILDING_SPANS`.
+ * What a cart must not stand in is a doorway people walk out of, and those are the shops': `DOORS`
+ * is what the spawner reads, and every entry in it is a shop. A restaurant stands 1.3 m beyond the
+ * path's edge while a cart stands 2.3 m inside it, so the two can never touch, and charging the
+ * carts for the restaurants' doorways as well costs five of the nine carts -- measured. A cart
+ * parked outside a restaurant is a promenade, not a bug.
+ */
 export function kiosks(curve: PathCurve = PATH, spans: readonly EdgeSpan[] = [...SHOP_SPANS, ...PAD_SPANS]): Kiosk[] {
     const out: Kiosk[] = [];
     KIOSK_PLACEMENTS.forEach((at, i) => {

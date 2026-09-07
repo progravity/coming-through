@@ -28,8 +28,11 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
   `edge.ts` (what a piece of the path's edge *is*; pure, so the simulation can read it),
   `kit.ts` (how one lands and gets drawn), `railings.ts` and `furniture.ts` (where the pieces go),
   `structure.ts` (the structure-archetype pattern: fixed form, rolled colour, derived footprint),
-  `kiosks.ts` (the seven carts built with it) and `shops.ts` (the five shopfronts, which also own
-  where they stand and the gaps they take out of the edge), `plan.ts` (every edge layer as one list,
+  `kiosks.ts` (the seven carts built with it), `facade.ts` (the storefront every building wears, as
+  one function of the box it is drawn on), `shops.ts` and `restaurants.ts` (the two building types,
+  which also own where they stand and what they take out of the edge), `buildings.ts` (both types'
+  interruptions as one list, which is all the railings, the furniture and the debug overlay read),
+  `plan.ts` (every edge layer as one list,
   which the renderer draws and the simulation takes footprints out of),
   `props.ts` (the distant skyline, and nothing else since the shops got a layer of their own),
   `box.ts`, `material.ts` (the one shading model the whole world takes).
@@ -43,9 +46,9 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
   conforms to, `registry.ts` the only file that knows they exist, `entities/` the conformances,
   and `index.ts`/`panel.ts`/`state.ts` a shell that has never heard of any of them. A driver for
   the game's own assemblers, never a copy of them; see "Entity inspection" below.
-  `entities/structure.ts` is the cast the carts and the shopfronts share, since everything the tool
-  does with one it does with the other and a copy is where "through the game's own assembler"
-  quietly stops being true for one of them.
+  `entities/structure.ts` is the cast the carts, the shopfronts and the restaurants share, since
+  everything the tool does with one it does with the others and a copy is where "through the game's
+  own assembler" quietly stops being true for one of them.
 - `src/compare/` — the render-direction comparator. The six rendering directions it shows side by
   side live as data in `src/render/look.ts`; `?look=` plays a normal run under one of them and
   reaches every surface, not just the crowd. `main.ts` names this directory only to *open* it, so
@@ -95,6 +98,13 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
   product set, that the livery costs no extra draw, that a shop has a footprint and **no collider**,
   and that the whole layer planned along a bending, widening, climbing stub measures back off the
   frame there.
+- `test/restaurants.test.ts` — the five restaurants: that the storefront is `facade()`'s and neither
+  building type owns a copy of it, that every restaurant is gabled and no shop is, that a restaurant
+  stands further back than the lamp posts (which is what lets it open a doorway rather than a
+  frontage), that **no two of the ten building symbols are alike** and that the noodle bowl and the
+  salad bowl differ in proportion, in colour and in what stands out of them, that all three spots
+  land somewhere they mean something, and that the whole layer **costs the promenade nothing** —
+  measured against the same layers planned with the doorways taken back out.
 - `test/kiosks.test.ts` — that an archetype fixes a cart's form completely and only colour rolls,
   that a roll cannot leave the curated set, that a collider is the cart and never the topper, that
   the service and staff points land on the right sides of it, and that a cart is solid without
@@ -121,7 +131,9 @@ break nothing and be found by nobody, which is why `test/taxonomy.test.ts` reads
 fails on one.
 
 - **family** — the structural kind: `person`, `kiosk`, `building`, `furniture`. All four are
-  populated: `building` is the five shopfronts.
+  populated, and `building` holds **two types**: the five shopfronts and the five restaurants. They
+  are siblings rather than a variant of one another — one you browse and buy from, one you sit and
+  eat at — which is what the type axis is for.
 - **type** — the archetype: the fixed form and identity. **Type fixes form; the recipe rolls only
   colour**, which is the rule `makeRecipe` and `structurePaint` already keep.
 - **properties** — the traits *behaviour queries*: `bump-relevant`, `mobile`, `immobile`,
@@ -164,11 +176,27 @@ asserted empty.
 
 **`vendor` is a capability, and it crosses families.** A vendor is an entity with the `vendor`
 property, which has a **service spot** and a **staff spot** — where a customer stands, and where
-staff stand. The kiosks have it and so do the shops, which is the claim the design made before there
-was a second family to test it on: a shopfront's service spot turned out to be exactly a cart's
-question, answered by the same two fields, which is why it is a property carrying data rather than
-two fields that could only ever be a fact about carts. The spots are authored in the structure's own cross-section and
-turned into path coordinates by `placeStructure`, so they turn with the thing. Nothing places staff.
+staff stand. The kiosks have it, and so do the shops and the restaurants, which is the claim the
+design made before there was a second family to test it on: a shopfront's service spot turned out to
+be exactly a cart's question, answered by the same two fields, which is why it is a property carrying
+data rather than two fields that could only ever be a fact about carts. The spots are authored in the
+structure's own cross-section and turned into path coordinates by `placeStructure`, so they turn with
+the thing. Nothing places staff.
+
+**A restaurant carries a third spot, and it is not the vendor's.** `seating` is a **point** — no
+extent, no side, no options — where a seating area would attach. It rides beside `vendor` on
+`StructureArchetype`, on `Placed` and on `PlacedEntity` rather than inside it, because seating is not
+a vendor's business: a building that sold nothing could still have a terrace, and a cart with a
+service spot could never have one. It is **not** a new term in the property vocabulary: the axis
+stays small and closed, and what a restaurant declares is `immobile` and `vendor`, exactly as a shop
+does. See "the seating-area seam" below.
+
+**Direction, not yet built: named attachment spots.** Service, staff and seating are three fields
+answering one question — *what does this entity expose for something else to be placed at?* The
+inspector already treats them that way (one overlay, one `spotRows`), and the world/composition
+layer would consume a `Record<string, PathSpot>` more happily than three optional fields. Do not
+refactor the two existing spots into it until something actually resolves against them; a
+generalisation with one consumer is a guess.
 
 **How the metadata reaches the simulation.** `EdgePlan` has a fourth list, `entities`, beside the
 parts it draws, the bars it strings and the footprints it presents — one entry per **object**, keyed
@@ -186,15 +214,30 @@ built as three categories:
   the boundary is a property of the thing and not of the file it lives in.
 - An **effect** is transient. Nothing is one yet.
 
-**Seams left open, deliberately unbuilt.** The `building` family is closed — the shops filled it,
-built by `world/structure.ts` exactly as the seam promised, which is the evidence that leaving it
-open was worth doing. Still open: `shop-staff` is a person archetype nobody has written; `stationed`
-and the vendor's staff spot are what it will need, and both exist and are asserted unused. And the
-**world/composition layer** — which places entities by resolving what they require — is the planned
-consumer of all of this: `placed-with-requirements` is a label today, and the requirements
-themselves are still the `EdgeSpan` lists, the clearances, `KIOSK_N` and `SHOP_BOX`, where they have
-always been. The metadata exists to be read by worlds later; do not build the resolver before the
-things it resolves are real.
+**Seams left open, deliberately unbuilt.** The `building` family is closed twice over — the shops
+filled it and the restaurants filled it again, both built by `world/structure.ts` exactly as the seam
+promised, and the second time cost no change at all to `sim/obstacles.ts`, which is the evidence that
+asking the entity rather than assuming from the footprint was worth doing. Still open:
+
+- **`shop-staff`**, a person archetype nobody has written; `stationed` and the vendor's staff spot are
+  what it will need, and both exist and are asserted unused.
+- **The seating area.** An on-path entity, a `static-obstacle`, placed by a requirement that reads
+  "attach to a restaurant's seating spot", deriving its width from the restaurant it attaches to, and
+  **binary** — a restaurant either has one or does not. Three things about it are already known and
+  should not have to be rediscovered:
+  - It is the **first entity to straddle on-path and off-path**: the building is behind the railings,
+    the terrace in front of them. Nothing in the plan has had to be two places at once before.
+  - It needs the **path-passability check** the kiosks paid for the hard way. A restaurant-width
+    obstacle is 8.5 m of a 12 m walkway; `KIOSK_N - r` is the corridor rule and this is the same
+    question at four times the width. See "Where they stand, and what they cost" below.
+  - **A seating spot is not empty walkway.** Four of the five sites have a cart within a terrace's
+    width, and the taco house had to move once already because the pinwheel cart's collider was
+    around its seating point. The resolver has to see the carts.
+- **The world/composition layer** — which places entities by resolving what they require — is the
+  planned consumer of all of this: `placed-with-requirements` is a label today, and the requirements
+  themselves are still the `EdgeSpan` lists, the clearances, `KIOSK_N`, `SHOP_BOX` and
+  `RESTAURANT_BOX`, where they have always been. The metadata exists to be read by worlds later; do
+  not build the resolver before the things it resolves are real.
 
 ## Seeds and restarting
 
@@ -426,8 +469,15 @@ debug overlay draws the doorways off the same spans, so it cannot claim a gap th
 plaza, a crossing or a bus stop is one more entry.
 
 **The edge is instanced, batched by shape alone, with colour carried per instance.** A thousand-odd
-posts, rails, slats, lamps, bins and kiosk parts are ten meshes -- two per primitive, one shaded and
-one ink -- and **a new colour costs nothing**. It used to batch by shape *and* colour, which was free
+posts, rails, slats, lamps, bins, cart and building parts are twelve meshes -- two per primitive, one
+shaded and one ink -- and **a new colour costs nothing**. There are six primitives: `box`, `cyl`,
+`ball`, `cone`, `taper` and `prism`. Each one past the first three arrived because the others could
+not fake it -- `cone` and `taper` for a wafer and a paper cup, `prism` for the restaurants' gabled
+roof, which is also the pizza slice. **A new primitive costs two draw calls for the whole world**, so
+it has to be a shape rather than a convenience; the prism earns its pair twice over. Its unit
+geometry is written out by hand rather than taken from a three-sided cylinder, because every unit
+geometry here **fills its unit cube** and a triangle inscribed in a circle does not -- and that fact
+is what the inspector's bounding boxes, measured heights and ground shadows are all built on. It used to batch by shape *and* colour, which was free
 while the whole layer was four paints of ironwork and timber; the kiosks broke that, because nine
 carts each rolling three colours of their own would have taken the layer from 10 draw calls to 82.
 So the colour moved onto the instance: `instanceColor` multiplies a white toon material, which
@@ -436,7 +486,7 @@ a mesh, and adding one in a colour nothing else uses is now free too. Colours co
 `KIOSK` in `palette.ts`, made of palette entries the same way the ground's are.
 
 **Every layer's plan is one list, in `plan.ts`.** `edgePlans` merges the railings, the furniture,
-the kiosks and the shops and renumbers their `piece` ids unique across the lot; `world/index.ts` draws that list
+the kiosks, the shops and the restaurants and renumbers their `piece` ids unique across the lot; `world/index.ts` draws that list
 and `sim/obstacles.ts` takes the footprints out of it. One list because there are two readers and
 they must not be able to disagree -- a layer that were drawn but not solid, or solid but not drawn,
 is exactly the bug two call sites would eventually produce. The next layer of props is one entry.
@@ -481,13 +531,15 @@ readings of one number -- move a bench, lengthen it, widen the path under it, an
 together. `test/obstacles.test.ts` measures the capsule against the bounding box of the parts
 carrying its `piece` id, so a collider that outgrew its object fails. Which of those footprints
 becomes a collider is the object's own statement rather than an assumption: `buildObstacles` takes
-the solids of entities declaring `static-obstacle`. The shops are the one thing with a footprint
-that does not declare it, for two reasons rather than one. Nothing can *reach* a shopfront — it
-stands behind the railings and both the crowd and the player are fenced inside `halfWidth` — and a
-shop's capsule has `r = 3`, so admitting one to the fixed grid would break the
+the solids of entities declaring `static-obstacle`. The **buildings** are the things with a footprint
+that do not declare it, for two reasons rather than one. Nothing can *reach* one — they stand behind
+the railings and both the crowd and the player are fenced inside `halfWidth` — and a shop's capsule
+has `r = 3` and a restaurant's `r = 4`, so admitting one to the fixed grid would break the
 `biggest obstacle + widest body + OBSTACLE_ROOM < grid.reach` invariant outright. The lamp post's
 "furniture is solid with no exception to remember" does not stretch to a building the size of a
-house. See "The entity taxonomy" above.
+house. The exemption is the **family's** rather than the shops': the restaurants inherited it without
+a line of `sim/obstacles.ts` changing, which is the return on having asked the entity. See "The
+entity taxonomy" above.
 
 The shape is a **capsule**: a segment `2 * half` long swollen by `r`. A bin and a lamp are `half = 0`,
 which is a circle; a bench is a long thin one lying along the path. One primitive covers both, the
@@ -561,9 +613,17 @@ accessory, and re-tuning the crowd against it. The furniture's colliders already
 
 ## Structures and kiosks
 
-`world/structure.ts` is the pattern every *built* thing on the walkway is made by, and `kiosks.ts`
-is its first user. Buildings come next and are the same problem at a different size; they reuse
-this file and add an archetype table of their own.
+`world/structure.ts` is the pattern every *built* thing on the walkway is made by. `kiosks.ts` was
+its first user; `shops.ts` and `restaurants.ts` are the second and third, and they are the same
+problem at a different size -- they reuse this file and add an archetype table of their own. The two
+building types also share `facade.ts`, which is the storefront elevation as one function of the box
+it is drawn on: wall, plinth, cornice, corner pilasters, door, framed windows, sign board, awning.
+**What scales with the box and what does not is the design there.** A door is a human-sized thing, so
+heights and openings are absolute and only the frontage-derived numbers move -- which is why an 8.5 m
+restaurant does not get a 2.5 m door or an awning out of reach. Given the shop's own box it
+reproduces the shopfront exactly as it was written by hand, and `test/restaurants.test.ts` checks
+both types against `facade()` itself rather than against each other, because a copy that has not
+diverged yet still passes a comparison between the two.
 
 The whole of the pattern is one split:
 
@@ -665,7 +725,9 @@ does around benches -- and left `identityHash()` byte-identical.
 ## The shops
 
 The five shopfronts, in `world/shops.ts`: the first members of the `building` family and the second
-user of the structure pattern. They replace the four nondescript cubes `props.ts` used to draw.
+user of the structure pattern. They replace the four nondescript cubes `props.ts` used to draw. The
+restaurants are their sibling type; everything below about the template, the symbols and the livery
+holds for both, and the section after this one is only what a restaurant does *differently*.
 
 **Candy, souvenir, toy, clothing, drinks.** One storefront, five symbols:
 
@@ -728,6 +790,9 @@ were found on the turntable and are worth keeping:
 
 **Colour is a livery** (see "Structures and kiosks" above): wall from the primary, joinery from the
 secondary, door/sign/awning-band from the accent, and the symbol from the type's own product set.
+`BUILDING_LIVERY` is the family's, not the shops' -- a restaurant is painted out of the same book,
+which is what makes the ten buildings read as one street rather than two layers standing near each
+other.
 Two symbols are exceptions worth knowing, and they are the same exception: where a symbol is a
 *group*, its members have to stay different colours, so only one of them rolls and the rest are
 literals. The toy shop's bottom block rolls and the two above it do not; the clothes shop's sun hat
@@ -758,6 +823,120 @@ batches by shape and **add no draw calls at all**; deleting the eight placeholde
 full crowd at `high` from 44 draw calls to 36. Pose cost is unchanged (1.216 to 1.212 ms), the crowd
 being untouched. The paint comes off a stream seeded by a constant, like the kiosks' and the
 ground's grain, so the promenade is decorated identically in every run.
+
+## The restaurants
+
+The five restaurants, in `world/restaurants.ts`: the **second type** in the `building` family, and
+the thing that proved the family was a family. A shop and a restaurant are two different things to a
+player -- one you browse and buy from, one you sit and eat at -- so they are siblings under one
+family rather than a shop with a flag, which is what the type axis exists for.
+
+**Burger, pizza, taco, noodles, salad.** Everything structural is the shops': the same `Prim`
+vocabulary, the same `placeStructure`, the same instanced kit, the same `EdgePlan`, the same
+`facade()` and the same `BUILDING_LIVERY`. Three things differ, and each is doing a job.
+
+**A gabled roof.** One `prism`, ridge along the path, eaves overhanging both ways, sunk 60 mm into
+the cornice it lands on. It is the whole silhouette signal: from the walkway, at an angle, with a
+crowd in front, a pitched roof is the one difference you can read before anything else resolves. It
+is also the reason `prism` exists as a primitive -- two leaning slabs would have left the gable ends
+open, and the shape that would have to close them is the shape being faked.
+
+**Bigger, and set back.** 8.5 x 8 m against the shop's 7 x 6, with a wall a metre taller. The
+set-back is not decoration and is the most load-bearing number in the file: at `inset` 1.3 the
+frontage stands **behind the lamp posts** (which reach 0.98 m past the path's edge), so a restaurant
+takes only a **doorway** out of the railings and the furniture where a shop has to open its whole
+frontage. Measured: five shop-style frontages here delete twelve of the promenade's nineteen benches,
+bins and lamps and thirty-two railing posts; five doorways delete nothing at all. If `inset` ever
+drops back inside the lamps, that trade has to be made again.
+
+**Three spots, all points, nothing placed at any of them.** Service (a customer at the door, on the
+walkway), staff (behind the counter, inside the building), and **seating** -- where a seating area
+would attach. All three are authored in the structure's own cross-section and turned into path
+coordinates by `placeStructure`, so they turn with the building; the two that face the walkway have
+to land inside `halfWidth` or they describe places nobody can stand, which is what the test checks.
+
+### The five symbols
+
+Same rule the shops and the carts keep: the identity is an oversized emblem, no text anywhere, and
+**one member of the group rolls while the rest are literals**, because a group of things has to stay
+a group of *different* things.
+
+| type | symbol | what rolls |
+|---|---|---|
+| burger | bun, patty, square cheese, lettuce, domed top bun, sesame | the bun |
+| pizza | a slice on its point: crust wedge, cheese, crust rod, three pepperoni through it | the melted cheese |
+| taco | a rounded crease with two flaps leaning apart, filling heaped over | the shell |
+| noodles | a deep warm bowl, a noodle mound, strands, two chopsticks | the bowl |
+| salad | a wide shallow green bowl heaped with overlapping leaves and two tomatoes | the bowl |
+
+Five things were found on the turntable and are worth keeping:
+
+- **Sized against the building, not against itself.** The first pass sized them like cart toppers,
+  at 2.5 m on an 8.5 m frontage, and they read as ornaments. A shop's emblem takes about two thirds
+  of its own frontage; so do these, which means **wide** rather than tall -- a burger got its
+  presence from a 4.7 m lettuce leaf, not from another metre of height.
+- **A flat plate faces along the path, not at the walkway.** The pizza slice is the case. A side
+  building is only *on screen* while it is ahead of you, so the view a player really gets of one is
+  end-on for most of the approach and square-on for about two metres of it. Facing the slice along
+  the path is the same finding the clothes shop's cap peak is, arrived at from the other direction.
+  It is still 0.95 m thick, which is the concession to those two metres: seen edge-on a thin plate is
+  a stick, and a stick on a roof is a mistake.
+- **The taco is a U with straight sides, never a wedge.** A wedge would have been one part instead of
+  three -- and it would have been the pizza slice's silhouette at a different thickness, which is the
+  one thing five symbols on one promenade cannot afford. Straight flaps off a round crease is a fold;
+  a wedge is a triangle. The flaps are cylinders rather than boxes so their long faces end in a curve:
+  as boxes the whole thing read as a packing crate from square-on.
+- **Filling has to spill past the thing holding it.** The taco's read from square-on is entirely the
+  filling overflowing both ends of the shell; contained inside it, the shell is just a container.
+- **The noodle bowl and the salad bowl are the only real risk in the feature**, being the only two
+  symbols that start from the same object. Three things separate them and all three are tested:
+  the salad's bowl is at least 1.3x flatter in proportion, the two colour sets are curated as warm
+  against green with nothing in common, and what stands out of the top is two long diagonals against
+  a mound -- chopsticks being the cue that still works once distance has taken the colour.
+
+**A board straddles the ridge under each symbol**, and the arithmetic in it is worth reading before
+widening it: a pitched roof falls away from the ridge, so the board has to be **sunk deeper than its
+half-width times the slope** or its lower corners hang in the air. At 1.3 m across the roof has
+fallen 284 mm by the board's edge and it is sunk 320 mm.
+
+### Where they stand
+
+`RESTAURANT_PLACEMENTS` is authored and then measured, like the kiosks' and the shops'. Five sites
+the length of the walkway, three on one edge and two on the other, and the list that came back
+**costs the promenade nothing at all** -- not a bench, not a bin, not a lamp post, not a railing post,
+not a cart. Every doorway falls in a gap the bench rhythm already left. That is why adding a whole
+building type left both determinism hashes byte-identical, and `test/restaurants.test.ts` pins it by
+re-planning the same layers with the doorways taken back out rather than by restating today's totals.
+
+Two filters chose the list, and the second is the one that moved two of them:
+
+- **The doorway must cost nothing.** A 2.6 m span, not a frontage; the free sites are narrow and
+  cluster, which is what a promenade with nineteen pieces of furniture, nine carts and five shops on
+  it has left.
+- **The seating spot must be free too.** The taco house stood at `s = -19.5` until the pinwheel cart
+  at `s = -20` turned out to have its collider *around* the seating point -- an attachment spot
+  nothing could ever attach at, which is worse than no spot. A restaurant is placed by the doorway it
+  needs **and** by the piece of walkway it points at.
+
+**The carts are deliberately not kept clear of them.** `kiosks()` routes around `SHOP_SPANS` and the
+pads, not `BUILDING_SPANS`. A cart stands 2.3 m inside the path's edge and a restaurant 1.3 m outside
+it, so the two can never touch; the only thing a cart could block is a doorway, and the doorways
+people actually walk out of are the shops' -- `DOORS`, which the spawner reads. Charging the carts for
+five more stretches of walkway costs five of the nine carts, which is a real loss to pay for an
+imagined one. A cart parked outside a restaurant is a promenade, not a bug.
+
+**`BUILDING_SPANS` in `world/buildings.ts` is the one list** the railings, the furniture and the
+debug overlay read. It lives in a file of its own for a dull, load-bearing reason: those three read it
+and `shops.ts`/`restaurants.ts` produce it, and anywhere else the import graph closes on itself. A
+span is not the same thing as a building -- a shop registers its frontage and a restaurant its
+doorway -- and which one a type registers is a fact about where it stands, so it belongs with it.
+
+**What it cost.** The restaurants draw through the shared instanced kit, so their parts join the
+existing batches by shape; the only new cost is the `prism` batch's own pair of meshes, taking a full
+crowd at `high` from **36 draw calls to 38**. Pose cost is unchanged (1.232 to 1.226 ms) and so is
+the simulation step (0.217 to 0.212 ms per step), the crowd being untouched. The paint comes off a
+stream seeded by a constant, like the shops', the kiosks' and the ground's grain, so the promenade is
+decorated identically in every run.
 
 ## Character recipes
 
@@ -939,12 +1118,14 @@ colour is still drawing through -- the failure a shared cache always risks, and 
 `?inspect=1` opens a turntable: one thing on a neutral stage, a camera that holds still, a slow
 spin, and controls for whatever varies about it. `?inspect=row` puts a whole family side by side.
 `&entity=` chooses what is on the stage — `person` (the default, so every URL written before this
-existed still works), `kiosk`, `furniture`, and `bench`/`lamp`/`bin` as names for the furniture
-with its kind pinned.
+existed still works), `kiosk`, `furniture`, `shop`, `restaurant`, and `bench`/`lamp`/`bin` and the
+five cuisine names as aliases with a kind or a type pinned. `?entity=building` still means a shop:
+the family has two members now and an alias owes nobody more than that a URL written before it
+existed opens what it opened.
 
 Its entire value rests on one rule: **it renders everything through the game's own assembler.**
-`makeRecipe` and `drawPerson` for people, `placeStructure` and `buildEdge` for the carts, the
-`bench`/`lamp`/`bin` builders and `buildEdge` for the furniture. There is no inspection-only copy
+`makeRecipe` and `drawPerson` for people, `placeStructure` and `buildEdge` for the carts and both
+kinds of building, the `bench`/`lamp`/`bin` builders and `buildEdge` for the furniture. There is no inspection-only copy
 of any of it and there must never be one — a turntable that draws a thing differently from the game
 is worse than no turntable. `test/inspect.test.ts` compares `Subject` against a real `Agent`,
 `test/edge.test.ts` rebuilds `furniturePlan` out of the three builders the inspector calls, and
@@ -1012,8 +1193,14 @@ cannot reload is a close look you cannot compare against. The wheel zooms about 
 shift-drag or a right-drag pans, and `0` puts it back.
 
 The families are the taxonomy's own, imported from `entity.ts` rather than declared here: `person`,
-`kiosk`, `furniture` (benches, lamps, bins) and `building` (the five shopfronts). **The shop
-turntable is where the five symbols were authored**, and it earned itself immediately: the toy
+`kiosk`, `furniture` (benches, lamps, bins) and `building` (five shopfronts and five restaurants).
+**The building turntables are where all ten symbols were authored**, and the restaurants' row earned
+itself three times over: the symbols were less than half the size they needed against an 8.5 m
+frontage, the taco read as a packing crate until its flaps were rounded, and the noodle-versus-salad
+question is one only a side-by-side can answer. `?inspect=row&entity=restaurant` is that view; the
+hold-angle buttons matter as much as the row does, because a symbol has to survive being seen from
+along the path as well as across it, and those are different pictures. The shop turntable is where
+the shops' five symbols were authored, and it earned itself immediately: the toy
 shop's blocks read as a tower falling over, the clothes shop's cap read as a beanie because its
 peak pointed at the viewer, and every symbol was less than half the size it needed to be against a
 seven-metre frontage. None of
@@ -1028,9 +1215,13 @@ shell's own state, URL and keymap is what keeps that true.
 
 Two consequences worth knowing:
 
-- A shop offers **no collider overlay**, because it has none. `EdgeExhibit` draws the loop only for
-  an object whose entity declares `static-obstacle` — the same question `sim/obstacles.ts` asks — so
-  the tool cannot draw a wall the simulation does not have.
+- A building offers **no collider overlay**, because it has none. `EdgeExhibit` draws the loop only
+  for an object whose entity declares `static-obstacle` — the same question `sim/obstacles.ts` asks
+  — so the tool cannot draw a wall the simulation does not have.
+- The **spots** overlay draws whatever a placed structure exposes rather than a fixed pair, which is
+  why a restaurant's third spot arrived without `entities/restaurant.ts` mentioning it. One overlay
+  and one `spotRows` for all of them, because they are one question: what does this thing expose for
+  something else to be placed at?
 - The person's age, build and mobility overrides are **archetype edits**, not recipe edits. They
   set `look.age`, `look.w` and `look.aid` — the same fields `archetypes.ts` already uses to make
   Timmy a child and Dave narrow — so `makeRecipe` still takes every draw in its fixed order and
@@ -1201,6 +1392,13 @@ decisions, on any machine and at any frame rate. Everything below exists to keep
   is why `DOORS` lives in `layout.ts` as a simulation input and is *not* derived from
   `SHOP_PLACEMENTS` -- see "The shops". A list the spawner reads is not a list a decorative layer
   may own.
+- **A world layer that displaces a collider is a change to the crowd, not to the scenery.** Nothing
+  in `world/` reads a stream the simulation can see, so a new layer looks free -- but a building that
+  takes a stretch of edge out of the railings and the furniture deletes benches, bins and lamp posts,
+  and those are obstacles the crowd steers around. `Simulation.hash()` moves for it. The restaurants
+  are the worked example: five buildings that cost the promenade nothing, chosen by measuring exactly
+  this, which is why they arrived with both hashes untouched. If a layer does displace furniture, say
+  so and regenerate on purpose -- and check first whether a placement exists that does not.
 - New features that add randomness or timers must state which stream they use and be covered by
   the determinism test. If a change is meant to alter behaviour, update the stored hash with
   `npm run test:update-hash` in the same commit and say so in the commit message. Never update it

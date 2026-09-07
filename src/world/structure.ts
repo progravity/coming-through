@@ -109,6 +109,21 @@ export interface StructureArchetype {
      * carrying data rather than a pair of fields that could only be a fact about carts.
      */
     vendor?: { service: Spot; staff: Spot };
+    /**
+     * Where a seating area would attach, if this kind of structure can have one.
+     *
+     * A **point and nothing else**: no extent, no side, no options. A restaurant either gets a
+     * seating area or it does not, and the thing that attaches derives its own size from the
+     * building it attaches to -- so a width written here would be a second statement of a fact that
+     * lives at the other end, and the two would drift.
+     *
+     * Nothing is placed at it. It is captured now for the same reason the vendor's two spots were
+     * captured before there was anybody to stand in them: derived from the placement and the facing
+     * through the frame, it turns with the building, and the mechanics that want it later find it
+     * on the plan rather than having to be handed a third list to keep in step. See "the
+     * seating-area seam" in CLAUDE.md.
+     */
+    seating?: Spot;
     colours: Record<Slot, readonly number[]>;
     /**
      * Curate the slots **jointly** rather than independently: a set of liveries, one of which the
@@ -243,7 +258,7 @@ export interface Site {
 }
 
 /** A placed structure: the parts to draw, the footprint to walk round, and any capability data. */
-export interface Placed { standing: Standing[]; solid: Solid; vendor?: Vendor; }
+export interface Placed { standing: Standing[]; solid: Solid; vendor?: Vendor; seating?: PathSpot; }
 
 /**
  * Turn one structure's own cross-section into the path's.
@@ -278,5 +293,9 @@ export function placeStructure(arch: StructureArchetype, paint: Paint, at: Site,
         // spots with it rather than serving its customers out of its own back.
         vendor: arch.vendor === undefined ? undefined
             : { service: spot(arch.vendor.service), staff: spot(arch.vendor.staff) },
+        // Turned through the same facing for the same reason, and by the same `spot`: service,
+        // staff and seating are three named places beside one building, and the only thing that
+        // makes them three fields rather than one map is that nothing yet reads them by name.
+        seating: arch.seating === undefined ? undefined : spot(arch.seating),
     };
 }

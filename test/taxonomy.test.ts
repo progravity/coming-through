@@ -18,6 +18,7 @@ import { PROPERTIES, entityMeta, hasProperty } from '../src/entity.ts';
 import { ENTITIES } from '../src/inspect/registry.ts';
 import { FURNITURE_ENTITIES } from '../src/world/furniture.ts';
 import { KIOSK_ARCHETYPES, KIOSK_TYPES, kiosks } from '../src/world/kiosks.ts';
+import { RESTAURANT_ARCHETYPES, RESTAURANT_TYPES, restaurants } from '../src/world/restaurants.ts';
 import { SHOP_ARCHETYPES, SHOP_TYPES, shops } from '../src/world/shops.ts';
 import { edgePlans } from '../src/world/plan.ts';
 import { railingPlan } from '../src/world/railings.ts';
@@ -101,7 +102,9 @@ test('the inspector shelves entities by the same family the game files them unde
     // One axis, one vocabulary. The inspector had words of its own for this -- agent,
     // path-furniture, structure -- which is two names for one concept, and the thing this removes.
     const shelves = ENTITIES.map(e => `${e.id}:${e.family}`).sort();
-    assert.deepEqual(shelves, ['furniture:furniture', 'kiosk:kiosk', 'person:person', 'shop:building']);
+    assert.deepEqual(shelves, [
+        'furniture:furniture', 'kiosk:kiosk', 'person:person', 'restaurant:building', 'shop:building',
+    ]);
 });
 
 test('every person declares themselves a crowd-spawned, mobile, bump-relevant person', () => {
@@ -209,14 +212,18 @@ test('the railings are scenery and contribute no entities', () => {
     assert.deepEqual(rail.entities, []);
 });
 
-test('the shops are the entities with a footprint and no collider', () => {
+test('the buildings are the entities with a footprint and no collider', () => {
     // Named rather than merely counted, because *which* things are exempt is the interesting half.
-    // A shop is off the walkway behind the railings: the crowd and the player are both fenced
+    // A building is off the walkway behind the railings: the crowd and the player are both fenced
     // inside `halfWidth`, so nothing can reach one, and a bench's rule -- "furniture is solid with
     // no exception to remember" -- does not extend to a building the size of a house.
+    //
+    // The exemption is the **family's**, not the shops'. When the restaurants arrived they inherited
+    // it without a line of `sim/obstacles.ts` changing, which is the whole return on having asked
+    // the entity rather than assumed from the footprint.
     const soft = edgePlans().entities.filter(e => !hasProperty(e.meta, 'static-obstacle'));
     assert.deepEqual(new Set(soft.map(e => e.meta.family)), new Set(['building']));
-    assert.equal(soft.length, shops().length);
+    assert.equal(soft.length, shops().length + restaurants().length);
 });
 
 test('softening any entity drops exactly its own footprints', () => {
@@ -272,12 +279,45 @@ test('nothing is stationed yet', () => {
     for (const e of edgePlans().entities) assert.ok(!hasProperty(e.meta, 'stationed'), `piece ${e.piece}`);
 });
 
-test('the building family is populated by the shops', () => {
-    // The seam, closed. Buildings were always the same problem as the kiosks at a different size,
-    // and the shops are built by the same `world/structure.ts` -- which is what made filling this
-    // family additive rather than a rewrite.
+test('the building family holds two types, and they are siblings rather than variants', () => {
+    // The seam, closed twice. Buildings were always the same problem as the kiosks at a different
+    // size, and both the shops and the restaurants are built by the same `world/structure.ts` --
+    // which is what made filling this family, and then filling it again, additive rather than a
+    // rewrite.
     const families = new Set(edgePlans().entities.map(e => e.meta.family));
     assert.deepEqual([...families].sort(), ['building', 'furniture', 'kiosk']);
+    // A restaurant is not a shop with a flag on it: the two are distinct `type`s under one family,
+    // which is what the axes are for. If a restaurant ever filed itself under a shop's type, the
+    // taxonomy would be describing one thing where the player sees two.
+    const types = new Set(edgePlans().entities.filter(e => e.meta.family === 'building').map(e => e.meta.type));
+    for (const t of SHOP_TYPES) assert.ok(types.has(t), `no ${t} shop reached the plan`);
+    for (const t of RESTAURANT_TYPES) assert.ok(types.has(t), `no ${t} restaurant reached the plan`);
+    assert.equal(types.size, SHOP_TYPES.length + RESTAURANT_TYPES.length, 'a shop and a restaurant share a type');
+});
+
+test('every restaurant declares itself an immobile, placed building that serves people', () => {
+    assert.deepEqual([...RESTAURANT_TYPES], ['burger', 'pizza', 'taco', 'noodles', 'salad']);
+    for (const type of RESTAURANT_TYPES) {
+        const meta = RESTAURANT_ARCHETYPES[type].entity;
+        assert.equal(meta.family, 'building', `${type} is not filed as a building`);
+        assert.equal(meta.type, type, `${type} calls itself '${meta.type}'`);
+        assert.equal(meta.placement, 'placed-with-requirements');
+        // Exactly a shop's properties, on a different type. Seating is data a restaurant carries,
+        // not a term in the vocabulary: the property axis stays small and closed on purpose.
+        assert.deepEqual(new Set(meta.properties), new Set(['immobile', 'vendor']));
+    }
+});
+
+test('only restaurants carry a seating spot, and every one of them does', () => {
+    // The same discipline `only vendors carry vendor data` keeps, for the spot that has no property
+    // behind it. A seating spot on a bench or a bin would be an attachment point for something that
+    // could never attach; a restaurant without one would be a building the seam does not reach.
+    const seated = edgePlans().entities.filter(e => e.seating !== undefined);
+    assert.equal(seated.length, restaurants().length);
+    for (const e of seated) {
+        assert.ok(RESTAURANT_TYPES.includes(e.meta.type as (typeof RESTAURANT_TYPES)[number]),
+            `piece ${e.piece} is a ${e.meta.type} and carries a seating spot`);
+    }
 });
 
 test('every shop declares itself an immobile, placed building that serves people', () => {

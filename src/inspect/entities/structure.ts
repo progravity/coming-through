@@ -22,10 +22,17 @@ import { INK } from '../inspectable.ts';
 import type { Cast, Controls, DrawnPart, OverlayDef, Readout } from '../inspectable.ts';
 import { EdgeExhibit, spotMarker } from './edge.ts';
 
-/** The vendor overlay: where a customer stands and where staff stand. */
+/**
+ * The spots overlay: every named place beside a structure, on one button.
+ *
+ * The vendor's two -- where a customer stands, where staff stand -- plus a restaurant's seating
+ * spot, which is where a seating area would attach. One overlay rather than three because they are
+ * one question: *what does this thing expose for something else to be placed at?* A structure that
+ * exposes none simply has an empty group here.
+ */
 export const POINTS = 'points';
-export const POINTS_OVERLAY: OverlayDef = { id: POINTS, label: 'service points', key: 'p' };
-const SERVICE_C = 0x7ad17a, STAFF_C = 0xd17a9c;
+export const POINTS_OVERLAY: OverlayDef = { id: POINTS, label: 'spots', key: 'p' };
+const SERVICE_C = 0x7ad17a, STAFF_C = 0xd17a9c, SEATING_C = 0x7aa8d1;
 
 /** One thing standing on the stage: which archetype it is, and what was rolled for it. */
 export interface Instance<T extends string> { type: T; arch: StructureArchetype; paint: Paint; placed: Placed }
@@ -80,13 +87,14 @@ export class StructureCast<T extends string> implements Cast {
             const placed = placeStructure(arch, paint, { s, n, facing, phase }, 1);
             const plan: EdgePlan = {
                 standing: placed.standing, bars: [], solids: [placed.solid],
-                entities: [{ piece: 1, meta: arch.entity, vendor: placed.vendor }],
+                entities: [{ piece: 1, meta: arch.entity, vendor: placed.vendor, seating: placed.seating }],
             };
             const ex = new EdgeExhibit(this.scene, plan, facing);
             const points = new THREE.Group();
             if (placed.vendor !== undefined) {
                 points.add(spotMarker(placed.vendor.service, SERVICE_C), spotMarker(placed.vendor.staff, STAFF_C));
             }
+            if (placed.seating !== undefined) points.add(spotMarker(placed.seating, SEATING_C));
             ex.addOverlay(POINTS, points);
             this.exhibits.push(ex);
             this.items.push({ type, arch, paint, placed });
@@ -124,10 +132,19 @@ export class StructureCast<T extends string> implements Cast {
 /** Two decimals, which is every number either readout wants. */
 export const n2 = (v: number, d = 2): string => v.toFixed(d);
 
-/** A vendor's two spots as readout rows, or nothing if the thing serves nobody. */
+/**
+ * Every named spot a structure exposes, as readout rows, in the order the overlay draws them.
+ *
+ * A vendor contributes two and a restaurant a third; something exposing none contributes nothing,
+ * and the card simply has fewer rows. Written as one function over the whole `Placed` rather than
+ * one per capability, because the day these become a map of named spots this is the only line that
+ * has to know.
+ */
 export function spotRows(placed: Placed): (readonly [string, string])[] {
+    const where = (p: { s: number; n: number }): string => `s ${n2(p.s)} · n ${n2(p.n)}`;
     const v = placed.vendor;
-    return v === undefined ? []
-        : [['service', `s ${n2(v.service.s)} · n ${n2(v.service.n)}`],
-            ['staff', `s ${n2(v.staff.s)} · n ${n2(v.staff.n)}`]];
+    return [
+        ...(v === undefined ? [] : [['service', where(v.service)] as const, ['staff', where(v.staff)] as const]),
+        ...(placed.seating === undefined ? [] : [['seating', where(placed.seating)] as const]),
+    ];
 }

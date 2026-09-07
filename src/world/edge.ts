@@ -19,7 +19,7 @@
  *   not the same height. So a bar is built from its two frame-placed ends and leans however it has
  *   to in order to meet them.
  */
-import type { EntityMeta, Vendor } from '../entity.ts';
+import type { EntityMeta, PathSpot, Vendor } from '../entity.ts';
 import type { EdgeSpan } from './layout.ts';
 
 /**
@@ -27,13 +27,15 @@ import type { EdgeSpan } from './layout.ts';
  * piece's `across`/`up`/`along` are its real size in metres and nothing has a scale factor to
  * remember.
  *
- * Five primitives is the whole vocabulary, and it is deliberately short: every structure standing
- * on the path -- a railing post, a bench, a cotton-candy cart, and the buildings that come next --
- * is an assembly of these, which is what lets the entire layer batch into a handful of draw calls.
- * `cone` and `taper` were added for the kiosks (a wafer, a paper cup) and are the two shapes a box,
- * a cylinder and a ball genuinely cannot fake.
+ * Six primitives is the whole vocabulary, and it is deliberately short: every structure standing
+ * on the path -- a railing post, a bench, a cotton-candy cart, a shopfront and a restaurant -- is an
+ * assembly of these, which is what lets the entire layer batch into a handful of draw calls. Each
+ * one past the first three arrived because a box, a cylinder and a ball genuinely could not fake
+ * it: `cone` and `taper` for the kiosks (a wafer, a paper cup), and `prism` for the restaurants,
+ * whose gabled roof is the one thing that says at a glance that a building is not a shop. A prism
+ * earns its batch twice over -- the roof is one, and so is a pizza slice.
  */
-export type Shape = 'box' | 'cyl' | 'ball' | 'cone' | 'taper';
+export type Shape = 'box' | 'cyl' | 'ball' | 'cone' | 'taper' | 'prism';
 
 /**
  * A piece that moves after it has been placed: a balloon bobbing on its string, a pinwheel turning.
@@ -127,7 +129,20 @@ export interface Solid { piece: number; s: number; n: number; half: number; r: n
  * One entry per **entity**, not per part and not per collider. The railings contribute none: what
  * stops you there is the path's own width, so they carry no gameplay property and are scenery.
  */
-export interface PlacedEntity { piece: number; meta: EntityMeta; vendor?: Vendor; }
+export interface PlacedEntity {
+    piece: number;
+    meta: EntityMeta;
+    vendor?: Vendor;
+    /**
+     * Where a seating area would attach to this entity, for the entities that can carry one.
+     *
+     * The restaurants are the only bearers, and nothing is placed here yet -- see
+     * `StructureArchetype.seating`. It rides beside `vendor` rather than inside it because seating
+     * is not a vendor's business: a building that sells nothing could still have a terrace, and a
+     * cart with a service spot could never have one.
+     */
+    seating?: PathSpot;
+}
 
 /**
  * What one layer of the edge contributes: the pieces it stands, the bars it strings, the footprints

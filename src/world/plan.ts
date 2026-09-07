@@ -6,7 +6,9 @@
  * kiosks there was only one layer with footprints in it, so both sides could name `furniturePlan`
  * and stay honest by accident. With two there is a real chance of a layer being drawn and not being
  * solid, or the reverse -- so the list lives here, in the one place, and adding the next layer of
- * props is a single entry that both readers pick up at once. The shops were exactly that entry.
+ * props is a single entry that both readers pick up at once. The shops were exactly that entry, and
+ * the restaurants were the next one -- a whole second building type reaching the renderer and the
+ * simulation together, for one line here.
  *
  * A plan's footprints are not automatically colliders, and the shops are why that distinction is
  * now load-bearing rather than theoretical: they present a footprint and decline `static-obstacle`,
@@ -22,6 +24,7 @@ import { kioskPlan } from './kiosks.ts';
 import { PATH } from './path.ts';
 import type { PathCurve } from './path.ts';
 import { railingPlan } from './railings.ts';
+import { restaurantPlan } from './restaurants.ts';
 import { shopPlan } from './shops.ts';
 
 /**
@@ -33,5 +36,5 @@ import { shopPlan } from './shops.ts';
  * asking.
  */
 export function edgePlans(curve: PathCurve = PATH): EdgePlan {
-    return mergePlans([railingPlan(curve), furniturePlan(curve), kioskPlan(curve), shopPlan(curve)]);
+    return mergePlans([railingPlan(curve), furniturePlan(curve), kioskPlan(curve), shopPlan(curve), restaurantPlan(curve)]);
 }
