@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CAMERA } from './feel.ts';
+import { CAMERA, bobAt, bobHz, newBobOffsets } from './feel.ts';
 import { eyeHeight, standingHeight } from './render/person.ts';
 import type { Recipe } from './recipe.ts';
 import { CAMERA_MODES } from './sim/player.ts';
@@ -27,7 +27,20 @@ const _p = new THREE.Vector3();
  * position smoothing here is visual and may use the frame delta.
  */
 export class CameraRig {
-    mode: CameraMode = 'shoulder';
+    /**
+     * The view the game opens in. First person rather than over the shoulder, which is a choice
+     * about what the game is: threading a crowd is a judgement about gaps, and a gap reads
+     * truthfully only from where the player's own eyes are.
+     *
+     * It changes what the stick means -- `updatePlayer` steers by yaw at `MOVE.lookTurn` here and
+     * by heading in the shoulder view -- so it changes the path a given input walks. That is a
+     * simulation input carried on `StepCommand.cam` and hashed through the player's position, but
+     * it moves no stored hash: `test/determinism.test.ts` scripts `cmd.cam` explicitly rather than
+     * reading whatever the rig happens to default to. **`CAMERA_MODES` is a different matter and
+     * must not be reordered** -- `input/recorder.ts` encodes the mode into the input log by its
+     * index in that list.
+     */
+    mode: CameraMode = 'first';
     readonly persp = new THREE.PerspectiveCamera(CAMERA.fov, 1, 0.1, 200);
     readonly top = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 200);
     /** Where the rig sits before a run: a few paces behind the start pad, on the path. */
@@ -59,6 +72,17 @@ export class CameraRig {
     private kickZ = 0;
     private hit = 0;
     private fov: number = CAMERA.fov;
+    /**
+     * The head bob's own phase, in cycles, and the offsets it produced this frame.
+     *
+     * Its own accumulator rather than the body's gait phase, and that is the whole reason the
+     * frequency is tunable at all: a gait-locked phase turns at whatever cadence the walk cycle is
+     * running at, which is precisely the coupling `BOB.freqCap` exists to be able to break. It
+     * keeps its value while the player stands still -- `bobAt` gates the output on `mv` instead of
+     * resetting the phase, so stopping settles the head rather than snapping it.
+     */
+    private bobPhase = 0;
+    private readonly bob = newBobOffsets();
 
     constructor() { this.persp.rotation.order = 'YXZ'; }
 
@@ -91,7 +115,7 @@ export class CameraRig {
 
     reset(): void {
         this.pos.set(this.home.x, this.home.y + 3, this.home.z);
-        this.rush = 0; this.hit = 0;
+        this.rush = 0; this.hit = 0; this.bobPhase = 0;
     }
 
     resize(width: number, height: number): void {
@@ -116,6 +140,14 @@ export class CameraRig {
         // a shove from the left would. Both are applied after the follow so they read as a hit
         // landing on the shot rather than as something the follow smooths away.
         const shift = this.hit * CAMERA.kickShift;
+        // The head bob, advanced at whatever rate the tuning says and turned into three offsets.
+        // Frame-timed and read-only over the player's view, exactly like `rush` and the jolt above:
+        // nothing here reaches the simulation, so no setting of it can move a hash.
+        this.bobPhase += dt * bobHz(v.speed);
+        const b = bobAt(this.bobPhase, v.speed, v.mv, this.bob);
+        // Sway is across the *view*, not across the world -- in world x it would rotate with the
+        // player and read as drift rather than as a gait. This is the camera's own right vector.
+        const rx = Math.cos(v.camYaw), rz = -Math.sin(v.camYaw);
         const roll = -(this.kickX * Math.cos(v.camYaw) - this.kickZ * Math.sin(v.camYaw)) * this.hit * CAMERA.kickRoll;
 
         // Every height below is a height above the walkway, added to the path's surface under the
@@ -132,15 +164,23 @@ export class CameraRig {
             cam.up.set(0, 1, 0); cam.position.copy(this.pos);
             cam.position.x += this.kickX * shift; cam.position.z += this.kickZ * shift;
             cam.lookAt(this.target.set(tx, PATH.surfaceY(tx, tz) + this.look, tz));
+            // The bob lands *after* the aim, as a pure translation of the eye. Offsetting before
+            // `lookAt` would have the shot re-aim at a fixed target every frame, which turns a
+            // vertical bounce into a pitch oscillation as well -- two axes moving from one slider,
+            // which is the exact coupling this whole parameter set exists to avoid.
+            cam.position.x += rx * b.dx; cam.position.y += b.dy; cam.position.z += rz * b.dx;
             // After lookAt, and last in the YXZ order, so this is a roll about the camera's own axis.
-            cam.rotation.z = roll;
+            cam.rotation.z = roll + b.roll;
             return cam;
         }
         const under = PATH.surfaceY(v.x, v.z);
         if (this.mode === 'first') {
             cam.up.set(0, 1, 0);
-            cam.position.set(v.x + this.kickX * shift, under + this.eye + Math.sin(v.phase * 2) * 0.03 * v.mv, v.z + this.kickZ * shift);
-            cam.rotation.set(-0.08, v.camYaw, roll);
+            cam.position.set(
+                v.x + this.kickX * shift + rx * b.dx,
+                under + this.eye + b.dy,
+                v.z + this.kickZ * shift + rz * b.dx);
+            cam.rotation.set(-0.08, v.camYaw, roll + b.roll);
             this.pos.copy(cam.position);
             return cam;
         }

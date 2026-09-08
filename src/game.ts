@@ -4,7 +4,7 @@ import type { PlayerView } from './camera.ts';
 import { parseSeed, randomSeed } from './core/rng.ts';
 import { MAX_CATCHUP_STEPS, SIM_DT } from './core/time.ts';
 import { DebugOverlay } from './debug.ts';
-import { hitStrength } from './feel.ts';
+import { BOB, BOB_CONTROLS, hitStrength } from './feel.ts';
 import { TIER_SETTINGS, initialTier, nextTier, pixelRatioFor, saveTier } from './device.ts';
 import type { Tier } from './device.ts';
 import { Input } from './input/index.ts';
@@ -28,7 +28,16 @@ const params = new URLSearchParams(location.search);
 /** Stress mode pins this seed so runs are comparable across machines and commits. */
 const STRESS_SEED = 1;
 const stress = params.get('stress') === '1';
-/** Optional rendering direction, played on top of a normal run; see applyLook below. */
+/**
+ * The rendering direction the game ships under: the shipped toon ramp with the ink shells off.
+ *
+ * A look rather than an ink toggle, and the distinction is load-bearing. `current` still means
+ * *as shipped* -- outline and all -- so `?look=current` is a working way back, and every other look
+ * keeps meaning exactly what its comparator panel says. What has changed is only which of the six
+ * a run with no `?look=` starts in.
+ */
+const DEFAULT_LOOK = 'toon-bare';
+/** The rendering direction asked for, if any; `DEFAULT_LOOK` is used when there is none. */
 const lookParam = params.get('look');
 const seedParam = params.get('seed');
 const initialSeed = stress ? STRESS_SEED : seedParam !== null && seedParam !== '' ? parseSeed(seedParam) : randomSeed();
@@ -46,7 +55,7 @@ const debug = new DebugOverlay(ui.debugCanvas);
 
 // ---------- loop state ----------
 const IDLE = { x: 0, y: 0, mag: 0, hurry: false } as const;
-const cmd: StepCommand = { x: 0, y: 0, mag: 0, hurry: false, cam: 'shoulder', running: false, crowd: 0 };
+const cmd: StepCommand = { x: 0, y: 0, mag: 0, hurry: false, cam: 'first', running: false, crowd: 0 };
 const view = newPose();
 const playerView: PlayerView = { ...newPose(), camYaw: 0, speed: 0 };
 const RING = 120;
@@ -139,6 +148,37 @@ function applyTier(t: Tier): void {
 }
 function cycleCamera(): void { ui.setCamera(rig.cycle()); }
 function toggleDebug(): void { ui.setDebug(debug.toggle()); }
+function toggleBob(): void { ui.setBobPanel(!ui.bobOpen()); }
+
+/**
+ * The head-bob tuning, in the address bar: `?bob=` and one value per axis in `BOB_CONTROLS` order.
+ *
+ * A tuning bench whose findings cannot be reloaded is a bench you have to re-find your answer on
+ * every time, so the panel mirrors itself out the way the entity inspector mirrors its controls --
+ * and `Copy link` picks it up for free, since that reads `location.href` after this has written to
+ * it. The parameter is dropped entirely when every axis is 0, so an untouched run keeps a clean URL.
+ */
+function writeBobParam(): void {
+    if (stress) return;
+    const url = new URL(location.href);
+    if (BOB_CONTROLS.some(c => BOB[c.key] !== 0)) {
+        url.searchParams.set('bob', BOB_CONTROLS.map(c => String(BOB[c.key])).join(','));
+    } else {
+        url.searchParams.delete('bob');
+    }
+    history.replaceState(null, '', url);
+}
+
+/** Read one back. Values are clamped to each axis's own range, and anything unparseable is left at 0. */
+function readBobParam(text: string): void {
+    const parts = text.split(',');
+    BOB_CONTROLS.forEach((c, i) => {
+        const v = Number(parts[i]);
+        if (parts[i] !== undefined && parts[i] !== '' && Number.isFinite(v)) {
+            BOB[c.key] = Math.max(0, Math.min(c.max, v));
+        }
+    });
+}
 
 /**
  * `?look=<name>` plays an ordinary run under one rendering direction applied to the whole world,
@@ -151,8 +191,7 @@ function toggleDebug(): void { ui.setDebug(debug.toggle()); }
  * how to wear one, so playing a real run under it is `world.dress(look)` and `pools.dress(look)`
  * and nothing else.
  *
- * Dynamically imported, so a run without the flag never downloads the tool -- and applied after
- * `applyTier`, so the look has the last word on the ink either way. **That relationship is
+ * Applied after `applyTier`, so the look has the last word on the ink either way. **That relationship is
  * bidirectional now that a look reaches every surface**: `toon-bare` takes the line off a `high`
  * run, and `?tier=low&look=soft-ink` puts it back on, because `soft-ink` asks for the shipped ink
  * and an absent `inkOn` means shipped rather than "whatever the tier just decided". Judging a look
@@ -161,10 +200,12 @@ function toggleDebug(): void { ui.setDebug(debug.toggle()); }
  */
 async function applyLook(name: string): Promise<void> {
     const { LOOK_NAMES, lookNamed } = await import('./render/look.ts');
-    const look = lookNamed(name);
-    if (look === null) {
+    // An unknown name falls back to the game's own default rather than to whatever the tier just
+    // did, so a typo in the flag lands on the same picture a run with no flag at all does.
+    const look = lookNamed(name) ?? lookNamed(DEFAULT_LOOK);
+    if (look === null) return;
+    if (look.slug !== name) {
         console.warn(`?look=${name} is not a rendering look. Try one of: ${LOOK_NAMES.join(', ')}`);
-        return;
     }
     world.dress(look);
     pools.dress(look);
@@ -196,6 +237,7 @@ input.onAction((a: Action) => {
         case 'cycleCamera': cycleCamera(); break;
         case 'toggleInk': setInk(!pools.inkOn); break;
         case 'toggleDebug': toggleDebug(); break;
+        case 'toggleBob': toggleBob(); break;
         case 'cycleTier': { const t = nextTier(tier); saveTier(t); applyTier(t); break; }
         case 'fewer': if (!stress) setCount(targetCount - 10); break;
         case 'more': if (!stress) setCount(targetCount + 10); break;
@@ -209,6 +251,8 @@ ui.cam.onclick = () => input.dispatch('cycleCamera');
 ui.ink.onclick = () => input.dispatch('toggleInk');
 ui.tier.onclick = () => input.dispatch('cycleTier');
 ui.debug.onclick = () => input.dispatch('toggleDebug');
+ui.bobBtn.onclick = () => input.dispatch('toggleBob');
+ui.onBobChange = writeBobParam;
 ui.randomSeed.onclick = () => { startRun(randomSeed()); ui.setStartLabel(false); };
 ui.seedInput.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); ui.start.click(); } };
 ui.start.onclick = () => {
@@ -233,12 +277,16 @@ addEventListener('resize', () => {
 dispatchEvent(new Event('resize'));
 
 applyTier(tier);
-if (lookParam !== null && lookParam !== '') await applyLook(lookParam);
+await applyLook(lookParam !== null && lookParam !== '' ? lookParam : DEFAULT_LOOK);
 ui.setCount(targetCount);
 ui.setCamera(rig.mode);
 ui.setStartLabel(false);
 if (params.get('debug') === '1') debug.toggle();
 ui.setDebug(debug.visible);
+// A run loaded with a tuning in it opens the panel: you arrived here to look at those numbers.
+const bobParam = params.get('bob');
+if (bobParam !== null && bobParam !== '') { readBobParam(bobParam); ui.syncBob(); }
+ui.setBobPanel(bobParam !== null && bobParam !== '');
 startRun(seed);
 if (stress) { ui.hideOverlay(); running = true; }
 

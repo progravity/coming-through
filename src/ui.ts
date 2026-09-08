@@ -1,4 +1,6 @@
 import { ARCH, ARCH_KEYS } from './archetypes.ts';
+import { BOB, BOB_CONTROLS, resetBob } from './feel.ts';
+import type { BobKey } from './feel.ts';
 import type { CameraMode } from './sim/player.ts';
 import { TIER_SETTINGS } from './device.ts';
 import type { Tier } from './device.ts';
@@ -19,6 +21,7 @@ export class UI {
     readonly ink = el<HTMLButtonElement>('ink');
     readonly tier = el<HTMLButtonElement>('tier');
     readonly debug = el<HTMLButtonElement>('debug');
+    readonly bobBtn = el<HTMLButtonElement>('bobBtn');
     readonly less = el<HTMLButtonElement>('less');
     readonly more = el<HTMLButtonElement>('more');
     readonly start = el<HTMLButtonElement>('start');
@@ -32,6 +35,13 @@ export class UI {
     private readonly flashEl = el<HTMLElement>('flash');
     private readonly scrapeEl = el<HTMLElement>('scrape');
     private scrapeTimer = 0;
+    private readonly bobPanel = el<HTMLElement>('bobPanel');
+    private readonly bobRows = new Map<BobKey, { slider: HTMLInputElement; read: HTMLElement }>();
+    /**
+     * Called after any tuning change, so whoever owns the address bar can mirror it there.
+     * The panel writes into `BOB` itself -- this is only the notification.
+     */
+    onBobChange: (() => void) | null = null;
     private readonly title = el<HTMLElement>('overlayTitle');
     private readonly result = el<HTMLElement>('result');
 
@@ -42,7 +52,74 @@ export class UI {
             row.innerHTML = `<i style="background:#${A.color.toString(16).padStart(6, '0')}"></i>${A.name} <span>${A.desc}</span>`;
             legend.appendChild(row);
         }
+        this.buildBobPanel();
     }
+
+    /**
+     * Build one slider per tuning axis, from `BOB_CONTROLS` and nothing else.
+     *
+     * The list is the single source of the ranges, so a new axis is an entry in `feel.ts` and no
+     * change at all here -- the same reason the legend above is built from `ARCH_KEYS` rather than
+     * written out in the markup.
+     *
+     * A slider writes straight into `BOB` and the next frame reads it. There is no apply step and
+     * nothing to restart, which is the whole point of the bench: the change you are judging happens
+     * while you are still holding the handle.
+     */
+    private buildBobPanel(): void {
+        for (const c of BOB_CONTROLS) {
+            const row = document.createElement('label');
+            const name = document.createElement('i');
+            name.style.fontStyle = 'normal';
+            name.textContent = c.label;
+            if (c.unit !== '') {
+                const unit = document.createElement('em');
+                unit.textContent = ' ' + c.unit;
+                name.appendChild(unit);
+            }
+            const read = document.createElement('span');
+            const slider = document.createElement('input');
+            slider.type = 'range';
+            slider.min = '0';
+            slider.max = String(c.max);
+            slider.step = String(c.step);
+            slider.oninput = () => {
+                BOB[c.key] = Number(slider.value);
+                read.textContent = this.bobText(c.key);
+                this.onBobChange?.();
+            };
+            row.append(name, read, slider);
+            this.bobPanel.appendChild(row);
+            this.bobRows.set(c.key, { slider, read });
+        }
+        const reset = document.createElement('button');
+        reset.textContent = 'Reset';
+        reset.onclick = () => { resetBob(); this.syncBob(); this.onBobChange?.(); };
+        this.bobPanel.appendChild(reset);
+        this.syncBob();
+    }
+
+    /** One value, at the precision its own step is written to -- 0.0005 reads to four places. */
+    private bobText(key: BobKey): string {
+        const c = BOB_CONTROLS.find(x => x.key === key);
+        const dp = c === undefined ? 2 : Math.max(0, -Math.floor(Math.log10(c.step)));
+        return BOB[key].toFixed(dp);
+    }
+
+    /** Push `BOB` back out to the sliders: after a reset, or after the address bar has been read. */
+    syncBob(): void {
+        for (const [key, row] of this.bobRows) {
+            row.slider.value = String(BOB[key]);
+            row.read.textContent = this.bobText(key);
+        }
+    }
+
+    setBobPanel(on: boolean): void {
+        this.bobPanel.hidden = !on;
+        this.bobBtn.textContent = 'Bob: ' + (on ? 'on' : 'off');
+    }
+    /** Whether the tuning panel is currently open. */
+    bobOpen(): boolean { return !this.bobPanel.hidden; }
 
     setCount(n: number): void { this.count.textContent = String(n); }
     setCamera(mode: CameraMode): void { this.cam.textContent = 'Camera: ' + mode; }

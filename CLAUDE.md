@@ -37,9 +37,12 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
   `props.ts` (the distant skyline, and nothing else since the shops got a layer of their own),
   `box.ts`, `material.ts` (the one shading model the whole world takes).
 - `src/feel.ts` — every number that decides how the *player* feels, and nothing else: speeds,
-  accel/decel, turn rates, camera follow and sprint cues, bump shove and recovery. Imports nothing,
+  accel/decel, turn rates, camera follow and sprint cues, bump shove and recovery, and the head-bob
+  tuning. Imports nothing,
   so `sim/player.ts` reads it without the purity boundary noticing and the camera reads the same
-  numbers rather than keeping a second copy. See "Player feel" below.
+  numbers rather than keeping a second copy. `BOB` is the one **mutable** thing in it — a live
+  tuning bench rather than a constant — which is why nothing under `src/sim/` may read it. See
+  "Player feel" and "Head bob" below.
 - `src/render/`, `src/camera.ts`, `src/ui.ts`, `src/debug.ts` — presentation only.
 - `src/main.ts` — the entry point and nothing else: it dynamic-imports the game, the entity
   inspector when `?inspect=` is present, or the render comparator when `?compare=` is, so a normal
@@ -67,6 +70,11 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
   quite legitimately. It is checked rather than trusted because a breach here fails nothing else —
   three.js loads happily under `node` with no GL context, so a renderer dragged in would go green
   all the way and be found only by whoever next tried to run the sim without a canvas.
+- `test/bob.test.ts` — the head-bob bench: that zeroing every axis is a camera that does not move,
+  that each amplitude moves its own axis and no other, that sway and roll run at half the vertical's rate, that the frequency
+  cap holds at a sprint, and — the half that has to be checked rather than trusted — that nothing in
+  the simulation's transitive import closure reads the mutable `BOB`. It also drives the real
+  `CameraRig` headlessly, because `bobAt` being right proves nothing if the rig never calls it.
 - `test/inspect.test.ts` — proves a turntable person is byte-identical to the crowd's agent,
   guarding `Subject` against `Agent` specifically.
 - `test/attachment.test.ts` — where equipment meets the body, all of it measured off the drawn
@@ -617,6 +625,15 @@ accessory, and re-tuning the crowd against it. The furniture's colliders already
 
 ## Player feel
 
+**The game opens in first person**, and that is a choice about what it is: threading a crowd is a
+judgement about gaps, and a gap reads truthfully only from where the player's own eyes are. `C`
+still cycles shoulder and top-down. It is not a purely cosmetic default -- `updatePlayer` steers by
+yaw at `MOVE.lookTurn` in first person and by heading in the shoulder view, so the same stick walks
+a different path -- but it moves no stored hash, because `test/determinism.test.ts` scripts
+`cmd.cam` explicitly rather than reading whatever the rig defaults to. **`CAMERA_MODES` must not be
+reordered** for a separate reason: `input/recorder.ts` encodes the mode into the input log by its
+index in that list.
+
 The player is **arcade, and the crowd is not**. The people keep their believable speeds, their
 acceleration and their steering; the player is quick, crisp and slightly implausible on purpose, and
 every number that decides that is in `src/feel.ts` as `MOVE`, `CAMERA` and `BUMP`. They are
@@ -679,6 +696,55 @@ path at a different speed, meets different people, and `kx`/`kz`/`knock` are gam
 hashed. `identityHash()` must not move and does not — player feel touches no `spawn` or `behavior`
 draw, and the identity hash is read off a freshly filled crowd before any step. If a change here
 ever moves it, something has reached a stream it has no business in.
+
+## Head bob
+
+`BOB` in `feel.ts` is a **tuning bench**: the numbers in it are whatever the last playtest found
+good, hand-edited between sessions, and they are expected to move. It replaced something — first
+person used to carry a hardcoded 3 cm bounce locked to the gait phase, and shoulder had none at all.
+
+**Nothing in the tests pins those numbers, and nothing should.** What is pinned is the behaviour
+around them: that zeroing every axis is a camera that does not move (the bench has an off position,
+and `Reset` reaches it), that each amplitude moves its own axis and no other, and that the shipped
+values are inside their own controls' ranges — a value past a slider's range is one the panel
+silently clamps the moment it is touched. `withBob` in `test/bob.test.ts` zeroes every axis before
+setting the ones a test is about, for exactly this reason: a test that assumed the rest were off
+would pass or fail on whatever the file happened to be tuned to.
+
+**It is a set of independent numbers rather than one level, and that is the whole design.** A single
+"bob amount" cannot answer which *combination* reads as walking, because the pleasant answer is
+almost never one axis turned up — it is usually a little sway, very little vertical, and both calming
+as speed rises. Finding that needs one slider moving while the others hold still, so: vertical
+amplitude; a frequency split three ways (`freq` at rest, `freqPerSpeed`, and a `freqCap` where **0
+means no cap**, so a default of 0 cannot silently gate every other slider); lateral sway; roll; and
+`damp`, which calms all three amplitudes together as `1 / (1 + damp * speed)`.
+
+Four things are settled and worth knowing before changing them:
+
+- **The bob runs on its own phase accumulator, not the body's gait phase.** A gait-locked phase turns
+  at whatever cadence the walk cycle is running, which is exactly the coupling `freqCap` exists to be
+  able to break.
+- **`mv` gates the output rather than the phase being reset.** The phase keeps running while you
+  stand still, so without the gate the eye would freeze wherever the sine left it — at a different
+  offset every time you let go of the stick.
+- **Sway and roll run at half the vertical's rate.** A head rises and falls once per footfall but
+  leans once per *stride*. Same rate for both is the standard way head bob comes out wrong.
+- **The offset is applied *after* `lookAt`, as a pure translation of the eye.** Offsetting before it
+  re-aims the shot at a fixed target every frame, which turns the vertical slider into a pitch
+  oscillation as well — one control moving two axes, which is what this parameter set exists to
+  avoid. Roll is therefore the only rotational term, added beside the bump jolt's own.
+
+The sliders live behind the `Bob` button (`B`), write straight into `BOB`, and are read by the next
+frame: no apply step and nothing to restart. `BOB_CONTROLS` is the single source of every range, so
+adding an axis is one entry there and no change to `ui.ts`, the address bar or Reset.
+
+**Determinism.** All of it is frame-timed and lives in `CameraRig`, like `rush` and the jolt, so
+neither hash moves. The real risk is that `BOB` is mutable while `feel.ts` is already in the
+simulation's import closure (`sim/player.ts` reads `MOVE` and `BUMP`): one `import { BOB }` in a step
+function and a replay stops being reproducible, and **nothing else in the repo would fail** — the
+stored hashes are recorded in one process with the sliders untouched, so they would agree with
+themselves and the breach would only surface on somebody else's machine. `test/bob.test.ts` walks
+the closure and fails on it.
 
 ## Structures and kiosks
 
@@ -1341,6 +1407,13 @@ cost of toon against PBR against matcap actually shows up.
 per-frame sim/render milliseconds), `?debug=1` (top-down overlay), `?tier=low|mid|high`,
 `?look=<name>` (play the whole world under one rendering direction; see below).
 
+`?bob=` carries the head-bob tuning: one value per axis in `BOB_CONTROLS` order, clamped to each
+axis's own range on the way in, and dropped from the URL entirely when everything is 0 so an
+untouched run keeps a clean address bar. The panel mirrors itself out on every change, `Copy link`
+picks it up for free, and a run loaded with a tuning in it opens the panel — you arrived to look at
+those numbers. A bench whose findings cannot be reloaded is one you re-find your answer on every
+time; see "Head bob" above.
+
 `?compare=1` (or `?compare=row`) opens a side-by-side of rendering directions -- four panels
 crossing toon ramp against soft diffuse and ink shell against none, so each edge of that table
 moves one thing only, then two that ask about the line and the light instead: a finer warm ink, and
@@ -1357,13 +1430,20 @@ the crowd alone: `current`, `toon-bare`, `soft-ink`, `soft`, `soft-thin`, `matca
 data in `src/render/look.ts`, and `?look=` names them by the same slug the comparator's panels
 print, so the loop is to read a panel and then type what it says. Six still turntables cannot
 answer how a direction holds up in motion, at crowd distance, from the game's own camera under the
-game's own lights, and that is the only place it has to hold up. `game.ts` dynamic-imports
-`render/look.ts` and calls `World.dress` then `PartPools.dress`, so a run without the flag
-downloads none of it; it is applied after `applyTier`, which gives the look the last word on the ink
-in **both** directions -- `toon-bare` takes the line off a `high` run, and `?tier=low&look=soft-ink`
-puts it back on, because an absent `inkOn` means the shipped ink rather than whatever the tier just
-decided. Judging a look is what the flag is for, so the look winning is right; it does mean `?look=`
-is not a way to measure a tier. An unknown name warns with the real list and plays the shipped look.
+game's own lights, and that is the only place it has to hold up. `game.ts` calls `World.dress`
+then `PartPools.dress`; it is applied after `applyTier`, which gives the look the last word on the
+ink in **both** directions -- `toon-bare` takes the line off a `high` run, and
+`?tier=low&look=soft-ink` puts it back on, because an absent `inkOn` means the shipped ink rather
+than whatever the tier just decided. Judging a look is what the flag is for, so the look winning is
+right; it does mean `?look=` is not a way to measure a tier.
+
+**The game ships under `toon-bare`, so `?look=` now chooses a departure from that rather than an
+addition to a bare run.** `DEFAULT_LOOK` in `game.ts` is what a run with no flag dresses in, which
+is why the import of `render/look.ts` is no longer optional -- it used to be dynamic precisely so a
+normal run downloaded none of it, and every run needs it now. `current` is unchanged and still means
+*as shipped*, outline and all, so `?look=current` is the way back to the old picture. An unknown
+name warns with the real list and then falls back to `DEFAULT_LOOK`, so a typo in the flag lands on
+the same picture a run with no flag does rather than on a third thing.
 
 Each panel prints what its look costs, split three ways because the three are not equally knowable.
 **Structure** is exact rather than measured: draw calls and instance matrices per person, which only

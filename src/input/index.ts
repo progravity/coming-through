@@ -7,7 +7,7 @@ export type InputState = MoveInput;
 export interface AxisSample { x: number; y: number; }
 
 /** Discrete one-shot commands, bound by whichever adapter has a way to express them. */
-export type Action = 'cycleCamera' | 'toggleInk' | 'toggleDebug' | 'cycleTier' | 'fewer' | 'more' | 'replayRun' | 'newRun';
+export type Action = 'cycleCamera' | 'toggleInk' | 'toggleDebug' | 'toggleBob' | 'cycleTier' | 'fewer' | 'more' | 'replayRun' | 'newRun';
 
 export interface InputAdapter {
     /** Current axis reading, or null if this adapter is not being used right now. */

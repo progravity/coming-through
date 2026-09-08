@@ -38,6 +38,15 @@
   #fps{bottom:max(12px,env(safe-area-inset-bottom));left:max(12px,env(safe-area-inset-left));font-size:12px;color:#9a978f}
   #debugCanvas[hidden]{display:none}
   #debugCanvas{position:fixed;left:max(12px,env(safe-area-inset-left));top:50%;transform:translateY(-50%);width:200px;height:min(70vh,560px);background:rgba(20,22,28,.78);border-radius:12px;pointer-events:none}
+  /* The head-bob tuning bench. A flex item spanning the controls row rather than a chip of its
+     own, so it tracks the buttons down the screen when they wrap instead of overlapping them. */
+  #bobPanel{flex-basis:100%;max-width:240px;margin-top:2px;background:rgba(20,22,28,.82);border-radius:12px;padding:10px 12px;font-size:12px;display:grid;gap:7px}
+  #bobPanel[hidden]{display:none}
+  #bobPanel label{display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:2px 8px;color:#c9c6bd}
+  #bobPanel label>span{justify-self:end;color:#e8c34a;font-variant-numeric:tabular-nums}
+  #bobPanel em{font-style:normal;color:#7e7b74}
+  #bobPanel input{grid-column:1/-1;width:100%;accent-color:#e8c34a;margin:0}
+  #bobPanel button{font-size:12px;padding:5px 10px;justify-self:start}
   @media (max-width:640px){#legend{display:none}}
 </style>
 </head>
@@ -45,10 +54,12 @@
 <div id="stats" class="chip"><b id="time">0.0s</b><span id="bumps">0 bumps</span></div>
 <div id="controls">
   <button id="less" aria-label="Fewer people">−</button><button id="count" aria-label="Crowd size">80</button><button id="more" aria-label="More people">+</button>
-  <button id="cam">Camera: shoulder</button>
+  <button id="cam">Camera: first</button>
   <button id="ink">Ink: on</button>
   <button id="tier">Tier: High</button>
   <button id="debug">Debug: off</button>
+  <button id="bobBtn">Bob: off</button>
+  <div id="bobPanel" hidden></div>
 </div>
 <div id="legend" class="chip"></div>
 <canvas id="debugCanvas" hidden></canvas>

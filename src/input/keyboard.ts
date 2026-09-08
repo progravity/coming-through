@@ -1,7 +1,7 @@
 import type { Action, AxisSample, Input, InputAdapter } from './index.ts';
 
 const HOTKEYS: Record<string, Action> = {
-    KeyC: 'cycleCamera', KeyO: 'toggleInk', KeyG: 'toggleDebug', KeyT: 'cycleTier',
+    KeyC: 'cycleCamera', KeyO: 'toggleInk', KeyG: 'toggleDebug', KeyB: 'toggleBob', KeyT: 'cycleTier',
     BracketLeft: 'fewer', BracketRight: 'more', KeyR: 'replayRun', KeyN: 'newRun',
 };
 const SCROLL_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space']);

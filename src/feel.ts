@@ -118,3 +118,135 @@ export const BUMP = {
 
 /** How hard a bump should read on screen, from the 0..1 speed the player hit at. */
 export const hitStrength = (force: number): number => BUMP.hitFloor + (1 - BUMP.hitFloor) * force;
+
+/**
+ * Head bob: the camera's own gait, as a set of **independent** numbers rather than one level.
+ *
+ * This is a tuning bench, not a shipped effect. A single "bob amount" cannot answer the question
+ * that actually matters -- *which combination reads as walking* -- because the pleasant answer is
+ * almost never one axis turned up. It is usually a little sway, very little vertical, and both
+ * calming down as you speed up; and you can only find that by moving one of them at a time while
+ * the other two hold still. So each axis is its own field, every field is live-adjustable from the
+ * `Bob` panel while a run is playing, and **all of them default to 0**, which is a camera that does
+ * not move at all.
+ *
+ * That default is a deliberate change to what shipped: first person used to carry a hardcoded 3 cm
+ * bounce locked to the walk cycle, and it is gone. `vert: 0.03` with a `freqPerSpeed` that tracks
+ * cadence is roughly where it was, if it is wanted back.
+ *
+ * **This object is mutable, and it is the only mutable thing in this file.** Everything else here
+ * is `as const` because it is a tuning constant; these are tuning *variables*, written by the panel
+ * between frames. That makes one rule absolute: **nothing under `src/sim/` may ever read `BOB`.**
+ * A fixed step that reads a value the player can drag is a replay that cannot be reproduced, which
+ * is the one way a camera effect could reach a determinism hash. `test/bob.test.ts` walks the
+ * simulation's transitive imports and fails if it ever does.
+ */
+export const BOB = {
+    /** Peak vertical displacement of the eye, metres. The bounce. */
+    vert: 0.02,
+    /**
+     * Cycles per second at a standstill, and the extra cycles per second per m/s of speed.
+     *
+     * Split in two because "how fast it cycles" and "how strongly that tracks speed" are separate
+     * questions and the interesting settings decouple them. `freq` alone is a bob that ignores how
+     * fast you are going; `freqPerSpeed` alone is one that starts only when you move, which is the
+     * gait-locked behaviour a walk cycle gives you.
+     */
+    freq: 0,
+    freqPerSpeed: 0.3,
+    /**
+     * Ceiling on the combined rate, cycles per second. **0 means no ceiling.**
+     *
+     * A cap rather than a curve, because the failure it exists to stop is abrupt: with any
+     * `freqPerSpeed` at all, a sprint runs the cycle away into a vibration. A cap defaulting to
+     * "off" rather than to 0 Hz is what keeps the other fields honest -- a 0 that silently gated
+     * every other slider would be a trap, not a default.
+     */
+    freqCap: 0,
+    /** Peak lateral displacement, metres, across the view rather than across the world. */
+    sway: 0.02,
+    /** Peak roll about the view axis, radians. Small: a few degrees is already a lot here. */
+    roll: 0,
+    /**
+     * How much all three amplitudes calm as speed rises, as `1 / (1 + damp * speed)`.
+     *
+     * The point of the bench. A bob tuned to read well at a walk is usually unbearable at a sprint,
+     * and the fix is not a smaller bob -- it is a bob that gets out of the way exactly when the
+     * `rush` cue takes over selling the speed. At `damp` 0.3 a full sprint keeps about three
+     * quarters of the amplitude; at 1 it keeps under a quarter.
+     */
+    damp: 0,
+};
+
+/** The tuning axes, as data: what the panel builds its sliders from, in the order it shows them. */
+export type BobKey = keyof typeof BOB;
+export interface BobControl { key: BobKey; label: string; max: number; step: number; unit: string; }
+
+/**
+ * One row per field, and the **only** place a range is written down.
+ *
+ * The maxima are tuning room rather than limits of taste -- every one of them is well past where
+ * anything usable lives, because a bench whose slider bottoms out before the effect gets silly
+ * cannot show you where silly starts. Adding an axis is an entry here and a line in `bobAt`;
+ * the panel, the address bar and the reset button all follow from this list.
+ */
+export const BOB_CONTROLS: readonly BobControl[] = [
+    { key: 'vert', label: 'Vertical', max: 0.12, step: 0.001, unit: 'm' },
+    { key: 'freq', label: 'Frequency', max: 3, step: 0.05, unit: 'Hz' },
+    { key: 'freqPerSpeed', label: 'per speed', max: 2, step: 0.02, unit: 'Hz per m/s' },
+    { key: 'freqCap', label: 'Cap', max: 6, step: 0.05, unit: 'Hz, 0 = none' },
+    { key: 'sway', label: 'Sway', max: 0.12, step: 0.001, unit: 'm' },
+    { key: 'roll', label: 'Roll', max: 0.06, step: 0.0005, unit: 'rad' },
+    { key: 'damp', label: 'Speed damping', max: 3, step: 0.02, unit: '' },
+];
+
+/** Where the eye is this frame, relative to where it would be with every axis at 0. */
+export interface BobOffsets {
+    /** Vertical, metres. */
+    dy: number;
+    /** Lateral, metres, **across the view** -- the caller turns it by the camera's own right vector. */
+    dx: number;
+    /** Roll about the view axis, radians. */
+    roll: number;
+}
+
+/** How fast the cycle is turning at this speed, in cycles per second, ceiling applied. */
+export const bobHz = (speed: number): number => {
+    const hz = BOB.freq + BOB.freqPerSpeed * Math.max(0, speed);
+    return BOB.freqCap > 0 ? Math.min(BOB.freqCap, hz) : hz;
+};
+
+/**
+ * The bob, as three offsets. Pure, frame-timed, and reads nothing but its arguments and `BOB`, so
+ * it can be tested with no camera, no canvas and no GL context at all.
+ *
+ * Two things in here are decisions rather than arithmetic:
+ *
+ * - **Sway and roll run at half the vertical's rate.** A walker's head rises and falls twice per
+ *   stride pair -- once per footfall -- but leans *once*, toward the leg carrying the weight. Run
+ *   them at the same rate and the sway reads as a shiver rather than a gait, which is the single
+ *   most common way head bob comes out wrong.
+ * - **`mv` gates the whole thing.** The phase is advanced by the caller and keeps its value while
+ *   you stand still, so without this the head would freeze wherever the sine happened to leave it
+ *   -- permanently off-centre, and worse, at a different offset every time you stop.
+ *
+ * @param phase Cycles elapsed, accumulated by the caller at `bobHz`.
+ * @param speed Current speed, m/s, for the damping.
+ * @param mv 0 standing, 1 moving: the gait blend the body is already drawn with.
+ */
+export function bobAt(phase: number, speed: number, mv: number, out: BobOffsets): BobOffsets {
+    const a = mv / (1 + BOB.damp * Math.max(0, speed));
+    const stride = Math.PI * phase;
+    out.dy = Math.sin(2 * stride) * BOB.vert * a;
+    out.dx = Math.sin(stride) * BOB.sway * a;
+    out.roll = Math.sin(stride) * BOB.roll * a;
+    return out;
+}
+
+/** A zeroed offset triple, so the rig can keep one and never allocate per frame. */
+export const newBobOffsets = (): BobOffsets => ({ dy: 0, dx: 0, roll: 0 });
+
+/** Put every axis back to 0: the bench's off position, not whatever the file ships tuned to. */
+export function resetBob(): void {
+    for (const c of BOB_CONTROLS) BOB[c.key] = 0;
+}
