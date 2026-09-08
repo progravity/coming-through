@@ -4,6 +4,7 @@ import type { PlayerView } from './camera.ts';
 import { parseSeed, randomSeed } from './core/rng.ts';
 import { MAX_CATCHUP_STEPS, SIM_DT } from './core/time.ts';
 import { DebugOverlay } from './debug.ts';
+import { hitStrength } from './feel.ts';
 import { TIER_SETTINGS, initialTier, nextTier, pixelRatioFor, saveTier } from './device.ts';
 import type { Tier } from './device.ts';
 import { Input } from './input/index.ts';
@@ -47,7 +48,7 @@ const debug = new DebugOverlay(ui.debugCanvas);
 const IDLE = { x: 0, y: 0, mag: 0, hurry: false } as const;
 const cmd: StepCommand = { x: 0, y: 0, mag: 0, hurry: false, cam: 'shoulder', running: false, crowd: 0 };
 const view = newPose();
-const playerView: PlayerView = { ...newPose(), camYaw: 0 };
+const playerView: PlayerView = { ...newPose(), camYaw: 0, speed: 0 };
 const RING = 120;
 const simRing = new Float64Array(RING), renderRing = new Float64Array(RING), stepRing = new Float64Array(RING), poseRing = new Float64Array(RING);
 const ringSum = { sim: 0, render: 0, steps: 0, pose: 0 };
@@ -95,7 +96,10 @@ const game = {
 function startRun(nextSeed: number): void {
     seed = nextSeed >>> 0;
     sim = new Simulation(seed);
-    sim.onBump = () => ui.flash();
+    // The bump's own normal and its own force drive both cues, so the screen is struck from the
+    // side the player was actually shoved and as hard as they were actually going. The jolt is the
+    // rig's, purely visual; the shove itself already happened in the step that reported this.
+    sim.onBump = e => { const hit = hitStrength(e.force); ui.flash(hit); rig.kick(e.nx, e.nz, hit); };
     // Scenery, not a person: its own quiet cue, and never the bump count.
     sim.onScrape = () => ui.scrape();
     rig.setBody(sim.player.recipe);
@@ -281,6 +285,9 @@ function frame(now: number): void {
     const p = sim.player;
     lerpPose(playerView, p.prev, p, alpha);
     playerView.camYaw = p.prevCamYaw + wrapAngle(p.camYaw - p.prevCamYaw) * alpha;
+    // How fast the player is actually going, for the camera's sprint cue. Not interpolated: it is
+    // already smoothed by the time the step is done with it, and the rig eases its own response.
+    playerView.speed = Math.hypot(p.vx, p.vz);
     if (rig.mode === 'first') pools.freeSlot(PLAYER_SLOT);
     else drawPerson(pools, PLAYER_SLOT, p, playerView, t, PATH.surfaceY(playerView.x, playerView.z));
     pools.commit();

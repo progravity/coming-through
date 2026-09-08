@@ -36,6 +36,10 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
   which the renderer draws and the simulation takes footprints out of),
   `props.ts` (the distant skyline, and nothing else since the shops got a layer of their own),
   `box.ts`, `material.ts` (the one shading model the whole world takes).
+- `src/feel.ts` — every number that decides how the *player* feels, and nothing else: speeds,
+  accel/decel, turn rates, camera follow and sprint cues, bump shove and recovery. Imports nothing,
+  so `sim/player.ts` reads it without the purity boundary noticing and the camera reads the same
+  numbers rather than keeping a second copy. See "Player feel" below.
 - `src/render/`, `src/camera.ts`, `src/ui.ts`, `src/debug.ts` — presentation only.
 - `src/main.ts` — the entry point and nothing else: it dynamic-imports the game, the entity
   inspector when `?inspect=` is present, or the render comparator when `?compare=` is, so a normal
@@ -610,6 +614,71 @@ widths live as inline constants inside `drawPerson` rather than as data, and shr
 `bodyHalfWidth(recipe)` out of `render/person.ts` alongside `standingHeight`, covering every aid and
 accessory, and re-tuning the crowd against it. The furniture's colliders already follow the
 "collision matches what you see" rule; people are the half that is still owed it.
+
+## Player feel
+
+The player is **arcade, and the crowd is not**. The people keep their believable speeds, their
+acceleration and their steering; the player is quick, crisp and slightly implausible on purpose, and
+every number that decides that is in `src/feel.ts` as `MOVE`, `CAMERA` and `BUMP`. They are
+playtest-tuned and are always retuned against each other, which is why they are one file and not
+scattered across the three that read them.
+
+Approach rates there are per second, used as `min(1, dt * rate)` — the fraction of the remaining gap
+closed each step, so a rate of `k` settles in about `3/k` seconds. Read them that way.
+
+Four things are settled and worth knowing before changing them:
+
+- **Velocity chases the stick, fast, with `decel` above `accel`.** 67 ms to nine tenths of top
+  speed, 83 ms to a dead stop with 6 cm of coast. It is deliberately still an exponential ramp
+  rather than a step: a step function on the velocity reads as a cursor rather than a person, and
+  the gait would strobe between standing and running.
+- **The body faces the intent, not the velocity.** `updatePlayer` turns toward `(mx, mz)` — where
+  the stick is pointing — and not toward where the body is drifting. This is the difference between
+  steering and being steered, and the bump is what makes it load-bearing: facing the velocity means
+  a shove turns you, the camera follows the turn, and "forward" then means the direction you were
+  knocked in, which is the game taking the wheel at the exact moment it should be handing it back.
+- **`CAMERA.yawFollow` is a trade, not a dial, and it is the first number to reach for if weaving
+  feels wrong.** Input is camera-relative and the camera chases the body, so holding a lateral
+  direction always curves the player round — there is no sidestep in this scheme at any rate. How
+  fast it curves is entirely this number: from a standstill a held "right" swings the shot 56° in a
+  quarter second at 3, 73° at 4, and 120° at 7, which is a spin rather than a weave. So the
+  *position* follow is tightened hard (6 → 14) and the yaw only gently (3 → 4); the snap in the
+  steering comes from `MOVE.turn` pointing the body where the stick says, not from hurrying the
+  camera after it.
+- **The bump's shove rides its own channel.** `Player.kx`/`kz` sits beside `vx`/`vz` and decays at
+  `BUMP.fade`, rather than being added into the velocity. It has to: at `MOVE.accel` the stick pulls
+  the velocity back to what it asked for inside a tenth of a second, so an impulse mixed into it is
+  gone before the flash has faded. Kept separate, how far a bump moves you is `shove / fade` and
+  nothing else — retuning how crisp the controls are cannot silently retune how hard a bump hits.
+  It is added into the movement before the path fences it and before the furniture stops it, so it
+  obeys both, and it accumulates, so being caught between two people shoves twice.
+
+A bump therefore does three things with three different lifetimes, which is why there are three
+constants and not one: the shove carries you about half a metre off your line over a third of a
+second, `keep` takes the momentum you had (speed dips to under half and is back inside 120 ms), and
+`knock` cuts the stick's authority for 180 ms so the instant of contact reads as a stumble. Control
+is never taken away — `BUMP.grip` is reduced authority, ramping back linearly — because on a touch
+stick losing control reads as the game having stopped listening.
+
+**The feedback is derived from the collision, not fired on a boolean.** `BumpEvent` carries the
+normal the crowd already computed and a `force` of 0 at a standstill to 1 at a sprint, so the screen
+flash and the camera jolt are the hit that actually landed: struck from the side the player was
+shoved, at the strength they were going. `UI.flash` suppresses its own transition and forces a
+reflow so the hit lands in one frame and only the fade is animated — transitioning *up* to full
+spends the first half of the cue arriving, which reads as a pulse rather than a strike.
+
+**The camera sells the speed.** `CameraRig` eases a `rush` from 0 at `MOVE.walk` to 1 at `MOVE.run`
+and spends it on +8° of field of view and 0.55 m of extra pull-back, arriving over about half a
+second and leaving over about the same. The window is the walk-to-run range itself, so retuning the
+speeds carries the cue with them. The jolt is a shift along the hit normal plus a roll about the
+view axis taken from its sideways component, decaying with a 0.11 s time constant — a hit, not a
+shake. All of it is frame-timed and lives in the rig, so none of it can reach a hash.
+
+**What this does to the hashes.** `Simulation.hash()` moves, and did: the player walks a different
+path at a different speed, meets different people, and `kx`/`kz`/`knock` are gameplay state and are
+hashed. `identityHash()` must not move and does not — player feel touches no `spawn` or `behavior`
+draw, and the identity hash is read off a freshly filled crowd before any step. If a change here
+ever moves it, something has reached a stream it has no business in.
 
 ## Structures and kiosks
 

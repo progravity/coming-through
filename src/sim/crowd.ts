@@ -6,11 +6,19 @@ import { Agent } from './agent.ts';
 import { SpatialGrid } from './grid.ts';
 import { buildObstacles, reachOf } from './obstacles.ts';
 import type { Obstacle } from './obstacles.ts';
+import { knockPlayer } from './player.ts';
 import type { Player } from './player.ts';
 import { copyPose } from './pose.ts';
 import { spawn } from './spawner.ts';
 
-export interface BumpEvent { agent: Agent; nx: number; nz: number; }
+/**
+ * One player-versus-person contact. `nx`/`nz` is the collision normal, pointing from the person to
+ * the player -- the direction the player was shoved -- and `force` is how fast they were going when
+ * it happened, 0 at a standstill and 1 at a full sprint. Both are here so the feedback can be
+ * physical: the flash and the camera jolt are the same hit the simulation just resolved, at the
+ * strength it actually landed with, rather than a fixed cue fired on a boolean.
+ */
+export interface BumpEvent { agent: Agent; nx: number; nz: number; force: number; }
 
 /** Minimum gap between spawns, in fixed steps (150 ms). */
 const SPAWN_INTERVAL = stepsFor(0.15);
@@ -101,8 +109,10 @@ export class Crowd {
             // someone is contact resolution, not scoring.
             if (bumpsCount && hasProperty(a.A.entity, 'bump-relevant') && a.bumpCd <= 0) {
                 a.bumpCd = 1.2; a.stopUntil = a.t + 0.8; a.vx = -nx * 0.6; a.vz = -nz * 0.6;
-                player.vx += nx * 1.5; player.vz += nz * 1.5;
-                onBump({ agent: a, nx, nz });
+                // The person's own reaction is unchanged; only the player's is arcade. What the
+                // player gets is a shove along this same normal plus a moment of loose steering,
+                // which is `knockPlayer`'s business and lives with the rest of the feel numbers.
+                onBump({ agent: a, nx, nz, force: knockPlayer(player, nx, nz) });
             }
         });
         // reap

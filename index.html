@@ -19,7 +19,10 @@
   #legend span{color:#b9b6ad}
   #stick{position:fixed;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);display:none;pointer-events:none}
   #knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.35)}
-  #flash{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 55%,rgba(230,70,60,.55));opacity:0;transition:opacity .12s}
+  /* Hitting a person. Struck rather than pulsed: UI.flash suppresses this transition to put the
+     hit on screen in one frame, and only the fade back out is animated. It reaches further in and
+     lands harder than the scrape below, because a bump is the one thing in the game that counts. */
+  #flash{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 30%,rgba(236,84,64,.42) 66%,rgba(206,40,32,.92));opacity:0;transition:opacity .2s cubic-bezier(.2,.6,.35,1)}
   /* Walking into the scenery. Deliberately nothing like the bump: no red, half the strength, and
      hugging the very edge of the screen, so it reads as "that is solid" rather than "that counted". */
   #scrape{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 74%,rgba(120,112,96,.4));opacity:0;transition:opacity .18s}

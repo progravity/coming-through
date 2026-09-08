@@ -1,6 +1,7 @@
 import { ARCH } from '../archetypes.ts';
 import { Rng } from '../core/rng.ts';
 import { SIM_DT } from '../core/time.ts';
+import { BUMP, CAMERA, MOVE } from '../feel.ts';
 import { makeRecipe } from '../recipe.ts';
 import type { Recipe } from '../recipe.ts';
 import { clamp, wrapAngle } from '../util.ts';
@@ -29,20 +30,36 @@ export interface Player extends Poseable {
      * forward = (-sin, 0, -cos).
      */
     camYaw: number;
+    /**
+     * The shove from the last bump, carried beside the steered velocity rather than mixed into it,
+     * and decaying on its own clock. This is the whole reason a bump reads at all: at `MOVE.accel`
+     * the stick pulls the velocity back to what it asked for inside a tenth of a second, so an
+     * impulse added to `vx`/`vz` is gone before the flash has faded. Kept separate, how long a
+     * shove carries you is `BUMP.fade` and nothing else -- retuning how crisp the controls are
+     * cannot silently retune how hard a bump hits.
+     */
+    kx: number;
+    kz: number;
+    /**
+     * Seconds of reduced stick authority left after a bump, counting down to 0. Small and brief: it
+     * is there so the instant of contact reads as a stumble, not so the player loses the wheel.
+     * They are steering at full authority again a fifth of a second later, while the shove above is
+     * still carrying them -- which is what "shoved sideways, recover fast" actually is.
+     */
+    knock: number;
     prev: Pose;
     prevCamYaw: number;
 }
 
 /** Where a run begins, in path coordinates: the middle of the start pad. */
 export const PLAYER_START = { s: START_S, n: 0 } as const;
-const WALK = 1.7, HURRY = 2.4;
 
 /** Stand the player on the start pad at rest, facing down the path toward the goal. */
 function placeAtStart(p: Player): void {
     const w = PATH.toWorld(PLAYER_START.s, PLAYER_START.n, _world);
     p.x = w.x; p.z = w.z;
     p.yaw = p.camYaw = PATH.yawAt(PLAYER_START.s) + Math.PI;
-    p.vx = 0; p.vz = 0;
+    p.vx = 0; p.vz = 0; p.kx = 0; p.kz = 0; p.knock = 0;
 }
 
 export function createPlayer(): Player {
@@ -53,7 +70,7 @@ export function createPlayer(): Player {
     recipe.hair = 'none'; recipe.ponytail = false; recipe.beard = 'none'; recipe.acc = 'none';
     recipe.mobility = 'none'; recipe.seated = false; recipe.stoop = 0; recipe.jacket = false;
     recipe.limb = 1;
-    const p: Player = { x: 0, z: 0, yaw: 0, camYaw: 0,
+    const p: Player = { x: 0, z: 0, yaw: 0, camYaw: 0, kx: 0, kz: 0, knock: 0,
         r: 0.32, vx: 0, vz: 0, phase: 0, mv: 0, lean: 0, fidget: 0, recipe, prev: newPose(), prevCamYaw: 0 };
     placeAtStart(p);
     p.prevCamYaw = p.camYaw;
@@ -92,22 +109,40 @@ export interface MoveInput {
  * angle slides you along it and walking into it square stops you dead. Neither is a bump: the
  * return value is a *scrape*, and the caller gives it its own quiet cue. Bumps stay what they have
  * always been, which is hitting a person.
+ *
+ * The feel is arcade rather than physical, and every number deciding that is in `feel.ts`. Velocity
+ * still chases the stick on an exponential approach -- the shape a body has -- but at a rate that
+ * puts it there inside a tenth of a second, with `decel` above `accel` so releasing is the crisper
+ * half of the pair. There is deliberately still a ramp: a step function on the velocity reads as a
+ * cursor rather than a person, and the gait would strobe between standing and running.
  */
 export function updatePlayer(p: Player, input: MoveInput, mode: CameraMode, grid: FixedQuery): boolean {
     const dt = SIM_DT;
     const firstPerson = mode === 'first';
     let mx = 0, mz = 0;
     if (firstPerson) {
-        p.yaw -= input.x * dt * 2.4;
+        p.yaw -= input.x * dt * MOVE.lookTurn;
         mx = Math.sin(p.yaw) * input.y; mz = Math.cos(p.yaw) * input.y;
     } else {
         const cy = p.camYaw;
         const fx = -Math.sin(cy), fz = -Math.cos(cy), rx = Math.cos(cy), rz = -Math.sin(cy);
         mx = fx * input.y + rx * input.x; mz = fz * input.y + rz * input.x;
     }
-    const spd = input.hurry ? HURRY : WALK * Math.min(1, input.mag / 0.85);
+    const spd = input.hurry ? MOVE.run : MOVE.walk * Math.min(1, input.mag / 0.85);
     const tvx = mx * spd, tvz = mz * spd;
-    p.vx += (tvx - p.vx) * Math.min(1, dt * 9); p.vz += (tvz - p.vz) * Math.min(1, dt * 9);
+    // Reaching for speed and letting go of it are two different rates, and a recent bump scales
+    // both: `grip` is the stick's authority, cut at the moment of contact and handed back linearly
+    // over BUMP.recover. Cutting the authority rather than the velocity is what makes a shove
+    // survive an approach this fast, and what keeps the player steering the whole way through it.
+    if (p.knock > 0) p.knock = Math.max(0, p.knock - dt);
+    const grip = p.knock > 0 ? BUMP.grip + (1 - BUMP.grip) * (1 - p.knock / BUMP.recover) : 1;
+    const chase = Math.min(1, dt * (tvx === 0 && tvz === 0 ? MOVE.decel : MOVE.accel) * grip);
+    p.vx += (tvx - p.vx) * chase; p.vz += (tvz - p.vz) * chase;
+    // The shove fades on its own clock and is added on top, so the player is steering at full
+    // strength through a bump while still being carried by it.
+    const fade = Math.max(0, 1 - dt * BUMP.fade);
+    p.kx *= fade; p.kz *= fade;
+    const mvx = p.vx + p.kx, mvz = p.vz + p.kz;
     // Movement is camera-relative and therefore world-space; only the limits are path-space -- how
     // far across the walkway, and how far past either end -- so the player is fenced in by the path.
     // How far across is the path's own half width where they have got to, not a remembered number.
@@ -119,35 +154,71 @@ export function updatePlayer(p: Player, input: MoveInput, mode: CameraMode, grid
         return { x: w.x, z: w.z };
     };
     const fromX = p.x, fromZ = p.z;
-    let { x: nx, z: nz } = fence(p.x + p.vx * dt, p.z + p.vz * dt);
+    let { x: nx, z: nz } = fence(p.x + mvx * dt, p.z + mvz * dt);
     let scraped = false;
     grid.forFixed(nx, nz, o => {
         if (!pushOutOf(o, nx, nz, p.r, _push)) return;
         scraped = true;
         nx += _push.nx * _push.depth; nz += _push.nz * _push.depth;
+        // Both channels are projected out of the surface, each against its own inward component:
+        // a bench stops a shove exactly as it stops a stride, so nobody is knocked through one.
         const into = p.vx * _push.nx + p.vz * _push.nz;
         if (into < 0) { p.vx -= _push.nx * into; p.vz -= _push.nz * into; }
+        const kInto = p.kx * _push.nx + p.kz * _push.nz;
+        if (kInto < 0) { p.kx -= _push.nx * kInto; p.kz -= _push.nz * kInto; }
     });
     if (scraped) {
         ({ x: nx, z: nz } = fence(nx, nz));
         // Pushed out and then fenced back in: if that put the player back inside the furniture --
         // a wedge, or the strip behind a bench -- there is nowhere legal to go but where they were.
-        if (insideFurniture(grid, nx, nz, p.r)) { nx = fromX; nz = fromZ; p.vx = 0; p.vz = 0; }
+        if (insideFurniture(grid, nx, nz, p.r)) { nx = fromX; nz = fromZ; p.vx = 0; p.vz = 0; p.kx = 0; p.kz = 0; }
     }
     p.x = nx; p.z = nz;
-    const ps = Math.hypot(p.vx, p.vz);
-    if (ps > 0.2 && !firstPerson) {
-        const d = wrapAngle(Math.atan2(p.vx, p.vz) - p.yaw);
-        p.yaw += d * Math.min(1, dt * 10); p.lean = clamp(-d * 0.6, -0.2, 0.2);
+    // Everything below reads the speed the body is actually travelling at, shove included, so a
+    // knocked player's gait and lean belong to the movement you can see rather than to the stick.
+    const ps = Math.hypot(p.vx + p.kx, p.vz + p.kz);
+    // The body faces where the stick is pointing, not where the body is drifting. That is the
+    // difference between steering and being steered, and it is worth more than it looks: facing
+    // the velocity means a shove turns you, the camera follows the turn, and "forward" then means
+    // the direction you were knocked in -- which is the game taking the wheel at the exact moment
+    // it should be handing it back. Facing the intent, a bump slides you sideways while you carry
+    // on aiming where you were aiming.
+    const want = Math.hypot(mx, mz);
+    if (want > MOVE.faceAt && !firstPerson) {
+        const d = wrapAngle(Math.atan2(mx, mz) - p.yaw);
+        p.yaw += d * Math.min(1, dt * MOVE.turn); p.lean = clamp(-d * MOVE.lean, -MOVE.leanMax, MOVE.leanMax);
     } else p.lean *= 0.9;
-    p.mv += (clamp(ps / WALK, 0, 1) - p.mv) * Math.min(1, dt * 10);
+    p.mv += (clamp(ps / MOVE.walk, 0, 1) - p.mv) * Math.min(1, dt * MOVE.gaitBlend);
     p.phase += ps * dt * p.recipe.gait.cadence;
     return scraped;
 }
 
+/**
+ * Shove the player away from whoever they just walked into, and briefly loosen their grip on the
+ * stick. Returns how hard the hit was, 0 at a standstill and 1 at a full sprint, which is what the
+ * screen flash and the camera jolt are scaled by so the feedback matches the collision.
+ *
+ * The direction is the collision normal the crowd already computed -- from the person to the
+ * player -- so you are pushed off the one you hit rather than in some arbitrary direction. The
+ * shove rides its own channel but is added into the movement before the path fences it and before
+ * the furniture stops it, so it obeys both: you cannot be knocked through a railing or into a
+ * bench. It also *accumulates*, so being caught between two people shoves twice.
+ */
+export function knockPlayer(p: Player, nx: number, nz: number): number {
+    const speed = Math.hypot(p.vx, p.vz);
+    const shove = BUMP.shove + BUMP.shovePerSpeed * speed;
+    // Three things at once, and they are three because they do three different jobs: the shove
+    // carries you off your line, `keep` takes the momentum you had, and `knock` makes the instant
+    // of contact read as a stumble. Only the first survives longer than a moment.
+    p.kx += nx * shove; p.kz += nz * shove;
+    p.vx *= BUMP.keep; p.vz *= BUMP.keep;
+    p.knock = BUMP.recover;
+    return clamp(speed / MOVE.run, 0, 1);
+}
+
 /** Settle the camera yaw for the next step: smoothed behind the shoulder, locked in first person, fixed from above. */
 export function updateCameraYaw(p: Player, mode: CameraMode): void {
-    if (mode === 'shoulder') p.camYaw += wrapAngle(p.yaw + Math.PI - p.camYaw) * Math.min(1, SIM_DT * 3);
+    if (mode === 'shoulder') p.camYaw += wrapAngle(p.yaw + Math.PI - p.camYaw) * Math.min(1, SIM_DT * CAMERA.yawFollow);
     else if (mode === 'first') p.camYaw = p.yaw + Math.PI;
     else p.camYaw = 0;
 }

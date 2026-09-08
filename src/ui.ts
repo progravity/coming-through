@@ -80,7 +80,28 @@ export class UI {
     }
     /** Label the start button for whether pressing it replays the same seed or plays a new one. */
     setStartLabel(replaying: boolean): void { this.start.textContent = replaying ? 'Same seed again' : 'Start'; }
-    flash(): void { this.flashEl.style.opacity = '1'; setTimeout(() => { this.flashEl.style.opacity = '0'; }, 120); }
+    /**
+     * The bump cue: a hard-edged hit that lands on the frame it happened and falls away over the
+     * fifth of a second the CSS transition owns.
+     *
+     * The onset is the whole point, and it is why this is not two opacity writes and a timeout.
+     * Transitioning *up* to full spends the first half of the cue arriving, which reads as a pulse;
+     * suppressing the transition, forcing the reflow so the browser commits opacity 1 with no
+     * animation, then restoring it and dropping to 0 makes it a strike with a decay. Retriggering
+     * it mid-fade restarts the strike rather than stacking, so a run through a dense crowd flickers
+     * per bump instead of smearing into one red screen.
+     *
+     * @param strength 0..1, how fast the player was going when they hit. A stationary nudge is
+     *   `BUMP.hitFloor` of the full cue, not nothing: it still counted.
+     */
+    flash(strength = 1): void {
+        const e = this.flashEl;
+        e.style.transition = 'none';
+        e.style.opacity = String(Math.min(1, Math.max(0, strength)));
+        void e.offsetWidth;
+        e.style.transition = '';
+        e.style.opacity = '0';
+    }
 
     /**
      * The scenery cue: the player has walked into something solid that is not a person.

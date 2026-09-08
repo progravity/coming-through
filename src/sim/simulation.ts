@@ -106,7 +106,7 @@ export class Simulation {
         const h = new Hasher();
         const p = this.player;
         h.u32(this.seed).u32(this.steps).f64(this.elapsed).u32(this.bumps).bool(this.finished);
-        h.f64(p.x).f64(p.z).f64(p.yaw).f64(p.vx).f64(p.vz).f64(p.camYaw);
+        h.f64(p.x).f64(p.z).f64(p.yaw).f64(p.vx).f64(p.vz).f64(p.kx).f64(p.kz).f64(p.camYaw).f64(p.knock);
         h.u32(this.crowd.spawned).u32(this.crowd.agents.length);
         for (const a of this.crowd.agents) {
             const r = a.recipe;
