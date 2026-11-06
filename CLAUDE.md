@@ -37,12 +37,13 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
   `props.ts` (the distant skyline, and nothing else since the shops got a layer of their own),
   `box.ts`, `material.ts` (the one shading model the whole world takes).
 - `src/feel.ts` — every number that decides how the *player* feels, and nothing else: speeds,
-  accel/decel, turn rates, camera follow and sprint cues, bump shove and recovery, and the head-bob
-  tuning. Imports nothing,
+  accel/decel, turn rates, camera follow and sprint cues, bump shove and recovery, the stamina meter
+  that gates the run, and the head-bob tuning. Imports nothing,
   so `sim/player.ts` reads it without the purity boundary noticing and the camera reads the same
-  numbers rather than keeping a second copy. `BOB` is the one **mutable** thing in it — a live
-  tuning bench rather than a constant — which is why nothing under `src/sim/` may read it. See
-  "Player feel" and "Head bob" below.
+  numbers rather than keeping a second copy. Two of its blocks are the exceptions worth knowing:
+  `STAMINA` is the only **gameplay** thing in it — read by the fixed step and hashed — and `BOB` is
+  the only **mutable** one, a live tuning bench rather than a constant, which is why nothing under
+  `src/sim/` may read it. See "Player feel", "Stamina" and "Head bob" below.
 - `src/render/`, `src/camera.ts`, `src/ui.ts`, `src/debug.ts` — presentation only.
 - `src/main.ts` — the entry point and nothing else: it dynamic-imports the game, the entity
   inspector when `?inspect=` is present, or the render comparator when `?compare=` is, so a normal
@@ -75,6 +76,13 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
   cap holds at a sprint, and — the half that has to be checked rather than trusted — that nothing in
   the simulation's transitive import closure reads the mutable `BOB`. It also drives the real
   `CameraRig` headlessly, because `bobAt` being right proves nothing if the rig never calls it.
+- `test/stamina.test.ts` — the run gate: that the three rates are the ones `feel.ts` asks for, that
+  turning on the spot is standing rather than walking, that a low meter refuses to start a sprint
+  and an emptied one drops the player to a walk, that twenty seconds of one held button works the
+  gate exactly twice (the flicker the hysteresis pair exists to prevent), that the meter reaches
+  `hash()` and never reaches who is in the crowd, and that the HUD state is the gate's own branch
+  read back. Every rate is read out of `STAMINA` rather than written down again, so retuning the
+  meter never reddens the file.
 - `test/inspect.test.ts` — proves a turntable person is byte-identical to the crowd's agent,
   guarding `Subject` against `Agent` specifically.
 - `test/attachment.test.ts` — where equipment meets the body, all of it measured off the drawn
@@ -636,7 +644,7 @@ index in that list.
 
 The player is **arcade, and the crowd is not**. The people keep their believable speeds, their
 acceleration and their steering; the player is quick, crisp and slightly implausible on purpose, and
-every number that decides that is in `src/feel.ts` as `MOVE`, `CAMERA` and `BUMP`. They are
+every number that decides that is in `src/feel.ts` as `MOVE`, `CAMERA`, `BUMP` and `STAMINA`. They are
 playtest-tuned and are always retuned against each other, which is why they are one file and not
 scattered across the three that read them.
 
@@ -696,6 +704,69 @@ path at a different speed, meets different people, and `kx`/`kz`/`knock` are gam
 hashed. `identityHash()` must not move and does not — player feel touches no `spawn` or `behavior`
 draw, and the identity hash is read off a freshly filled crowd before any step. If a change here
 ever moves it, something has reached a stream it has no business in.
+
+## Stamina
+
+`STAMINA` in `feel.ts` is the one **gameplay** block in a file of feel numbers, and that difference
+is why it is a section of its own rather than a paragraph of the one above. The head bob is mutable,
+frame-timed, forbidden to `src/sim/` and invisible to both hashes; stamina is `as const`, read and
+written by the fixed step, and part of `Simulation.hash()`. It decides where the player can get to,
+which makes it state in exactly the sense `kx`/`kz`/`knock` are.
+
+**Three states and no fourth.** No movement input recovers at `standRecover`, movement drains at
+`walkDrain`, movement with the gate open drains at `runDrain`. Standing is the only way back, and
+that is a starting point rather than a finding: food, drink and a bench to sit on are the economy
+this leaves the door open for. **Do not build that yet** — a second recovery source is only worth
+designing once standing has been played enough to know what it is worth.
+
+**"Standing" is *no movement input*, not *no input*.** In first person the lateral axis turns the
+body and moves it nowhere, so a player pivoting to read the crowd is recovering, not draining. The
+meter therefore reads `hypot(mx, mz)` — the movement the stick is asking for — against
+`STAMINA.stillAt`, and never `input.mag`, which in first person is turning as much as walking.
+`stillAt` is deliberately its own number rather than a reuse of `MOVE.faceAt`: that one answers a
+different question about the same stick, and welding them would tie the deadzone of a resource to
+the deadzone of a facing.
+
+**The gate is a hysteresis pair, and the pair is the feature.** Starting a sprint asks for
+`runStart`; finishing one asks only for `runStop`. With a single threshold the meter would sit on
+it — drop below, slow to a walk, drain slower, cross back, sprint again, all inside a few steps,
+which reads as the controls malfunctioning rather than as being winded. So the band between the two
+is a one-way door: ease off down there and you are walking until the meter is properly back.
+`runStop` ships at 0, which is "run it to empty" and gives the bar its clearest read; it is a field
+rather than a literal so a sprint can be cut off while something is still showing.
+`Player.sprinting` is the latch that makes it work, and it has to be *state* rather than a
+recomputed predicate: "may I keep going" and "may I set off" are different questions with different
+answers inside the band, and only a latch remembers which is being asked.
+
+**`updateStamina` decides before it spends**, and that order is not arbitrary. A step that drained
+first would charge the run rate for a sprint it then refused, and the step the meter empties on
+would be a step at walking pace billed as a sprint. What it *returns* — not `input.hurry` — is what
+selects `MOVE.run`, so a player out of stamina keeps full control and loses only the burst. Nothing
+about a bump, a scrape or the path fence changes for it: the gate picks a target speed, and
+everything below that in `updatePlayer` is untouched.
+
+**The HUD reads the gate back rather than keeping thresholds of its own.** `staminaState` lives in
+`sim/player.ts` beside the branch it describes and returns `ok`, `low` or `spent`. `spent` is
+exactly "the gate is shut, holding hurry buys nothing" — whether the meter is flat empty or part-way
+back and still under `runStart` — which is the question a first-person player actually has. Two
+copies of these thresholds could disagree, and the copy the player can see is the one that would be
+wrong. The bar pulses at `low`, pulses and glows and says **Winded** at `spent`, and carries a notch
+at `runStart` placed from the constant rather than authored as a percentage: that notch is what
+makes a locked bar which is visibly refilling still legible, because the fill has not reached the
+mark yet. It is punchy rather than subtle on purpose — the game opens in first person, so the
+player's eyes are on the crowd and a bar that only reads when looked at would answer too late.
+
+**What this does to the hashes.** `Simulation.hash()` moves, and did: the player is refused the run
+speed, walks a different path, and meets different people; `stamina` and `sprinting` are gameplay
+state and are hashed. `identityHash()` is byte-identical, because the meter touches no `spawn` or
+`behavior` draw.
+
+**Which numbers to reach for first.** `runDrain` decides whether a sprint is a commitment —
+`max / runDrain` is how many seconds a full bar buys, 4.5 at the shipped 22 — and `standRecover`
+decides what a pause is worth against it, 16 against 22 being about three quarters of a second of
+sprint per second stood still. Those two are the pair that is really being tuned. `walkDrain` is the
+background pressure (a full bar is 40 seconds of walking, which is a little longer than the
+promenade takes) and `runStart` is how much of a reserve committing has to cost.
 
 ## Head bob
 

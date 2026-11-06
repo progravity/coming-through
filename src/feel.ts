@@ -41,6 +41,78 @@ export const MOVE = {
     gaitBlend: 14,
 } as const;
 
+/**
+ * The stamina meter: the resource that gates running, so top speed is something the player budgets
+ * rather than something they hold down.
+ *
+ * These are the only numbers in this file that are **gameplay** rather than feel. Everything else
+ * here decides how a movement reads; this decides where the player can get to, so it is read by the
+ * fixed step, it is part of `Simulation.hash()`, and it is `as const` for a reason -- unlike `BOB`
+ * below, nothing may drag these while a run is playing, because a replay whose speeds depended on
+ * where somebody left a slider is not a replay. Retune by editing the file between sessions, the
+ * way `MOVE` and `BUMP` are retuned, and regenerate the state hash on purpose when you do.
+ *
+ * The meter is in points out of `max`, so every rate below reads as **percent of the bar per
+ * second** and the three of them can be compared at a glance. Three states, and only three: no
+ * movement input recovers, movement drains, movement with the gate open drains hard. There is
+ * deliberately no other way to get stamina back yet -- food, drink and benches are an economy this
+ * leaves the door open for and does not build.
+ *
+ * The gate is a **hysteresis pair** rather than one threshold, and that is the difference between
+ * "winded, ease off" and a stutter. With a single line the meter would sit on it: drop below,
+ * slow to a walk, drain slower, cross back, sprint again, all inside a few steps, which reads as
+ * the controls malfunctioning. So starting a sprint asks for a real reserve (`runStart`) and
+ * finishing one asks for almost nothing (`runStop`), and the band between them is a one-way door:
+ * once you have eased off down there you are walking until the meter is properly back.
+ */
+export const STAMINA = {
+    /** Size of the meter. 100 so every rate below reads as percent per second. */
+    max: 100,
+    /**
+     * Drain while walking, per second. The gentle pressure: at 2.5 a full bar is 40 seconds of
+     * walking, which is longer than the promenade takes but not by much, so a player who never
+     * stops arrives with nothing left to spend. Raise it to make dwelling compulsory; drop it toward
+     * 0 to make walking free and the meter purely a sprint budget.
+     */
+    walkDrain: 2.5,
+    /**
+     * Drain while running, per second, and therefore how long a full bar of sprint lasts:
+     * `max / runDrain` seconds, about four and a half at 22. **This is the number that decides
+     * whether a sprint is a commitment**, and it is the first one to reach for. Under about 10 the
+     * meter stops mattering; over about 35 a sprint is too short to be worth the button.
+     */
+    runDrain: 22,
+    /**
+     * Recovery while standing, per second. Read it against `runDrain`: at 16 against 22, a second
+     * spent standing buys about three quarters of a second of sprint, which is what makes stopping
+     * a real move rather than a penalty. It is also `max / standRecover` = 6.3 seconds from empty
+     * to full, and `runStart / standRecover` = 1.6 seconds from empty to being allowed to run at
+     * all -- the second of those is the one the player actually feels, so nudge this and `runStart`
+     * together.
+     */
+    standRecover: 16,
+    /**
+     * Upper half of the gate: the meter has to be at least this to **start** a sprint. A quarter of
+     * the bar, so committing needs a visible reserve rather than a sliver.
+     */
+    runStart: 25,
+    /**
+     * Lower half of the gate: a sprint already under way continues until the meter falls to this.
+     * **0 means run it to empty**, which is the clearest read on the bar -- it drains to nothing and
+     * the lock-out is obvious. Raise it to cut the sprint off while there is still something showing.
+     * Must stay below `runStart` or the pair stops being hysteresis.
+     */
+    runStop: 0,
+    /**
+     * Movement input below this counts as standing still. Not a movement number: in first person
+     * the lateral axis turns the body and moves it nowhere, so a player pivoting on the spot to
+     * read the crowd is recovering, and a resting stick that quantises to a fraction of a step is
+     * not a walk. Deliberately its own value rather than a reuse of `MOVE.faceAt`, which answers a
+     * different question about the same stick.
+     */
+    stillAt: 0.05,
+} as const;
+
 /** Follow tightness, and the two cues that sell speed: a widening lens and a longer leash. */
 export const CAMERA = {
     /** Resting field of view, degrees. */

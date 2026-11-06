@@ -107,6 +107,10 @@ export class Simulation {
         const p = this.player;
         h.u32(this.seed).u32(this.steps).f64(this.elapsed).u32(this.bumps).bool(this.finished);
         h.f64(p.x).f64(p.z).f64(p.yaw).f64(p.vx).f64(p.vz).f64(p.kx).f64(p.kz).f64(p.camYaw).f64(p.knock);
+        // The stamina meter and its gate: gameplay state, so hashed. It gates the player's top speed,
+        // which changes where they get to and therefore who they meet -- the opposite of the camera
+        // effects in `feel.ts`, which are frame-timed and cannot reach here at all.
+        h.f64(p.stamina).bool(p.sprinting);
         h.u32(this.crowd.spawned).u32(this.crowd.agents.length);
         for (const a of this.crowd.agents) {
             const r = a.recipe;

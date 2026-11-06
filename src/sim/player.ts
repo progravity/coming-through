@@ -1,7 +1,7 @@
 import { ARCH } from '../archetypes.ts';
 import { Rng } from '../core/rng.ts';
 import { SIM_DT } from '../core/time.ts';
-import { BUMP, CAMERA, MOVE } from '../feel.ts';
+import { BUMP, CAMERA, MOVE, STAMINA } from '../feel.ts';
 import { makeRecipe } from '../recipe.ts';
 import type { Recipe } from '../recipe.ts';
 import { clamp, wrapAngle } from '../util.ts';
@@ -47,6 +47,22 @@ export interface Player extends Poseable {
      * still carrying them -- which is what "shoved sideways, recover fast" actually is.
      */
     knock: number;
+    /**
+     * The stamina meter, 0 to `STAMINA.max`. Gameplay state and hashed: it decides what top speed
+     * the player is allowed, so two runs that spend it differently are two different runs.
+     *
+     * Deliberately not the head bob's kind of number. `BOB` is mutable, frame-timed and unreachable
+     * from here on purpose; this is read and written by the fixed step and reaches `hash()`.
+     */
+    stamina: number;
+    /**
+     * Whether the run gate is currently open -- the latch that makes the pair of thresholds
+     * hysteresis rather than one line the meter can sit on. It has to be *state* rather than a
+     * recomputed predicate: "may I keep going" and "may I set off" are different questions with
+     * different answers in the band between `runStop` and `runStart`, and only a latch remembers
+     * which of the two is being asked.
+     */
+    sprinting: boolean;
     prev: Pose;
     prevCamYaw: number;
 }
@@ -60,6 +76,7 @@ function placeAtStart(p: Player): void {
     p.x = w.x; p.z = w.z;
     p.yaw = p.camYaw = PATH.yawAt(PLAYER_START.s) + Math.PI;
     p.vx = 0; p.vz = 0; p.kx = 0; p.kz = 0; p.knock = 0;
+    p.stamina = STAMINA.max; p.sprinting = false;
 }
 
 export function createPlayer(): Player {
@@ -70,7 +87,7 @@ export function createPlayer(): Player {
     recipe.hair = 'none'; recipe.ponytail = false; recipe.beard = 'none'; recipe.acc = 'none';
     recipe.mobility = 'none'; recipe.seated = false; recipe.stoop = 0; recipe.jacket = false;
     recipe.limb = 1;
-    const p: Player = { x: 0, z: 0, yaw: 0, camYaw: 0, kx: 0, kz: 0, knock: 0,
+    const p: Player = { x: 0, z: 0, yaw: 0, camYaw: 0, kx: 0, kz: 0, knock: 0, stamina: STAMINA.max, sprinting: false,
         r: 0.32, vx: 0, vz: 0, phase: 0, mv: 0, lean: 0, fidget: 0, recipe, prev: newPose(), prevCamYaw: 0 };
     placeAtStart(p);
     p.prevCamYaw = p.camYaw;
@@ -94,6 +111,60 @@ export interface MoveInput {
 }
 
 /**
+ * How the meter reads on the HUD, and it is the run gate's own condition read straight back rather
+ * than a second set of thresholds standing beside it.
+ *
+ * That is the whole point of putting it here instead of in `ui.ts`. The question the bar has to
+ * answer in first person -- where the player's eyes are on the crowd and not on the corner of the
+ * screen -- is "why is hurry doing nothing", and the only honest answer is the branch
+ * `updateStamina` actually took. Two copies of these thresholds could disagree, and the version
+ * that would be wrong is the one the player can see.
+ *
+ * - `spent`: the gate is **shut**. Holding hurry right now buys nothing, whether the meter is flat
+ *   empty or part-way back but still under `runStart`.
+ * - `low`: the gate is open and you are into the reserve. You may finish this sprint; ease off and
+ *   it flips to `spent` in the same step, which is exactly the "winded, ease off" moment.
+ * - `ok`: there is a sprint in the bank.
+ */
+export type StaminaState = 'ok' | 'low' | 'spent';
+export function staminaState(p: Player): StaminaState {
+    if (p.stamina >= STAMINA.runStart) return 'ok';
+    return p.sprinting ? 'low' : 'spent';
+}
+
+/** How full the meter is, 0 to 1: what the bar is drawn at. */
+export const staminaFraction = (p: Player): number => p.stamina / STAMINA.max;
+
+/**
+ * Advance the meter one fixed step and answer the only question anything else asks of it: **is the
+ * player allowed to run right now?**
+ *
+ * The order inside is deliberate -- gate first, then spend. A step that drained before deciding
+ * would charge the run rate for a sprint the player was refused, and the step the meter empties on
+ * would be a step at walking pace billed as a sprint. Deciding first means the last step of a
+ * sprint is a real one, and the gate shuts on the step after.
+ *
+ * Three states and one line each, because the meter genuinely has no fourth: no movement input
+ * recovers, movement drains, movement with the gate open drains hard. `moving` is read off the
+ * *movement* the stick is asking for rather than off `input.mag`, which in first person is turning
+ * as much as walking -- see `STAMINA.stillAt`.
+ *
+ * @param want How hard the stick is asking the body to move, 0..1.
+ */
+function updateStamina(p: Player, want: number, hurry: boolean): boolean {
+    const moving = want > STAMINA.stillAt;
+    // The hysteresis, and the only place either threshold is read: starting asks for `runStart`,
+    // continuing asks only for `runStop`. Letting go of hurry, or stopping, shuts the latch -- so
+    // easing off inside the band is a one-way door and the meter cannot flicker across a line.
+    if (!moving || !hurry) p.sprinting = false;
+    else if (p.sprinting) p.sprinting = p.stamina > STAMINA.runStop;
+    else p.sprinting = p.stamina >= STAMINA.runStart;
+    const rate = !moving ? -STAMINA.standRecover : p.sprinting ? STAMINA.runDrain : STAMINA.walkDrain;
+    p.stamina = clamp(p.stamina - rate * SIM_DT, 0, STAMINA.max);
+    return p.sprinting;
+}
+
+/**
  * Advance the player one fixed step, and say whether they walked into the scenery.
  *
  * In first person, left/right turns the body rather than strafing.
@@ -109,6 +180,12 @@ export interface MoveInput {
  * angle slides you along it and walking into it square stops you dead. Neither is a bump: the
  * return value is a *scrape*, and the caller gives it its own quiet cue. Bumps stay what they have
  * always been, which is hitting a person.
+ *
+ * **Top speed is bought from the stamina meter, not held down.** `updateStamina` runs before the
+ * speed is chosen, and what it returns -- rather than `input.hurry` -- is what selects `MOVE.run`.
+ * So a player out of stamina keeps full control and loses only the burst, and the meter empties
+ * whether or not it is being watched. That makes this the one thing in `feel.ts` that changes where
+ * the player can get to, which is why it is hashed and the head bob is not.
  *
  * The feel is arcade rather than physical, and every number deciding that is in `feel.ts`. Velocity
  * still chases the stick on an exponential approach -- the shape a body has -- but at a rate that
@@ -128,7 +205,11 @@ export function updatePlayer(p: Player, input: MoveInput, mode: CameraMode, grid
         const fx = -Math.sin(cy), fz = -Math.cos(cy), rx = Math.cos(cy), rz = -Math.sin(cy);
         mx = fx * input.y + rx * input.x; mz = fz * input.y + rz * input.x;
     }
-    const spd = input.hurry ? MOVE.run : MOVE.walk * Math.min(1, input.mag / 0.85);
+    // How much movement the stick is asking for, which is what the meter spends against and what
+    // the body turns toward further down. In first person that is `|input.y|` alone: the lateral
+    // axis is a turn, and turning on the spot goes nowhere and costs nothing.
+    const want = Math.hypot(mx, mz);
+    const spd = updateStamina(p, want, input.hurry) ? MOVE.run : MOVE.walk * Math.min(1, input.mag / 0.85);
     const tvx = mx * spd, tvz = mz * spd;
     // Reaching for speed and letting go of it are two different rates, and a recent bump scales
     // both: `grip` is the stick's authority, cut at the moment of contact and handed back linearly
@@ -183,7 +264,6 @@ export function updatePlayer(p: Player, input: MoveInput, mode: CameraMode, grid
     // the direction you were knocked in -- which is the game taking the wheel at the exact moment
     // it should be handing it back. Facing the intent, a bump slides you sideways while you carry
     // on aiming where you were aiming.
-    const want = Math.hypot(mx, mz);
     if (want > MOVE.faceAt && !firstPerson) {
         const d = wrapAngle(Math.atan2(mx, mz) - p.yaw);
         p.yaw += d * Math.min(1, dt * MOVE.turn); p.lean = clamp(-d * MOVE.lean, -MOVE.leanMax, MOVE.leanMax);

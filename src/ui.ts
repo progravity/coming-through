@@ -1,7 +1,8 @@
 import { ARCH, ARCH_KEYS } from './archetypes.ts';
-import { BOB, BOB_CONTROLS, resetBob } from './feel.ts';
+import { BOB, BOB_CONTROLS, STAMINA, resetBob } from './feel.ts';
 import type { BobKey } from './feel.ts';
-import type { CameraMode } from './sim/player.ts';
+import type { CameraMode, StaminaState } from './sim/player.ts';
+import { clamp } from './util.ts';
 import { TIER_SETTINGS } from './device.ts';
 import type { Tier } from './device.ts';
 
@@ -32,6 +33,12 @@ export class UI {
     readonly copyLink = el<HTMLButtonElement>('copyLink');
     readonly randomSeed = el<HTMLButtonElement>('randomSeed');
     readonly seedInput = el<HTMLInputElement>('seedInput');
+    private readonly staminaEl = el<HTMLElement>('stamina');
+    private readonly staminaFill = el<HTMLElement>('staminaFill');
+    private readonly staminaMark = el<HTMLElement>('staminaMark');
+    private readonly staminaTag = el<HTMLElement>('staminaTag');
+    /** Last state written, so the pulse is not restarted sixty times a second. */
+    private staminaShown: StaminaState | null = null;
     private readonly flashEl = el<HTMLElement>('flash');
     private readonly scrapeEl = el<HTMLElement>('scrape');
     private scrapeTimer = 0;
@@ -53,6 +60,26 @@ export class UI {
             legend.appendChild(row);
         }
         this.buildBobPanel();
+        // The notch is the run-start threshold, derived from the same constant the gate reads
+        // rather than written into the stylesheet as a percentage. It is what makes a locked bar
+        // that is visibly refilling still legible: the fill has not reached the mark yet.
+        this.staminaMark.style.left = `${(100 * STAMINA.runStart) / STAMINA.max}%`;
+        this.staminaTag.textContent = 'Winded';
+    }
+
+    /**
+     * Draw the stamina meter: how full it is, and which of the three things it has to say.
+     *
+     * The state is handed in rather than worked out here, because it is the run gate's own answer
+     * -- see `staminaState` in `sim/player.ts`. A bar that decided for itself when to turn red
+     * would be a second copy of the thresholds, and the copy the player can see is the one that
+     * would be wrong.
+     */
+    stamina(frac: number, state: StaminaState): void {
+        this.staminaFill.style.width = `${100 * clamp(frac, 0, 1)}%`;
+        if (this.staminaShown === state) return;
+        this.staminaShown = state;
+        this.staminaEl.dataset.state = state;
     }
 
     /**

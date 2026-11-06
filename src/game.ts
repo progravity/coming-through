@@ -14,6 +14,7 @@ import { Recorder } from './input/recorder.ts';
 import { TouchAdapter } from './input/touch.ts';
 import { drawPerson } from './render/person.ts';
 import { PartPools } from './render/pools.ts';
+import { staminaFraction, staminaState } from './sim/player.ts';
 import { lerpPose, newPose } from './sim/pose.ts';
 import { MAX_CROWD, Simulation, clampCrowd } from './sim/simulation.ts';
 import type { StepCommand } from './sim/simulation.ts';
@@ -120,6 +121,7 @@ function startRun(nextSeed: number): void {
     pools.freeAll();
     ui.setSeed(seed);
     ui.hud(0, 0);
+    ui.stamina(1, 'ok');
     if (stress) return;
     const url = new URL(location.href);
     url.searchParams.set('seed', String(seed));
@@ -346,6 +348,8 @@ function frame(now: number): void {
 
     // hud
     ui.hud(sim.elapsed, sim.bumps);
+    // Display only: the meter was spent in the fixed step, and this is the bar reading it back.
+    ui.stamina(staminaFraction(sim.player), staminaState(sim.player));
     fpsFrames++; fpsTime += frameDt;
     if (stress) {
         ringSum.sim += simMs - simRing[ringIdx]; ringSum.render += renderMs - renderRing[ringIdx]; ringSum.steps += steps - stepRing[ringIdx];

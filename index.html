@@ -19,6 +19,22 @@
   #legend span{color:#b9b6ad}
   #stick{position:fixed;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);display:none;pointer-events:none}
   #knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.35)}
+  /* The stamina meter. Deliberately arcade rather than subtle, and for one reason: the game opens
+     in first person, so the player's eyes are on the crowd and not on the corner of the screen.
+     A bar that only reads when looked at would answer "why is hurry doing nothing" too late, so
+     the low state pulses, the locked state pulses and glows, and the locked state says the word.
+     The notch is where the fill has to climb back to; ui.ts places it from STAMINA.runStart. */
+  #stamina{position:relative;margin-top:8px;width:140px;height:13px;border-radius:7px;background:rgba(255,255,255,.13);box-shadow:inset 0 0 0 1px rgba(255,255,255,.13)}
+  #staminaFill{position:absolute;left:0;top:0;bottom:0;width:100%;border-radius:7px}
+  #staminaMark{position:absolute;top:1px;bottom:1px;width:2px;margin-left:-1px;border-radius:1px;background:rgba(20,22,28,.6)}
+  #staminaTag{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:9px;font-weight:700;font-style:normal;letter-spacing:.18em;text-transform:uppercase;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.7)}
+  #stamina[data-state="ok"] #staminaFill{background:#e8c34a}
+  #stamina[data-state="low"] #staminaFill{background:#f2913c;animation:staminaLow .42s ease-in-out infinite}
+  #stamina[data-state="spent"]{animation:staminaSpent .42s ease-in-out infinite}
+  #stamina[data-state="spent"] #staminaFill{background:#ec5440}
+  #stamina[data-state="spent"] #staminaTag{display:flex}
+  @keyframes staminaLow{50%{opacity:.3}}
+  @keyframes staminaSpent{50%{box-shadow:inset 0 0 0 1px rgba(255,255,255,.13),0 0 0 3px rgba(236,84,64,.55)}}
   /* Hitting a person. Struck rather than pulsed: UI.flash suppresses this transition to put the
      hit on screen in one frame, and only the fade back out is animated. It reaches further in and
      lands harder than the scrape below, because a bump is the one thing in the game that counts. */
@@ -51,7 +67,7 @@
 </style>
 </head>
 <body>
-<div id="stats" class="chip"><b id="time">0.0s</b><span id="bumps">0 bumps</span></div>
+<div id="stats" class="chip"><b id="time">0.0s</b><span id="bumps">0 bumps</span><div id="stamina" data-state="ok"><i id="staminaFill"></i><i id="staminaMark"></i><em id="staminaTag">Winded</em></div></div>
 <div id="controls">
   <button id="less" aria-label="Fewer people">−</button><button id="count" aria-label="Crowd size">80</button><button id="more" aria-label="More people">+</button>
   <button id="cam">Camera: first</button>
@@ -70,7 +86,7 @@
 <div id="overlay"><div>
   <h1 id="overlayTitle">Coming Through!</h1>
   <p>Get from the blue pad to the green pad without bumping into anyone.</p>
-  <p>Touch and drag anywhere to move. Keyboard: WASD or arrows, shift to hurry. C cycles the camera, O toggles ink, [ and ] change the crowd size, T cycles the device tier, G toggles the debug view. R replays the current seed from the start, N rolls a new one.</p>
+  <p>Touch and drag anywhere to move. Keyboard: WASD or arrows, shift to hurry. Hurrying spends the yellow stamina bar; stand still to get it back. C cycles the camera, O toggles ink, [ and ] change the crowd size, T cycles the device tier, G toggles the debug view. R replays the current seed from the start, N rolls a new one.</p>
   <p id="result"></p>
   <p class="seednote">Same seed, same crowd, every time. Share the link to race a friend through the same people.</p>
   <p class="seedline">
