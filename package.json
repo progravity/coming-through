@@ -1,28 +1,27 @@
 {
-  "name": "coming-through",
-  "private": true,
-  "version": "0.0.0",
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "npm run lint && vite build",
-    "lint": "tsc && node scripts/check-math-random.mjs",
-    "test": "npm run lint && node --test test/",
-    "bench:looks": "node scripts/bench-looks.mjs",
-    "test:update-hash": "UPDATE_DETERMINISM_HASH=1 node --test test/determinism.test.ts",
-    "preview": "vite preview"
-  },
-  "devDependencies": {
-    "@types/node": "^26.4.1",
-    "@types/three": "^0.185.4",
-    "typescript": "~6.0.2",
-    "vite": "^8.2.2"
-  },
-  "dependencies": {
-    "three": "^0.185.1"
-  },
-  "allowScripts": {
-    "fsevents@2.3.3": true,
-    "three@0.185.1": true
-  }
+    "$schema": "https://www.schemastore.org/package.json",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "build": "vp build",
+        "dev": "vp dev"
+    },
+    "dependencies": {
+        "@laravel/passkeys": "^0.2.0",
+        "@tailwindcss/vite": "^4.1.11",
+        "concurrently": "^10.0.3",
+        "laravel-vite-plugin": "^3.1",
+        "tailwindcss": "^4.0.7",
+        "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
+        "vite-plus": "1.4.0"
+    },
+    "optionalDependencies": {
+        "@laravel/multiplex": "^0.4.1",
+        "@rollup/rollup-linux-x64-gnu": "4.9.5",
+        "@tailwindcss/oxide-linux-x64-gnu": "^4.0.1",
+        "lightningcss-linux-x64-gnu": "^1.29.1"
+    },
+    "overrides": {
+        "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0"
+    }
 }
