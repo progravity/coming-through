@@ -5,7 +5,7 @@
  *
  * Top-down is orthographic on purpose. Collider rings and separation radii are circles on the
  * ground, and a perspective camera would draw the far ones smaller than the near ones; looked at
- * square, a metre is a metre everywhere and two rings that touch on screen touch in the crowd.
+ * square, a meter is a meter everywhere and two rings that touch on screen touch in the crowd.
  * The walkway runs left to right in it (world +z to the right), start pad on the right.
  */
 import * as THREE from 'three';

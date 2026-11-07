@@ -17,7 +17,10 @@ import type { EdgePlan, Solid, Standing } from '../../world/edge.ts';
 import { barMatrix, buildEdge, standingMatrix } from '../../world/kit.ts';
 import type { EdgeLayer } from '../../world/kit.ts';
 import { PATH, newPathFrame, newWorldPoint, pathPlace } from '../../world/path.ts';
+import { meshCost } from '../describe.ts';
+import type { MeshCost } from '../describe.ts';
 import type { DrawnPart, OverlayDef } from '../inspectable.ts';
+import { MARK, capsuleLoop, spotAt } from '../markers.ts';
 
 export const COLLIDER = 'collider';
 export const FACING = 'facing';
@@ -38,44 +41,7 @@ export const EDGE_OVERLAYS: readonly OverlayDef[] = [EDGE_COLLIDER, EDGE_FACING]
 
 /** How far off the surface the flat overlays are drawn, so they do not z-fight it. */
 const LIFT = 0.02;
-const CAP = 12;
-const MARK = 0x59e0d0, AIM = 0xe8c34a, ALONG = 0x6f8fd0;
-
-const line = (pts: THREE.Vector3[], colour: number, loop: boolean): THREE.Object3D => {
-    const geo = new THREE.BufferGeometry().setFromPoints(pts);
-    const mat = new THREE.LineBasicMaterial({ color: colour, depthTest: false });
-    return loop ? new THREE.LineLoop(geo, mat) : new THREE.Line(geo, mat);
-};
-
-/**
- * The capsule a body walks into, drawn as a racetrack on the surface.
- *
- * Flat because the collider is: the crowd walks in the x/z plane and is draped onto the surface at
- * render time, so an obstacle has no height and pretending otherwise would be a picture of
- * something that is not there. The two caps are swept the way `nearestOn` measures them, from one
- * end of the segment round to the other.
- */
-function colliderLoop(solid: Solid): THREE.Object3D {
-    const f = PATH.frameAt(solid.s, newPathFrame());
-    const base = pathPlace(f, solid.n, LIFT, newWorldPoint());
-    const pts: THREE.Vector3[] = [];
-    const at = (along: number, across: number): void => {
-        pts.push(new THREE.Vector3(
-            base.x + f.tx * along + f.nx * across,
-            base.y + f.ty * along + f.ny * across,
-            base.z + f.tz * along + f.nz * across,
-        ));
-    };
-    for (let k = 0; k <= CAP; k++) {
-        const a = -Math.PI / 2 + (k / CAP) * Math.PI;
-        at(solid.half + solid.r * Math.cos(a), solid.r * Math.sin(a));
-    }
-    for (let k = 0; k <= CAP; k++) {
-        const a = Math.PI / 2 + (k / CAP) * Math.PI;
-        at(-solid.half + solid.r * Math.cos(a), solid.r * Math.sin(a));
-    }
-    return line(pts, MARK, true);
-}
+const AIM = 0xe8c34a, ALONG = 0x6f8fd0;
 
 /** Which way the thing looks, and which way the path runs under it. */
 function facingArrows(solid: Solid, front: 1 | -1): THREE.Object3D {
@@ -88,19 +54,8 @@ function facingArrows(solid: Solid, front: 1 | -1): THREE.Object3D {
     return g;
 }
 
-/** A place beside a structure worth marking: a stalk with a ball on it, stood at (s, n). */
-export function spotMarker(at: { s: number; n: number }, colour: number): THREE.Object3D {
-    const f = PATH.frameAt(at.s, newPathFrame());
-    const p = pathPlace(f, at.n, 0, newWorldPoint());
-    const g = new THREE.Group();
-    const mat = new THREE.MeshBasicMaterial({ color: colour, depthTest: false });
-    const stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.1, 6), mat);
-    stalk.position.set(p.x, p.y + 0.55, p.z);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.11, 10, 8), mat);
-    head.position.set(p.x, p.y + 1.15, p.z);
-    g.add(stalk, head);
-    return g;
-}
+/** A place beside a structure worth marking. Kept under its old name for the casts that call it. */
+export const spotMarker = spotAt;
 
 /**
  * Give back what this exhibit made, and nothing it merely drew through.
@@ -192,7 +147,7 @@ export class EdgeExhibit {
             this.parts.push({ matrix: new THREE.Matrix4(), color: b.colour });
         }
         const wall = plan.entities.some(e => e.piece === solid.piece && hasProperty(e.meta, 'static-obstacle'));
-        if (wall) this.addOverlay(COLLIDER, colliderLoop(solid));
+        if (wall) this.addOverlay(COLLIDER, capsuleLoop(solid, MARK.collider));
         this.addOverlay(FACING, facingArrows(solid, front));
     }
 
@@ -221,6 +176,17 @@ export class EdgeExhibit {
     }
 
     setInk(on: boolean): void { this.layer.setInk(on); }
+
+    /** What this one object's own kit draws, counted off its meshes; the overlays are not counted. */
+    cost(): MeshCost {
+        const out: MeshCost = { calls: 0, instances: 0, triangles: 0, materials: 0 };
+        for (const c of this.inner.children) {
+            if (c === this.extras) continue;
+            const m = meshCost(c);
+            out.calls += m.calls; out.instances += m.instances; out.triangles += m.triangles; out.materials += m.materials;
+        }
+        return out;
+    }
 
     dress(look: Look | null): void { this.layer.dress(look); }
 

@@ -95,6 +95,8 @@ export interface StructureArchetype {
     id: string;
     /** For readouts and test failures; never drawn. */
     name: string;
+    /** What it is, in a plain sentence, for the labs: the counterpart of a person archetype's `desc`. Never drawn. */
+    desc: string;
     parts: readonly Prim[];
     /** What kind of thing this is, on all four taxonomy axes. See `entity.ts`. */
     entity: EntityMeta;

@@ -34,7 +34,7 @@ export const CROWD_OVERLAYS: readonly OverlayDef[] = [
     { id: 'ink', label: 'ink', key: 'o' },
 ];
 
-/** Where the top-down camera is centered, and how many metres of walkway it shows top to bottom. */
+/** Where the top-down camera is centered, and how many meters of walkway it shows top to bottom. */
 export interface TopView { x: number; z: number; span: number }
 /** Where the orbiting camera stands and what it looks at. */
 export interface OrbitView { px: number; py: number; pz: number; tx: number; ty: number; tz: number }

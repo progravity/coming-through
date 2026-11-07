@@ -14,12 +14,18 @@
  */
 import * as THREE from 'three';
 import { hashString } from '../../core/rng.ts';
+import { hasProperty } from '../../entity.ts';
+import type { PathSpot, Vendor } from '../../entity.ts';
 import type { Look } from '../../render/look.ts';
-import type { EdgePlan } from '../../world/edge.ts';
-import { placeStructure } from '../../world/structure.ts';
+import type { EdgePlan, Solid } from '../../world/edge.ts';
+import type { EdgeSpan } from '../../world/layout.ts';
+import { PATH } from '../../world/path.ts';
+import { SLOTS, footprintOf, liveryFor, placeStructure } from '../../world/structure.ts';
 import type { Paint, Placed, StructureArchetype } from '../../world/structure.ts';
+import { colorRow, count, identitySection } from '../describe.ts';
+import type { MeshCost } from '../describe.ts';
 import { INK } from '../inspectable.ts';
-import type { Cast, Controls, DrawnPart, OverlayDef, Readout } from '../inspectable.ts';
+import type { Cast, Controls, DrawnPart, InfoRow, InfoSection, OverlayDef, Readout, Site, SiteSpot } from '../inspectable.ts';
 import { EdgeExhibit, spotMarker } from './edge.ts';
 
 /**
@@ -34,8 +40,27 @@ export const POINTS = 'points';
 export const POINTS_OVERLAY: OverlayDef = { id: POINTS, label: 'spots', key: 'p' };
 const SERVICE_C = 0x7ad17a, STAFF_C = 0xd17a9c, SEATING_C = 0x7aa8d1;
 
-/** One thing standing on the stage: which archetype it is, and what was rolled for it. */
-export interface Instance<T extends string> { type: T; arch: StructureArchetype; paint: Paint; placed: Placed }
+/** One thing standing on the stage: which archetype it is, and what was rolled for it, under which label. */
+export interface Instance<T extends string> { type: T; arch: StructureArchetype; paint: Paint; placed: Placed; label: string }
+
+/** One the world built: what `kiosks()`, `shops()` and `restaurants()` hand back, in the fields read here. */
+export interface Built<T extends string> {
+    type: T; arch: StructureArchetype; paint: Paint;
+    s: number; n: number; facing: 1 | -1; piece: number;
+    vendor?: Vendor; seating?: PathSpot; solid: Solid;
+}
+
+/** Where a kind's data lives, for the provenance card. */
+export interface KindSource {
+    /** The world file the archetypes, the roller and the placements are in. */
+    file: string;
+    /** The archetype record, the roller, and the authored placements. */
+    record: string; roller: string; placements: string;
+    /** The name the constant-seeded paint stream is hashed from, and the fork each site rolls off. */
+    stream: string; siteFork: string;
+    /** The stretches of edge each placement keeps clear, and what they keep it clear of. */
+    spans: string; clears: string;
+}
 
 /**
  * What one family of structures has to say for itself.
@@ -56,6 +81,122 @@ export interface StructureKind<T extends string> {
     site(s: number): { n: number; facing: 1 | -1 };
     /** The left-hand card, given the instance, its measured height and its drawn part count. */
     readout(x: Instance<T>, top: number, parts: number): Readout;
+    source: KindSource;
+    /** Every one the world builds, in placement order, and the span each keeps clear (by `piece - 1`). */
+    built(): readonly Built<T>[];
+    spans: readonly EdgeSpan[];
+}
+
+/**
+ * Every named spot a placed structure exposes, with its color on the spots overlay.
+ *
+ * One list over the whole `Placed` rather than one per capability, because the day these become a
+ * map of named spots this is the only function that has to know.
+ */
+export function spotsOf(p: { vendor?: Vendor; seating?: PathSpot }): (SiteSpot & { color: number })[] {
+    const out: (SiteSpot & { color: number })[] = [];
+    if (p.vendor !== undefined) {
+        out.push({ name: 'service', ...p.vendor.service, color: SERVICE_C }, { name: 'staff', ...p.vendor.staff, color: STAFF_C });
+    }
+    if (p.seating !== undefined) out.push({ name: 'seating', ...p.seating, color: SEATING_C });
+    return out;
+}
+
+/** How far outside the path's edge a point stands: negative is on the walkway. */
+export const pastEdge = (s: number, n: number): number => Math.abs(n) - PATH.halfWidth(s);
+
+const where = (d: number): string => (d < 0 ? `${n2(-d)} m inside the edge` : `${n2(d)} m outside the edge`);
+
+/** The sections every structure's card carries, on the stage or in its place on the promenade. */
+export function structureSections<T extends string>(
+    kind: StructureKind<T>,
+    x: { type: T; arch: StructureArchetype; paint: Paint; fork: string; solid: Solid; facing: 1 | -1; vendor?: Vendor; seating?: PathSpot },
+    opts: { top?: number; cost?: MeshCost; where: 'stage' | 'promenade' },
+): InfoSection[] {
+    const { arch, paint } = x;
+    const livery = liveryFor(arch, paint);
+    const fromLivery = (slot: string): boolean => livery !== undefined && slot !== 'topper';
+    const solidParts = arch.parts.filter(p => p.solid === true).length;
+    const fp = footprintOf(arch);
+    const wall = hasProperty(arch.entity, 'static-obstacle');
+    const sol = x.solid;
+    const spots = spotsOf(x);
+    const recipe: InfoRow[] = [
+        { k: 'fork', v: `${x.fork} of the '${kind.source.stream}' paint stream`, mono: true },
+        { k: 'form', v: `fixed by the archetype: ${arch.parts.length} parts, ${solidParts} solid` },
+        ...(arch.livery === undefined ? [] : [{ k: 'livery', v: `${livery?.name ?? 'none'} · one of ${arch.livery.length}` }]),
+        ...SLOTS.map(slot => colorRow(slot, paint[slot],
+            fromLivery(slot) ? 'from the livery' : `from the archetype's ${arch.colours[slot].length}`)),
+        ...(arch.distinct === undefined ? [] : [{ k: 'distinct', v: arch.distinct.join(' and ') + ' never match' }]),
+    ];
+    const geometry: InfoRow[] = [
+        ...(opts.top === undefined ? [] : [{ k: 'height', v: `${n2(opts.top)} m` }]),
+        { k: 'footprint', v: `${n2(2 * (fp.half + fp.r))} m along × ${n2(2 * fp.r)} m across, from the solid parts` },
+        {
+            k: 'collider',
+            v: wall ? `capsule · half ${n2(sol.half)} · r ${n2(sol.r)}`
+                : 'none: a footprint nothing walks into, since it declines static-obstacle',
+        },
+        { k: 'stands at', v: `s ${n2(sol.s)} · n ${n2(sol.n)} · ${where(pastEdge(sol.s, sol.n))}` },
+        { k: 'orientation', v: `faces ${x.facing > 0 ? '+n' : '−n'}, ${Math.sign(sol.n) === -x.facing ? 'toward the centerline' : 'away from it'}` },
+    ];
+    const tables = spots.length === 0 ? [] : [{
+        caption: 'spots: where something else would stand',
+        columns: ['spot', 's', 'n', 'from it', 'edge'],
+        rows: spots.map(p => [
+            { text: p.name, color: p.color },
+            n2(p.s), n2(p.n),
+            `${n2(p.s - sol.s)} along · ${n2(Math.abs(p.n - sol.n))} across`,
+            pastEdge(p.s, p.n) < 0 ? 'on the walkway' : 'behind it',
+        ]),
+    }];
+    const cost: InfoRow[] = [
+        { k: 'parts', v: `${arch.parts.length} instances` },
+        { k: 'in the game', v: 'no draw calls of its own: its parts join the edge layer\'s instanced batches by shape, colored per instance' },
+        ...(opts.cost === undefined ? [] : [{
+            k: 'alone',
+            v: `${opts.cost.calls} calls · ${count(opts.cost.triangles)} triangles · ${opts.cost.materials} materials, as this stage draws it`,
+        }]),
+    ];
+    return [
+        identitySection(arch.entity, arch.desc, [{ k: 'archetype', v: arch.name }]),
+        {
+            id: 'recipe', rows: recipe,
+            note: opts.where === 'stage'
+                ? 'The seed re-rolls the paint and never the form. The promenade paints its own off the same stream, one fork per site.'
+                : 'Painted as the promenade paints it: the same stream every run, so this is what the game shows here.',
+        },
+        { id: 'geometry', rows: geometry, tables },
+        {
+            id: 'provenance',
+            rows: [
+                { k: 'archetype', v: `${kind.source.file} · ${kind.source.record}['${x.type}']`, mono: true },
+                { k: 'painted by', v: `${kind.source.roller}, off hashString('${kind.source.stream}')`, mono: true },
+                { k: 'placed by', v: `${kind.source.placements} · ${kind.source.spans}`, mono: true },
+                { k: 'kit', v: 'resources/js/game/world/structure.ts · placeStructure; world/kit.ts · buildEdge', mono: true },
+                { k: 'model', v: 'none yet: primitives only (see STRUCTURE_MODELS in render/model-file.ts)' },
+            ],
+        },
+        { id: 'cost', rows: cost },
+    ];
+}
+
+/** Every place the world puts one of `type` (or of every type, for 'seed'), as the placement view wants them. */
+export function structureSites<T extends string>(kind: StructureKind<T>, c: Controls): Site[] {
+    const pinned = String(c[kind.control] ?? 'seed');
+    return kind.built().filter(b => pinned === 'seed' || b.type === pinned).map(b => {
+        const span = kind.spans[b.piece - 1];
+        return {
+            title: b.arch.name,
+            label: `s ${n2(b.s)} · ${b.n > 0 ? '+n' : '−n'} side`,
+            s: b.s, n: b.n, facing: b.facing,
+            solid: b.solid,
+            collider: hasProperty(b.arch.entity, 'static-obstacle'),
+            spots: spotsOf(b),
+            spans: span === undefined ? [] : [{ ...span, clears: kind.source.clears }],
+            sections: structureSections(kind, { ...b, fork: `${kind.source.siteFork}:${b.piece - 1}` }, { where: 'promenade' }),
+        };
+    });
 }
 
 export class StructureCast<T extends string> implements Cast {
@@ -79,7 +220,8 @@ export class StructureCast<T extends string> implements Cast {
                 : count > 1 ? kind.types[i]
                 : kind.types[hashString(`inspect:${kind.control}:${i}`, seed) % kind.types.length];
             const arch = kind.archetypes[type];
-            const { paint, phase } = kind.roll(arch, `inspect:${seed}:${i}`);
+            const label = `inspect:${seed}:${i}`;
+            const { paint, phase } = kind.roll(arch, label);
             // Standing where the promenade stands one, at the clearance from the path's own edge
             // that the world uses -- not at a distance chosen to look good on a stage.
             const s = 0;
@@ -97,7 +239,7 @@ export class StructureCast<T extends string> implements Cast {
             if (placed.seating !== undefined) points.add(spotMarker(placed.seating, SEATING_C));
             ex.addOverlay(POINTS, points);
             this.exhibits.push(ex);
-            this.items.push({ type, arch, paint, placed });
+            this.items.push({ type, arch, paint, placed, label });
         }
         this.apply();
         // No re-dressing here: the shell dresses the whole cast on the line after this returns, so
@@ -125,8 +267,15 @@ export class StructureCast<T extends string> implements Cast {
     }
 
     readout(i: number, top: number): Readout {
-        return this.kind.readout(this.items[i], top, this.parts(i).length);
+        const x = this.items[i];
+        const r = this.kind.readout(x, top, this.parts(i).length);
+        const sections = structureSections(this.kind, {
+            ...x, fork: x.label, solid: x.placed.solid, facing: this.facing(x), vendor: x.placed.vendor, seating: x.placed.seating,
+        }, { top, cost: this.exhibits[i]?.cost(), where: 'stage' });
+        return { ...r, sections };
     }
+
+    private facing(x: Instance<T>): 1 | -1 { return this.kind.site(x.placed.solid.s).facing; }
 }
 
 /** Two decimals, which is every number either readout wants. */

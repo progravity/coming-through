@@ -12,7 +12,12 @@ import { ARCH, ARCH_KEYS } from '../../resources/js/game/archetypes.ts';
 import type { ArchKey } from '../../resources/js/game/archetypes.ts';
 import { CATEGORIES, CATEGORY_OF } from '../../resources/js/game/entity.ts';
 import { Simulation } from '../../resources/js/game/sim/simulation.ts';
+import { FURNITURE_ABOUT } from '../../resources/js/game/world/furniture.ts';
+import { KIOSK_ARCHETYPES, KIOSK_SPANS, KIOSK_TYPES, kiosks } from '../../resources/js/game/world/kiosks.ts';
+import { RESTAURANT_ARCHETYPES } from '../../resources/js/game/world/restaurants.ts';
+import { SHOP_ARCHETYPES } from '../../resources/js/game/world/shops.ts';
 import type { Family } from '../../resources/js/game/entity.ts';
+import type { Site } from '../../resources/js/game/inspect/inspectable.ts';
 import { ENTITIES, modelOf } from '../../resources/js/game/inspect/registry.ts';
 import { queryOf, readState, resolveIn } from '../../resources/js/game/inspect/state.ts';
 import { LABS, labFor, primaries, viewOf } from '../../resources/js/game/labs/labs.ts';
@@ -140,4 +145,46 @@ test('a crowd mix of one archetype spawns nobody else', () => {
     sim.prime(60);
     assert.ok(sim.crowd.agents.length > 0);
     assert.deepEqual([...new Set(sim.crowd.agents.map(a => a.type))], ['kyle']);
+});
+
+test('every fixture and building type says what it is in a sentence', () => {
+    for (const rec of [KIOSK_ARCHETYPES, SHOP_ARCHETYPES, RESTAURANT_ARCHETYPES] as const) {
+        for (const arch of Object.values(rec)) assert.ok(arch.desc.length > 20, `${arch.id} has no description`);
+    }
+    for (const [kind, about] of Object.entries(FURNITURE_ABOUT)) assert.ok(about.length > 20, `${kind} has no description`);
+});
+
+test('the placement view stands each type where the world built it, and nowhere else', () => {
+    // Every site is one the world's own layer function placed, with the span it really keeps clear.
+    const sitesOf = ENTITIES.find(e => e.id === 'kiosk')?.sites;
+    assert.ok(sitesOf !== undefined);
+    const built = kiosks();
+    for (const type of KIOSK_TYPES) {
+        const sites: readonly Site[] = sitesOf({ type });
+        const want = built.filter(k => k.type === type);
+        assert.equal(sites.length, want.length, `${type} stands ${want.length} times on the promenade`);
+        sites.forEach((site, i) => {
+            assert.equal(site.s, want[i].s);
+            assert.equal(site.n, want[i].n);
+            assert.ok(site.collider, `a ${type} cart is something you walk into`);
+            assert.deepEqual(site.spots.map(p => p.name), ['service', 'staff']);
+            assert.equal(site.spans.length, 1);
+            assert.equal(site.spans[0].sMin, KIOSK_SPANS[want[i].piece - 1].sMin);
+        });
+    }
+    // Buildings have footprints and no colliders; a restaurant exposes a third spot.
+    for (const id of ['shop', 'restaurant']) {
+        const e = ENTITIES.find(x => x.id === id);
+        const sites = e?.sites?.({ type: 'seed' }) ?? [];
+        assert.equal(sites.length, 5, `${id} stands five times`);
+        for (const site of sites) assert.ok(!site.collider, `a ${id} is never an obstacle`);
+    }
+    const restaurant = ENTITIES.find(x => x.id === 'restaurant')?.sites?.({ type: 'taco' }) ?? [];
+    assert.deepEqual(restaurant[0]?.spots.map(p => p.name), ['service', 'staff', 'seating']);
+    // Furniture comes off the furniture plan, a kind at a time.
+    const benches = ENTITIES.find(x => x.id === 'furniture')?.sites?.({ kind: 'bench' }) ?? [];
+    assert.ok(benches.length > 4, 'the promenade has benches');
+    for (const b of benches) assert.ok(b.collider && b.spans.length === 0);
+    // People walk; they have no place to stand on.
+    assert.equal(ENTITIES.find(x => x.id === 'person')?.sites, undefined);
 });

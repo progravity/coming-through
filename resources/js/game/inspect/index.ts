@@ -247,7 +247,8 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
     /** Why the model source cannot be chosen for what is on stage, or null when it can. */
     function blocked(): string | null {
         if (entity.modelOf !== undefined) return null;
-        return modelOf(entity.id) !== undefined ? null : `${entity.title}: no model file yet. Primitives only for now.`;
+        return modelOf(entity.id) !== undefined ? null
+            : `${entity.title}: no model yet. Primitives only for now (see STRUCTURE_MODELS in render/model-file.ts).`;
     }
 
     /** A view this page does not draw is another page; the turntable's own two are a change in place. */

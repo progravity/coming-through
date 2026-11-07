@@ -43,8 +43,8 @@ const entitiesOf = (c: Category): Inspectable[] => ENTITIES.filter(e => CATEGORY
 
 export const LABS: Readonly<Record<Category, Lab>> = {
     people: { id: 'people', title: 'People', path: `${LAB_ROOT}/people`, entities: entitiesOf('people'), views: ['single', 'row', 'crowd'] },
-    fixtures: { id: 'fixtures', title: 'Fixtures', path: `${LAB_ROOT}/fixtures`, entities: entitiesOf('fixtures'), views: ['single', 'row'] },
-    buildings: { id: 'buildings', title: 'Buildings', path: `${LAB_ROOT}/buildings`, entities: entitiesOf('buildings'), views: ['single', 'row'] },
+    fixtures: { id: 'fixtures', title: 'Fixtures', path: `${LAB_ROOT}/fixtures`, entities: entitiesOf('fixtures'), views: ['single', 'row', 'placement'] },
+    buildings: { id: 'buildings', title: 'Buildings', path: `${LAB_ROOT}/buildings`, entities: entitiesOf('buildings'), views: ['single', 'row', 'placement'] },
 };
 
 /** The lab an entity is shown in. */

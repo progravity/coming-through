@@ -111,11 +111,11 @@ const STAFF = { dn: -(STAFF_BACK + BODY_W / 2), da: 0 };
 
 /** One archetype, with the parts of a cart already under whatever it is topped by. */
 function kiosk(
-    id: string, name: string, colours: StructureArchetype['colours'], topper: Prim[],
+    id: string, name: string, desc: string, colours: StructureArchetype['colours'], topper: Prim[],
     opt: { awning?: boolean; distinct?: readonly Slot[] } = {},
 ): StructureArchetype {
     return {
-        id, name, parts: [...cart(), ...(opt.awning === true ? awning() : []), ...topper],
+        id, name, desc, parts: [...cart(), ...(opt.awning === true ? awning() : []), ...topper],
         // Every cart is the same kind of thing: it does not move, you walk into it, and it serves
         // people. Nothing about its form is in here -- that is what `parts` is.
         entity: entityMeta('kiosk', id, ['immobile', 'static-obstacle', 'vendor'], 'placed-with-requirements'),
@@ -148,7 +148,7 @@ export type KioskType = (typeof KIOSK_TYPES)[number];
  * the mast is short, the blob is half again wider than it is tall, the colours stay saturated (see
  * `KIOSK.candy`), and there is a paper cone under it that nothing in a park has.
  */
-const COTTON_CANDY = kiosk('cotton-candy', 'Cotton candy', {
+const COTTON_CANDY = kiosk('cotton-candy', 'Cotton candy', "A candy-floss cart: a pink, magenta or lilac cloud on a paper cone, held high over the counter.", {
     base: KIOSK.body, trim: KIOSK.trim, topper: KIOSK.candy, accent: KIOSK.candySoft,
 }, [
     mast(2.1),
@@ -172,7 +172,7 @@ const COTTON_CANDY = kiosk('cotton-candy', 'Cotton candy', {
  * met in front of it and the whole topper read as a log. One flattened bun below, with the sausage
  * standing proud on top of it, is the silhouette a hot dog actually has.
  */
-const HOT_DOG = kiosk('hot-dog', 'Hot dog', {
+const HOT_DOG = kiosk('hot-dog', 'Hot dog', "A hot-dog cart under an awning, topped by a sausage lying lengthways in its bun.", {
     base: KIOSK.body, trim: KIOSK.trim, topper: KIOSK.sausage, accent: KIOSK.bun,
 }, [
     mast(2.4),
@@ -186,7 +186,7 @@ const HOT_DOG = kiosk('hot-dog', 'Hot dog', {
 ], { awning: true });
 
 /** A giant paper cup: tapered body, a banded waist, a domed lid and a straw out of the top. */
-const DRINKS = kiosk('drinks', 'Drinks', {
+const DRINKS = kiosk('drinks', 'Drinks', "A drinks cart under an awning, topped by a tall banded cup with a domed lid and an angled straw.", {
     base: KIOSK.body, trim: KIOSK.trim, topper: KIOSK.cup, accent: KIOSK.stripe,
 }, [
     mast(2.34),
@@ -216,7 +216,7 @@ const BALLOON_AT: readonly [Prim['colour'], number, number, number, number][] = 
     ['accent', -0.06, 3.18, 0.7, 0.5],
     ['trim', 0.2, 2.48, 0.48, 0.48],
 ];
-const BALLOONS = kiosk('balloons', 'Balloons', {
+const BALLOONS = kiosk('balloons', 'Balloons', "A balloon seller's cart with six balloons bobbing on strings over it.", {
     base: KIOSK.body, trim: KIOSK.balloon, topper: KIOSK.balloon, accent: KIOSK.balloon,
 }, BALLOON_AT.flatMap(([colour, dn, dy, da, d], i): Prim[] => {
     const bob = { kind: 'bob' as const, rate: 0.9 + i * 0.07, phase: i * 1.1, amp: 0.07 };
@@ -233,7 +233,7 @@ const BALLOONS = kiosk('balloons', 'Balloons', {
 }), { distinct: ['trim', 'topper', 'accent'] });
 
 /** An ice cream: the wafer is a cone stood on its point, and the scoops stack on its open end. */
-const ICE_CREAM = kiosk('ice-cream', 'Ice cream', {
+const ICE_CREAM = kiosk('ice-cream', 'Ice cream', "An ice-cream cart topped by a cone stood on its point under two scoops and a cherry.", {
     base: KIOSK.body, trim: KIOSK.trim, topper: KIOSK.scoop, accent: KIOSK.scoop,
 }, [
     mast(2.34),
@@ -258,7 +258,7 @@ const POP_AT: readonly [number, number, number, number][] = [
     [-0.5, 3.42, -0.46, 0.34], [0.04, 4.1, -0.1, 0.33], [-0.16, 3.4, 0.5, 0.32],
     [0.34, 3.32, -0.5, 0.3], [-0.52, 3.6, -0.12, 0.3], [0.5, 3.62, 0.06, 0.28],
 ];
-const POPCORN = kiosk('popcorn', 'Popcorn', {
+const POPCORN = kiosk('popcorn', 'Popcorn', "A popcorn cart topped by a striped box heaped over with popcorn.", {
     base: KIOSK.body, trim: KIOSK.popped, topper: KIOSK.box, accent: KIOSK.stripe,
 }, [
     mast(2.34),
@@ -283,7 +283,7 @@ const POPCORN = kiosk('popcorn', 'Popcorn', {
  * "turning" rather than "round".
  */
 const PINWHEEL_AT: readonly [number, number, number][] = [[-0.58, 3.02, 0.95], [0, 3.24, -0.8], [0.58, 3.06, 1.1]];
-const PINWHEEL = kiosk('pinwheel', 'Pinwheels', {
+const PINWHEEL = kiosk('pinwheel', 'Pinwheels', "A pinwheel seller's cart with a rack of three spinning two-color pinwheels.", {
     base: KIOSK.body, trim: KIOSK.trim, topper: KIOSK.pinwheel, accent: KIOSK.pinwheel,
 }, [
     { shape: 'cyl', colour: EDGE.iron, dn: -0.05, dy: (DECK + 2.6) / 2, da: -0.75, across: 0.06, up: 2.6 - DECK, along: 0.06 },

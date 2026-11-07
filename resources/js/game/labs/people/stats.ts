@@ -38,7 +38,7 @@ export interface Snapshot {
     people: number;
     spawned: number;
     byType: ReadonlyMap<ArchKey, number>;
-    /** People on the walkway itself, per square metre. */
+    /** People on the walkway itself, per square meter. */
     density: number;
     area: number;
     /** The fullest grid cell, and how many cells hold three or more. */

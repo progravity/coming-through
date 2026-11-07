@@ -20,14 +20,14 @@
 import type * as THREE from 'three';
 import { PATH } from '../../world/path.ts';
 import {
-    RESTAURANT_ARCHETYPES, RESTAURANT_BOX, RESTAURANT_SYMBOLS, RESTAURANT_TYPES, rollRestaurant,
+    RESTAURANT_ARCHETYPES, RESTAURANT_BOX, RESTAURANT_SPANS, RESTAURANT_SYMBOLS, RESTAURANT_TYPES, restaurants, rollRestaurant,
 } from '../../world/restaurants.ts';
 import type { RestaurantType } from '../../world/restaurants.ts';
 import { SLOTS, liveryFor } from '../../world/structure.ts';
-import type { Cast, Inspectable, Readout } from '../inspectable.ts';
+import type { Cast, Controls, Inspectable, Readout, Site } from '../inspectable.ts';
 import { EDGE_FACING } from './edge.ts';
-import { POINTS_OVERLAY, StructureCast, n2, spotRows } from './structure.ts';
-import type { Instance } from './structure.ts';
+import { POINTS_OVERLAY, StructureCast, n2, spotRows, structureSites } from './structure.ts';
+import type { Instance, StructureKind } from './structure.ts';
 
 function readout(r: Instance<RestaurantType>, top: number, parts: number): Readout {
     const sol = r.placed.solid;
@@ -53,6 +53,25 @@ function readout(r: Instance<RestaurantType>, top: number, parts: number): Reado
     };
 }
 
+/** The restaurants, as the structure cast and the placement view both drive them. */
+const KIND: StructureKind<RestaurantType> = {
+    control: 'type',
+    types: RESTAURANT_TYPES,
+    archetypes: RESTAURANT_ARCHETYPES,
+    roll: (arch, label) => ({ paint: rollRestaurant(arch, label) }),
+    // Off the +n edge, frontage looking back at the centerline -- the real clearance, which for
+    // a restaurant is the one that puts it behind the lamp posts.
+    site: (s: number) => ({ n: PATH.halfWidth(s) + RESTAURANT_BOX.inset + RESTAURANT_BOX.across / 2, facing: -1 }),
+    readout,
+    source: {
+        file: 'resources/js/game/world/restaurants.ts', record: 'RESTAURANT_ARCHETYPES', roller: 'rollRestaurant',
+        placements: 'RESTAURANT_PLACEMENTS', stream: 'restaurants', siteFork: 'restaurant', spans: 'RESTAURANT_SPANS',
+        clears: 'the railings and the furniture, for a doorway only: the frontage stands behind the lamp posts',
+    },
+    built: () => restaurants(),
+    spans: RESTAURANT_SPANS,
+};
+
 export const RESTAURANT: Inspectable = {
     id: 'restaurant',
     family: 'building',
@@ -66,14 +85,6 @@ export const RESTAURANT: Inspectable = {
     /** The seed is the livery: the form is the archetype's and never rolls. */
     stepping: 'seed',
     row: RESTAURANT_TYPES.length,
-    mount: (scene: THREE.Scene): Cast => new StructureCast<RestaurantType>(scene, {
-        control: 'type',
-        types: RESTAURANT_TYPES,
-        archetypes: RESTAURANT_ARCHETYPES,
-        roll: (arch, label) => ({ paint: rollRestaurant(arch, label) }),
-        // Off the +n edge, frontage looking back at the centreline -- the real clearance, which for
-        // a restaurant is the one that puts it behind the lamp posts.
-        site: (s: number) => ({ n: PATH.halfWidth(s) + RESTAURANT_BOX.inset + RESTAURANT_BOX.across / 2, facing: -1 }),
-        readout,
-    }),
+    mount: (scene: THREE.Scene): Cast => new StructureCast<RestaurantType>(scene, KIND),
+    sites: (c: Controls): readonly Site[] => structureSites(KIND, c),
 };

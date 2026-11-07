@@ -124,6 +124,38 @@ export interface InfoSection {
     note?: string;
 }
 
+/** A named place an entity exposes for something else to stand at, in path coordinates. */
+export interface SiteSpot { name: string; s: number; n: number }
+
+/**
+ * A stretch of the path's edge an entity keeps clear of other layers, and what it keeps clear: the
+ * gap a building opens in the railings, or the stretch of bench rhythm a cart takes. `side` names
+ * one railing; omitted, the span blocks both.
+ */
+export interface SiteSpan { sMin: number; sMax: number; side?: 1 | -1; clears: string }
+
+/**
+ * One place on the promenade where the game has put one of these, as the world built it.
+ *
+ * What the placement view needs to stand the camera beside it and draw what governs it: where it
+ * is, which way it faces, the capsule it presents and whether that is a collider, the spots it
+ * exposes, the stretches of edge it keeps clear, and the information sections for the object as
+ * the promenade has it (painted as the promenade paints it, not as the turntable's seed does).
+ */
+export interface Site {
+    title: string;
+    label: string;
+    s: number;
+    n: number;
+    /** The `n` direction its face looks in. */
+    facing: 1 | -1;
+    solid: { s: number; n: number; half: number; r: number };
+    collider: boolean;
+    spots: readonly SiteSpot[];
+    spans: readonly SiteSpan[];
+    sections: readonly InfoSection[];
+}
+
 /** The left-hand card: what is actually on the stage. */
 export interface Readout {
     title: string;
@@ -240,6 +272,11 @@ export interface Inspectable {
      */
     load?(): Promise<void>;
     mount(scene: THREE.Scene): Cast;
+    /**
+     * Every place the game puts one of these, for the placement view, given a type pinned in the
+     * controls. Omitted by entities that do not stand at a place on the path -- people walk.
+     */
+    sites?(c: Controls): readonly Site[];
 }
 
 export function defaultControls(e: Inspectable): Controls {

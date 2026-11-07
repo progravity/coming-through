@@ -7,6 +7,7 @@
  * and a place, and know nothing about whose they are.
  */
 import * as THREE from 'three';
+import { PATH, newPathFrame, newWorldPoint, pathPlace } from '../world/path.ts';
 
 /** The overlay palette, shared so a collider is the same color in every lab. */
 export const MARK = {
@@ -31,7 +32,7 @@ export function onTop<T extends THREE.Object3D>(o: T, order = 10): T {
     return o;
 }
 
-/** A flat circle of radius `r` in the x/z plane, centred on the origin. */
+/** A flat circle of radius `r` in the x/z plane, centered on the origin. */
 export function ring(r: number, color: number, opacity = 1, segments = 48): THREE.LineLoop {
     const pts: THREE.Vector3[] = [];
     for (let k = 0; k < segments; k++) {
@@ -76,4 +77,50 @@ export function disposeMarks(root: THREE.Object3D): void {
         const mat = m.material;
         for (const x of Array.isArray(mat) ? mat : mat === undefined ? [] : [mat]) x.dispose();
     });
+}
+
+/** How far off the surface the flat path-placed marks are drawn, so they do not z-fight it. */
+const LIFT = 0.02;
+const CAP = 12;
+
+/**
+ * A capsule a body walks into, drawn as a racetrack on the surface where the path puts it.
+ *
+ * Flat because the collider is: the crowd walks in the x/z plane and is draped onto the surface at
+ * render time, so an obstacle has no height and pretending otherwise would be a picture of
+ * something that is not there. The two caps are swept the way `nearestOn` measures them.
+ */
+export function capsuleLoop(solid: { s: number; n: number; half: number; r: number }, color: number, opacity = 1): THREE.LineLoop {
+    const f = PATH.frameAt(solid.s, newPathFrame());
+    const base = pathPlace(f, solid.n, LIFT, newWorldPoint());
+    const pts: THREE.Vector3[] = [];
+    const at = (along: number, across: number): void => {
+        pts.push(new THREE.Vector3(
+            base.x + f.tx * along + f.nx * across,
+            base.y + f.ty * along + f.ny * across,
+            base.z + f.tz * along + f.nz * across,
+        ));
+    };
+    for (let k = 0; k <= CAP; k++) {
+        const a = -Math.PI / 2 + (k / CAP) * Math.PI;
+        at(solid.half + solid.r * Math.cos(a), solid.r * Math.sin(a));
+    }
+    for (let k = 0; k <= CAP; k++) {
+        const a = Math.PI / 2 + (k / CAP) * Math.PI;
+        at(-solid.half + solid.r * Math.cos(a), solid.r * Math.sin(a));
+    }
+    const loop = new THREE.LineLoop(
+        new THREE.BufferGeometry().setFromPoints(pts),
+        new THREE.LineBasicMaterial({ color, transparent: true, opacity }),
+    );
+    return onTop(loop);
+}
+
+/** A place beside a structure worth marking: a stalk with a ball on it, stood at (s, n). */
+export function spotAt(at: { s: number; n: number }, color: number): THREE.Group {
+    const f = PATH.frameAt(at.s, newPathFrame());
+    const p = pathPlace(f, at.n, 0, newWorldPoint());
+    const g = stalk(color);
+    g.position.set(p.x, p.y, p.z);
+    return g;
 }

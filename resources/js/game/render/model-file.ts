@@ -34,6 +34,38 @@ export const MODEL_SOURCES: Readonly<Record<string, ModelSource>> = {
 };
 
 /**
+ * **Designed, not built: a model for a fixture or building type.** One model per type, standing in
+ * for that archetype's primitives the way `MODELS` stands in for the person's, with a data file of
+ * its own beside it (`<file>.structure.json`) that carries what the primitives derive from their
+ * parts today:
+ *
+ * - **spots** -- service, staff and seating, in the structure's own cross-section (`dn` across the
+ *   path from its center, `da` along it), exactly the shape `StructureArchetype.vendor` and
+ *   `.seating` already use, so `placeStructure` turns them through the frame unchanged;
+ * - **footprint** -- the solid box `footprintOf` would read off the solid parts, across and along,
+ *   so a model's collider is still derived from one stated fact rather than authored twice;
+ * - **regions** -- the same role file a person model's `.regions.json` is (`RoleFile` in
+ *   `modelcrowd/regions.ts`), mapping the model's color groups to the archetype's paint slots
+ *   (`base`, `trim`, `topper`, `accent`) so a livery can still roll.
+ *
+ * Nothing loads these yet: the labs' source toggle reads this list and stays on primitives with a
+ * reason while a type has no entry. Finish it when the first kiosk or building model exists.
+ */
+export interface StructureModel {
+    /** Under `public/models/`. */
+    readonly file: string;
+    /** `<file>.structure.json`, beside it. */
+    readonly data: string;
+}
+export interface StructureModelData {
+    readonly spots: { readonly service?: { dn: number; da: number }; readonly staff?: { dn: number; da: number }; readonly seating?: { dn: number; da: number } };
+    readonly footprint: { readonly across: number; readonly along: number };
+    readonly regions?: Readonly<Record<string, string>>;
+}
+/** By archetype id (`cotton-candy`, `toy`, `taco`, `bench`). Empty until the first model exists. */
+export const STRUCTURE_MODELS: Readonly<Record<string, StructureModel>> = {};
+
+/**
  * Root-relative, because Laravel serves `public/` as the web root: the game page is a route (`/play`)
  * rather than a file beside the models, so a page-relative path would move with the route.
  */

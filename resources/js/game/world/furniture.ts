@@ -50,6 +50,13 @@ export const FURNITURE_ENTITIES: Record<FurnitureKind, EntityMeta> = {
     bin: entityMeta('furniture', 'bin', ['immobile', 'static-obstacle'], 'placed-with-requirements'),
 };
 
+/** What each kind is, in a plain sentence, for the labs. Never drawn, and read by nothing in the game. */
+export const FURNITURE_ABOUT: Readonly<Record<FurnitureKind, string>> = {
+    bench: 'A timber bench inside the railings, facing across the walkway: a long, thin capsule to walk round.',
+    lamp: 'A lamp post just outside the railings: solid, though nothing can reach it.',
+    bin: 'A litter bin inside the railings: a small circle to walk round.',
+};
+
 /** How far past each end of the path furniture is placed. Short of the railings: the path ends here. */
 const FURN_END = L;
 

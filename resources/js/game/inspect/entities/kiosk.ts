@@ -16,14 +16,14 @@
  * `StructureCast`, which the shops drive too.
  */
 import type * as THREE from 'three';
-import { KIOSK_ARCHETYPES, KIOSK_N, KIOSK_TYPES, rollKiosk } from '../../world/kiosks.ts';
+import { KIOSK_ARCHETYPES, KIOSK_N, KIOSK_SPANS, KIOSK_TYPES, kiosks, rollKiosk } from '../../world/kiosks.ts';
 import type { KioskType } from '../../world/kiosks.ts';
 import { PATH } from '../../world/path.ts';
 import { SLOTS } from '../../world/structure.ts';
-import type { Cast, Inspectable, Readout } from '../inspectable.ts';
+import type { Cast, Controls, Inspectable, Readout, Site } from '../inspectable.ts';
 import { EDGE_OVERLAYS } from './edge.ts';
-import { POINTS_OVERLAY, StructureCast, n2, spotRows } from './structure.ts';
-import type { Instance } from './structure.ts';
+import { POINTS_OVERLAY, StructureCast, n2, spotRows, structureSites } from './structure.ts';
+import type { Instance, StructureKind } from './structure.ts';
 
 function readout(k: Instance<KioskType>, top: number, parts: number): Readout {
     const sol = k.placed.solid;
@@ -44,6 +44,25 @@ function readout(k: Instance<KioskType>, top: number, parts: number): Readout {
     };
 }
 
+/** The carts, as the structure cast and the placement view both drive them. */
+const KIND: StructureKind<KioskType> = {
+    control: 'type',
+    types: KIOSK_TYPES,
+    archetypes: KIOSK_ARCHETYPES,
+    roll: rollKiosk,
+    // On the +n edge, counter looking back at the centerline, at the clearance that is really
+    // setting the corridor behind it.
+    site: (s: number) => ({ n: PATH.halfWidth(s) - KIOSK_N, facing: -1 }),
+    readout,
+    source: {
+        file: 'resources/js/game/world/kiosks.ts', record: 'KIOSK_ARCHETYPES', roller: 'rollKiosk',
+        placements: 'KIOSK_PLACEMENTS', stream: 'kiosks', siteFork: 'kiosk', spans: 'KIOSK_SPANS',
+        clears: 'benches, bins and lamps on its own side; the railings run on, since a cart stands 2.3 m inside the edge',
+    },
+    built: () => kiosks(),
+    spans: KIOSK_SPANS,
+};
+
 export const KIOSK: Inspectable = {
     id: 'kiosk',
     family: 'kiosk',
@@ -56,14 +75,6 @@ export const KIOSK: Inspectable = {
     /** The seed is the paint: the form is the archetype's and never rolls. */
     stepping: 'seed',
     row: KIOSK_TYPES.length,
-    mount: (scene: THREE.Scene): Cast => new StructureCast<KioskType>(scene, {
-        control: 'type',
-        types: KIOSK_TYPES,
-        archetypes: KIOSK_ARCHETYPES,
-        roll: rollKiosk,
-        // On the +n edge, counter looking back at the centreline, at the clearance that is really
-        // setting the corridor behind it.
-        site: (s: number) => ({ n: PATH.halfWidth(s) - KIOSK_N, facing: -1 }),
-        readout,
-    }),
+    mount: (scene: THREE.Scene): Cast => new StructureCast<KioskType>(scene, KIND),
+    sites: (c: Controls): readonly Site[] => structureSites(KIND, c),
 };

@@ -90,10 +90,10 @@ const LENGTHWAYS = Math.PI / 2;
  * unrelated layers that happen to stand along the same walkway.
  */
 function shop(
-    id: ShopType, name: string, product: readonly number[], symbol: readonly Prim[], opt: { striped?: boolean } = {},
+    id: ShopType, name: string, desc: string, product: readonly number[], symbol: readonly Prim[], opt: { striped?: boolean } = {},
 ): StructureArchetype {
     return {
-        id, name,
+        id, name, desc,
         parts: [...facade(SHOP_BOX, opt.striped === true), pedestal(ROOF), ...symbol],
         /**
          * What every shop is: a building that does not move, that serves people, and that was put
@@ -253,11 +253,11 @@ export const SHOP_SYMBOLS: Record<ShopType, readonly Prim[]> = {
 };
 
 export const SHOP_ARCHETYPES: Record<ShopType, StructureArchetype> = {
-    candy: shop('candy', 'Sweet shop', SHOP.sweet, CANDY_SYMBOL, { striped: true }),
-    souvenir: shop('souvenir', 'Souvenirs', SHOP.gift, SOUVENIR_SYMBOL, { striped: true }),
-    toy: shop('toy', 'Toy shop', SHOP.block, TOY_SYMBOL),
-    clothing: shop('clothing', 'Clothing', SHOP.hat, CLOTHING_SYMBOL),
-    drinks: shop('drinks', 'Drinks', KIOSK.cup, DRINKS_SYMBOL, { striped: true }),
+    candy: shop('candy', 'Sweet shop', "A sweet shop: the shared storefront under a wrapped sweet, its wrapper twisted off both ends.", SHOP.sweet, CANDY_SYMBOL, { striped: true }),
+    souvenir: shop('souvenir', 'Souvenirs', "A souvenir shop under a gift box tied with ribbon both ways and finished with a bow.", SHOP.gift, SOUVENIR_SYMBOL, { striped: true }),
+    toy: shop('toy', 'Toy shop', "A toy shop under three building blocks, stacked and overlapping.", SHOP.block, TOY_SYMBOL),
+    clothing: shop('clothing', 'Clothing', "A clothing shop under a hat rack: a top hat, a cap and a sun hat climbing a rail.", SHOP.hat, CLOTHING_SYMBOL),
+    drinks: shop('drinks', 'Drinks', "A drinks shop under the drinks cart's cup at building scale, lid and straw included.", KIOSK.cup, DRINKS_SYMBOL, { striped: true }),
 };
 
 // ---------- where they stand ----------

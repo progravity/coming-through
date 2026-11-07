@@ -16,13 +16,13 @@
  */
 import type * as THREE from 'three';
 import { PATH } from '../../world/path.ts';
-import { SHOP_ARCHETYPES, SHOP_BOX, SHOP_SYMBOLS, SHOP_TYPES, rollShop } from '../../world/shops.ts';
+import { SHOP_ARCHETYPES, SHOP_BOX, SHOP_SPANS, SHOP_SYMBOLS, SHOP_TYPES, rollShop, shops } from '../../world/shops.ts';
 import type { ShopType } from '../../world/shops.ts';
 import { SLOTS, liveryFor } from '../../world/structure.ts';
-import type { Cast, Inspectable, Readout } from '../inspectable.ts';
+import type { Cast, Controls, Inspectable, Readout, Site } from '../inspectable.ts';
 import { EDGE_FACING } from './edge.ts';
-import { POINTS_OVERLAY, StructureCast, n2, spotRows } from './structure.ts';
-import type { Instance } from './structure.ts';
+import { POINTS_OVERLAY, StructureCast, n2, spotRows, structureSites } from './structure.ts';
+import type { Instance, StructureKind } from './structure.ts';
 
 function readout(sh: Instance<ShopType>, top: number, parts: number): Readout {
     const sol = sh.placed.solid;
@@ -48,6 +48,25 @@ function readout(sh: Instance<ShopType>, top: number, parts: number): Readout {
     };
 }
 
+/** The shops, as the structure cast and the placement view both drive them. */
+const KIND: StructureKind<ShopType> = {
+    control: 'type',
+    types: SHOP_TYPES,
+    archetypes: SHOP_ARCHETYPES,
+    roll: (arch, label) => ({ paint: rollShop(arch, label) }),
+    // Off the +n edge, storefront looking back at the centerline -- the real clearance, so the
+    // building on the stage is set back exactly as far as the building on the promenade.
+    site: (s: number) => ({ n: PATH.halfWidth(s) + SHOP_BOX.inset + SHOP_BOX.across / 2, facing: -1 }),
+    readout,
+    source: {
+        file: 'resources/js/game/world/shops.ts', record: 'SHOP_ARCHETYPES', roller: 'rollShop',
+        placements: 'SHOP_PLACEMENTS', stream: 'shops', siteFork: 'shop', spans: 'SHOP_SPANS',
+        clears: 'the railings, the furniture and the carts, across its whole frontage',
+    },
+    built: () => shops(),
+    spans: SHOP_SPANS,
+};
+
 export const SHOP: Inspectable = {
     id: 'shop',
     family: 'building',
@@ -61,14 +80,6 @@ export const SHOP: Inspectable = {
     /** The seed is the livery: the form is the archetype's and never rolls. */
     stepping: 'seed',
     row: SHOP_TYPES.length,
-    mount: (scene: THREE.Scene): Cast => new StructureCast<ShopType>(scene, {
-        control: 'type',
-        types: SHOP_TYPES,
-        archetypes: SHOP_ARCHETYPES,
-        roll: (arch, label) => ({ paint: rollShop(arch, label) }),
-        // Off the +n edge, storefront looking back at the centreline -- the real clearance, so the
-        // building on the stage is set back exactly as far as the building on the promenade.
-        site: (s: number) => ({ n: PATH.halfWidth(s) + SHOP_BOX.inset + SHOP_BOX.across / 2, facing: -1 }),
-        readout,
-    }),
+    mount: (scene: THREE.Scene): Cast => new StructureCast<ShopType>(scene, KIND),
+    sites: (c: Controls): readonly Site[] => structureSites(KIND, c),
 };

@@ -16,6 +16,11 @@ export async function startLab(lab: Lab): Promise<void> {
         await startCrowd(lab);
         return;
     }
+    if (view === 'placement') {
+        const { startPlacement } = await import('./placement.ts');
+        await startPlacement(lab);
+        return;
+    }
     const { startTurntable } = await import('../inspect/index.ts');
     await startTurntable(lab, view === 'row' ? 'row' : 'single');
 }

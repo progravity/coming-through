@@ -134,11 +134,11 @@ const disc = (colour: Prim['colour'], dy: number, d: number, up: number): Prim =
 
 /** One archetype: the shared storefront, a gabled roof, its own symbol on the ridge. */
 function restaurant(
-    id: RestaurantType, name: string, product: readonly number[], symbol: readonly Prim[],
+    id: RestaurantType, name: string, desc: string, product: readonly number[], symbol: readonly Prim[],
     opt: { striped?: boolean } = {},
 ): StructureArchetype {
     return {
-        id, name,
+        id, name, desc,
         parts: [...facade(RESTAURANT_BOX, opt.striped === true), ...ROOF, RIDGE_BOARD, ...symbol],
         /**
          * What every restaurant is: a building that does not move, that serves people, and that was
@@ -300,11 +300,11 @@ export const RESTAURANT_SYMBOLS: Record<RestaurantType, readonly Prim[]> = {
 };
 
 export const RESTAURANT_ARCHETYPES: Record<RestaurantType, StructureArchetype> = {
-    burger: restaurant('burger', 'Burger bar', RESTAURANT.bun, BURGER_SYMBOL, { striped: true }),
-    pizza: restaurant('pizza', 'Pizzeria', RESTAURANT.melt, PIZZA_SYMBOL),
-    taco: restaurant('taco', 'Taco house', RESTAURANT.shell, TACO_SYMBOL, { striped: true }),
-    noodles: restaurant('noodles', 'Noodle bar', RESTAURANT.noodleBowl, NOODLE_SYMBOL),
-    salad: restaurant('salad', 'Salad bar', RESTAURANT.saladBowl, SALAD_SYMBOL, { striped: true }),
+    burger: restaurant('burger', 'Burger bar', "A burger bar: a gabled restaurant under a burger of bun, patty, cheese, lettuce and sesame.", RESTAURANT.bun, BURGER_SYMBOL, { striped: true }),
+    pizza: restaurant('pizza', 'Pizzeria', "A pizzeria under a slice stood on its point: crust, melted cheese and three pepperoni.", RESTAURANT.melt, PIZZA_SYMBOL),
+    taco: restaurant('taco', 'Taco house', "A taco house under a folded shell with its filling spilling past both ends.", RESTAURANT.shell, TACO_SYMBOL, { striped: true }),
+    noodles: restaurant('noodles', 'Noodle bar', "A noodle bar under a deep warm bowl with a noodle mound, strands and two chopsticks.", RESTAURANT.noodleBowl, NOODLE_SYMBOL),
+    salad: restaurant('salad', 'Salad bar', "A salad bar under a wide, shallow green bowl heaped with leaves and two tomatoes.", RESTAURANT.saladBowl, SALAD_SYMBOL, { striped: true }),
 };
 
 // ---------- where they stand ----------
