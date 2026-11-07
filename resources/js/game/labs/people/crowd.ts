@@ -23,13 +23,13 @@ import { ARCH, ARCH_KEYS } from '../../archetypes.ts';
 import { parseSeed, randomSeed } from '../../core/rng.ts';
 import { MAX_CATCHUP_STEPS, SIM_DT } from '../../core/time.ts';
 import { count, n2 } from '../../inspect/describe.ts';
-import { personGeometry, personIdentity, personProvenance, personRecipe } from '../../inspect/entities/person.ts';
+import { personArchetype, personGeometry, personIdentity, personProvenance, personRecipe } from '../../inspect/entities/person.ts';
 import type { Who } from '../../inspect/entities/person.ts';
 import { InfoPanel } from '../../inspect/info.ts';
 import type { InfoRow, InfoSection, Readout } from '../../inspect/inspectable.ts';
 import { ModelCrowd } from '../../modelcrowd/crowd.ts';
 import type { Knobs } from '../../modelcrowd/crowd.ts';
-import { fetchBodyFile } from '../../modelcrowd/body.ts';
+import { drawsAsPrimitive, fetchBodyFile, modelFallback } from '../../modelcrowd/body.ts';
 import { prepareRegions } from '../../modelcrowd/regions.ts';
 import { lookNamed } from '../../render/look.ts';
 import { MODELS, fetchModel } from '../../render/model-file.ts';
@@ -309,7 +309,7 @@ export async function startCrowd(lab: Lab): Promise<void> {
         const q = new URLSearchParams();
         if (view !== null && view !== 'single') q.set('view', view);
         q.set('seed', String(state.seed));
-        if (state.source === 'model') q.set('source', 'model');
+        if (state.source === 'primitives') q.set('source', 'prim');
         location.href = `${lab.path}?${q}`;
     }
     /** The selected person on the turntable: the same seed, spawn index and archetype, and a group's outfit. */
@@ -320,7 +320,7 @@ export async function startCrowd(lab: Lab): Promise<void> {
         q.set('arch', a.type);
         // A family is dressed from one outfit the spawner chose; the turntable has to be handed it.
         if (a.group !== 0) q.set('outfit', String(a.recipe.outfit));
-        if (state.source === 'model') q.set('source', 'model');
+        if (state.source === 'primitives') q.set('source', 'prim');
         return `${lab.path}?${q}`;
     }
 
@@ -352,6 +352,7 @@ export async function startCrowd(lab: Lab): Promise<void> {
                 ['peak cell', `${s.peak} in one ${cell}×${cell} m cell · ${s.crowded} cells hold 3 or more`],
                 ['stopped', `${s.stopped} holding a stop · ${s.standing} standing still`],
                 ['contacts', `${s.contactsNow} pairs touching · ${n2(s.contactsPerSecond, 1)} new a second · ${s.contactsTotal} since the view began`],
+                ...(models === null ? [] : [['as primitives', `${models.fallback} with a mobility aid or a stroller, not yet supported on models`] as const]),
             ],
             sections: [
                 { id: 'state', title: 'Archetypes', tables: [table] },
@@ -431,11 +432,12 @@ export async function startCrowd(lab: Lab): Promise<void> {
         open.className = 'btnlink';
         selActions.append(follow, open, button('clear', () => select(-1)));
         const who = whoOf(sim.seed, a);
+        const fallback = models !== null ? modelFallback(a.recipe) : null;
         selInfo.show({
             title: a.A.name,
             sub: `seed ${sim.seed} · agent:${a.index}`,
-            rows: [],
-            sections: [stateSection(a), personIdentity(who), personRecipe(who), personGeometry(who), personProvenance(who)],
+            rows: fallback === null ? [] : [['drawn as', `${fallback}; the collider is sized for the equipment`]],
+            sections: [stateSection(a), personIdentity(who), personArchetype(who), personRecipe(who), personGeometry(who), personProvenance(who)],
         });
     }
 
@@ -532,7 +534,10 @@ export async function startCrowd(lab: Lab): Promise<void> {
         while (poses.length < agents.length) poses.push(newPose());
         for (let i = 0; i < agents.length; i++) lerpPose(poses[i], agents[i].prev, agents[i], alpha);
         if (models !== null) models.draw(agents, alpha, sim.player, pools.inkOn);
-        else for (let i = 0; i < agents.length; i++) {
+        // The primitives draw everyone under that source, and under the model source anyone whose
+        // equipment the models cannot carry yet -- exactly as the game does.
+        for (let i = 0; i < agents.length; i++) {
+            if (models !== null && !drawsAsPrimitive(agents[i].recipe)) continue;
             const p = poses[i];
             drawPerson(pools, agents[i].slot, agents[i], p, t, PATH.surfaceY(p.x, p.z));
         }

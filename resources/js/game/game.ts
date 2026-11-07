@@ -12,6 +12,8 @@ import type { Action } from './input/index.ts';
 import { KeyboardAdapter } from './input/keyboard.ts';
 import { Recorder } from './input/recorder.ts';
 import { TouchAdapter } from './input/touch.ts';
+import { drawsAsPrimitive } from './modelcrowd/body.ts';
+import { startPeople } from './modelcrowd/index.ts';
 import { drawPerson } from './render/person.ts';
 import { PartPools } from './render/pools.ts';
 import { staminaFraction, staminaState } from './sim/player.ts';
@@ -54,15 +56,16 @@ const rig = new CameraRig();
 const pools = new PartPools(world.scene);
 const debug = new DebugOverlay(ui.debugCanvas);
 /**
- * `?people=model` draws the crowd with a rigged model, and `?people=prim` keeps the primitive people;
- * either shows a cost readout. A performance experiment, kept entirely in `resources/js/game/modelcrowd/`: with no
- * `?people=` it is never loaded. The player stays a primitive person in every mode.
+ * People are drawn with models by default (`modelcrowd/`, `?model=` choosing which), and
+ * `?people=prim` keeps the primitive people. Primitives stay the fallback in every mode: for the
+ * player, for anyone whose equipment the models cannot carry yet (`drawsAsPrimitive`), and for the
+ * whole crowd if the model fails to load. The cost readout shows when asked for -- `?people=` or a
+ * stress run -- and is read by the bench scripts as `game.people` either way.
  */
 const peopleParam = params.get('people');
-const people = peopleParam === 'model' || peopleParam === 'prim'
-    ? await (await import('./modelcrowd/index.ts')).startPeople(peopleParam, world.scene, params, () => input.dispatch('toggleInk'))
-    : null;
-const modelCrowd = people?.models ?? null;
+const people = await startPeople(peopleParam === 'prim' ? 'prim' : 'model', world.scene, params,
+    () => input.dispatch('toggleInk'), peopleParam !== null || stress);
+const modelCrowd = people.models;
 
 // ---------- loop state ----------
 const IDLE = { x: 0, y: 0, mag: 0, hurry: false } as const;
@@ -114,8 +117,8 @@ const game = {
     get sim(): Simulation { return sim; },
     get recorder(): Recorder { return recorder; },
     stress: stress ? stressStats : null,
-    /** The `?people=` experiment's readout, or null without the flag. */
-    people: people?.stats ?? null,
+    /** Which renderer draws the crowd, and what it costs: the readout's numbers, shown or not. */
+    people: people.stats,
     restart: (s?: number | string): number => {
         startRun(s === undefined ? seed : typeof s === 'number' ? s >>> 0 : parseSeed(s));
         return seed;
@@ -356,8 +359,14 @@ function frame(now: number): void {
     // The crowd walks in the horizontal plane and is *draped* onto the walkway at the last
     // moment: the height under a body is a question about the path, asked of the interpolated
     // position rather than interpolated itself, so nobody floats over a crest between two steps.
-    if (modelCrowd !== null) modelCrowd.draw(sim.crowd.agents, alpha, sim.player, pools.inkOn);
-    else for (const a of sim.crowd.agents) { lerpPose(view, a.prev, a, alpha); drawPerson(pools, a.slot, a, view, t, PATH.surfaceY(view.x, view.z)); }
+    if (modelCrowd !== null) {
+        modelCrowd.draw(sim.crowd.agents, alpha, sim.player, pools.inkOn);
+        // And the people it leaves to the primitives, whose colliders their equipment sets.
+        for (const a of sim.crowd.agents) {
+            if (!drawsAsPrimitive(a.recipe)) continue;
+            lerpPose(view, a.prev, a, alpha); drawPerson(pools, a.slot, a, view, t, PATH.surfaceY(view.x, view.z));
+        }
+    } else for (const a of sim.crowd.agents) { lerpPose(view, a.prev, a, alpha); drawPerson(pools, a.slot, a, view, t, PATH.surfaceY(view.x, view.z)); }
     const p = sim.player;
     lerpPose(playerView, p.prev, p, alpha);
     playerView.camYaw = p.prevCamYaw + wrapAngle(p.camYaw - p.prevCamYaw) * alpha;
@@ -394,7 +403,7 @@ function frame(now: number): void {
         ui.fpsLine(fps, sim.crowd.agents.length, renderer.info.render.calls);
         fpsFrames = 0; fpsTime = 0;
     }
-    people?.report({
+    people.report({
         frameDt, simMs, poseMs, renderMs, calls: renderer.info.render.calls,
         triangles: renderer.info.render.triangles, people: sim.crowd.agents.length,
     });

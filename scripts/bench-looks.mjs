@@ -4,6 +4,9 @@
 //
 // Usage: npm run dev & node scripts/bench-looks.mjs [https://coming-through.test/play] [seconds]
 //        node scripts/bench-looks.mjs https://coming-through.test/play 30 --gpu
+//        node scripts/bench-looks.mjs https://coming-through.test/play 30 --prim   (primitive people)
+//
+// People are drawn with models, as the game draws them by default; --prim benches the primitives.
 //
 // `seconds` is a cap per look, not a duration: each one is read as soon as its ring holds only
 // settled frames, and the cap is what stops a slow machine running forever. Headless SwiftShader
@@ -28,6 +31,7 @@ import { spawn } from 'node:child_process';
 
 const args = process.argv.slice(2);
 const gpu = args.includes('--gpu');
+const prim = args.includes('--prim');
 const [base = 'https://coming-through.test/play', secs = gpu ? '20' : '120'] = args.filter(a => !a.startsWith('--'));
 // The game page with this query: a bare origin means its /play page, and a trailing slash is dropped.
 const gamePage = (base, query) => { const u = new URL(base); u.pathname = u.pathname === '/' ? '/play' : u.pathname.replace(/\/$/, ''); u.search = query; return u.href; };
@@ -62,7 +66,7 @@ const send = (method, params = {}, sessionId) => new Promise(r => {
 const rows = [];
 for (const look of LOOKS) {
     // A fresh target per look, so nothing a previous look left on the pools can carry over.
-    const url = gamePage(base, `stress=1&tier=high&look=${look}`);
+    const url = gamePage(base, `stress=1&tier=high&look=${look}${prim ? '&people=prim' : ''}`);
     const { result: { targetId } } = await send('Target.createTarget', { url: 'about:blank' });
     const { result: { sessionId } } = await send('Target.attachToTarget', { targetId, flatten: true });
     await send('Runtime.enable', {}, sessionId);

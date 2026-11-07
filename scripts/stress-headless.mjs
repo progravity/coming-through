@@ -1,14 +1,17 @@
 // Headless stress benchmark: opens ?stress=1 in Chrome over the DevTools protocol (plain
 // --headless --timeout only ever runs one animation frame) and prints window.game.stress.
-// Usage: npm run dev & node scripts/stress-headless.mjs [https://coming-through.test/play] [seconds]
+// Usage: npm run dev & node scripts/stress-headless.mjs [https://coming-through.test/play] [seconds] [--prim]
+// People are drawn with models, as the game draws them by default; --prim runs the primitives instead.
 // (Herd serves the page; Vite, or a prior `npm run build`, serves its scripts.)
 // Note: headless rAF runs at only a few fps under SwiftShader, so each frame does the maximum
 // catch-up steps; compare avgSimPerStepMs and avgRenderMs, not simMs per frame.
 import { spawn } from 'node:child_process';
-const [base = 'https://coming-through.test/play', secs = '60'] = process.argv.slice(2);
+const argv = process.argv.slice(2);
+const prim = argv.includes('--prim');
+const [base = 'https://coming-through.test/play', secs = '60'] = argv.filter(a => !a.startsWith('--'));
 // The game page with this query: a bare origin means its /play page, and a trailing slash is dropped.
 const gamePage = (base, query) => { const u = new URL(base); u.pathname = u.pathname === '/' ? '/play' : u.pathname.replace(/\/$/, ''); u.search = query; return u.href; };
-const url = gamePage(base, 'stress=1&tier=high');
+const url = gamePage(base, `stress=1&tier=high${prim ? '&people=prim' : ''}`);
 const CH = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const port = 9333;
 const chrome = spawn(CH, ['--headless=new', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--window-size=800,600',

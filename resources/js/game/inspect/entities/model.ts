@@ -31,25 +31,26 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { SIM_DT } from '../../core/time.ts';
+import { AGE_HEIGHT } from '../../recipe.ts';
 import type { Age } from '../../recipe.ts';
 import type { Look } from '../../render/look.ts';
 import { makeToonGradient } from '../../render/materials.ts';
 import { MODELS, MODEL_DIR as DIR, MODEL_SOURCES, fetchModel } from '../../render/model-file.ts';
 import { standingHeight } from '../../render/person.ts';
 import {
-    AGES, AGE_PRESETS, BODY_KEYS, BUILDS, BodyRig, CHILD_NOTE, LIMITS, bakeMask, buildAt, buildPosition,
-    drawnHeight, fetchBodyFile, patchFullness, shape, skinSpace,
+    AGES, BODY_KEYS, BUILDS, BodyRig, CHILD_NOTE, LIMITS, NOT_ON_MODELS, bakeMask, buildPosition,
+    drawnHeight, fetchBodyFile, modelFallback, patchFullness, shape, skinSpace,
 } from '../../modelcrowd/body.ts';
 import type { Body, BodyFile, FullnessUniforms, Limits, Shaped } from '../../modelcrowd/body.ts';
 import { falseHex, prepareRegions, recipeColours } from '../../modelcrowd/regions.ts';
 import type { RegionUniforms, Regions } from '../../modelcrowd/regions.ts';
 import { count, n2 } from '../describe.ts';
-import { defaultControls } from '../inspectable.ts';
+import { INK, RULER, defaultControls } from '../inspectable.ts';
 import type { Cast, Control, Controls, DrawnPart, InfoCell, InfoRow, InfoSection, InfoTable, Inspectable, OverlayDef, Readout } from '../inspectable.ts';
 import { disposeMarks, dot } from '../markers.ts';
 import type { Subject } from '../subject.ts';
 import {
-    COLLIDER, FACING, PERSON, PERSON_CONTROLS, PersonMarks, personGeometry, personIdentity, personRecipe, subjectFor,
+    COLLIDER, FACING, PERSON, PERSON_CONTROLS, PersonMarks, personArchetype, personGeometry, personIdentity, personRecipe, subjectFor,
 } from './person.ts';
 
 /** The clip option meaning no clip at all: the file's rest pose, which for a rig is usually a T. */
@@ -335,6 +336,8 @@ class Figure {
     readonly shaped: Shaped;
     /** Uniform scale on the root: the age height, or the crowd's own fitting with `fit` on. */
     readonly scale: number;
+    /** The recipe's own height against the model's, applied under `fit` (crowd scale) and 1 without. */
+    readonly recipeHeight: number;
     /** The torso's half width as drawn, girth and fullness both, in meters; undefined when not measurable. */
     readonly torso: number | undefined;
     readonly marks: PersonMarks;
@@ -354,7 +357,7 @@ class Figure {
         this.shaped = shape(spec.age, spec.pos, limits);
         const body = this.shaped.body;
         if (model === null) {
-            this.root = null; this.mixer = null; this.action = null; this.rig = null; this.scale = 1; this.torso = undefined;
+            this.root = null; this.mixer = null; this.action = null; this.rig = null; this.scale = 1; this.recipeHeight = 1; this.torso = undefined;
             this.missing = new THREE.LineSegments(
                 new THREE.EdgesGeometry(new THREE.BoxGeometry(MISSING.x, MISSING.y, MISSING.z)),
                 new THREE.LineBasicMaterial({ color: 0x8a8790 }),
@@ -375,6 +378,8 @@ class Figure {
         this.rig = new BodyRig(root, skinned, model.pristine);
         this.rig.apply(body);
         this.rig.pose();
+        this.recipeHeight = c.fit === true && model.restHeight > 0
+            ? standingHeight(who.recipe) / AGE_HEIGHT[who.recipe.age] / model.restHeight : 1;
         this.scale = c.fit === true && model.restHeight > 0
             ? drawnHeight(standingHeight(who.recipe), who.recipe, body) / model.restHeight
             : body.height;
@@ -417,6 +422,7 @@ class Figure {
                 for (const x of Array.isArray(want) ? want : [want]) {
                     const u = patchFullness(x);
                     u.bodyFull.value = this.shaped.body.fullness * space.height;
+                    u.bodyFace.value = this.shaped.body.face * space.height;
                     u.bodyForward.value.copy(space.forward);
                     this.full.push(u);
                 }
@@ -654,22 +660,28 @@ class ModelCast implements Cast {
             tables: [comparisonTable(name), clipTable(m), ...regionTables(m.regions), anchorTable(f.root)],
         };
         const childNote = f.spec.age === 'child' ? ` · ${CHILD_NOTE}` : '';
+        // The height, and what it is made of: the model as authored, the age, and the recipe's own.
+        const height = `${n2(m.restHeight * body.height * f.recipeHeight)} m = ${n2(m.restHeight)} base × ${n2(body.height)} ${title(f.shaped.shown)}`
+            + ` × ${n2(f.recipeHeight)} recipe height${this.c.fit === true ? '' : ' (crowd scale off)'}`;
+        const fallback = modelFallback(who.recipe);
         return {
             title: f.spec.exact === null ? name : `${f.spec.label}`,
             sub: `${name} · as ${who.arch.name} · seed ${who.seed} · agent:${who.index}`,
             rows: [
-                ['height', `${n2(top)} m tall`],
+                ['height', height],
                 ['body', `${title(f.shaped.shown)}${f.spec.age === 'child' ? ' (for a child)' : ''} · ${buildLabel(f.spec)}`],
+                ...(fallback === null ? [] : [['in the game', `${fallback}; its collider is sized for the equipment`] as const]),
                 ['clip', playing],
                 ['mesh', `${count(m.triangles)} triangles · ${m.bones} bones`],
                 ...(f.shaped.held.length > 0 ? [['held back', f.shaped.held.map(h => h.key).join(', ')] as const] : []),
             ],
-            line: `${f.spec.label} · w ${n2(body.width)} · full ${n2(body.fullness * 100, 1)}%${f.shaped.held.length > 0 ? ' · held' : ''}${childNote === '' ? '' : ' · teen body'}`,
+            line: `${f.spec.label} · ${n2(m.restHeight * body.height * f.recipeHeight)} m · w ${n2(body.width)} · full ${n2(body.fullness * 100, 1)}%${f.shaped.held.length > 0 ? ' · held' : ''}${childNote === '' ? '' : ' · teen body'}`,
             sections: [
                 personIdentity(who),
+                personArchetype(who),
                 bodySection(f, who, top),
                 personRecipe(who, this.c.recolour === true ? 'The model is painted in these colors through its role file.' : 'Recipe colors are off: the model shows its own texture.'),
-                personGeometry(who, { top, ...(f.torso === undefined ? {} : { torso: f.torso }) }),
+                personGeometry(who, { top, height, ...(f.torso === undefined ? {} : { torso: f.torso }) }),
                 model,
                 provenance,
                 {
@@ -709,19 +721,14 @@ function buildLabel(spec: Spec): string {
 }
 
 const fmt = (k: keyof Body, v: number, height: number): string =>
-    k === 'fullness' ? `${n2(v * 100, 1)}% · ${n2(v * height * 100, 1)} cm`
+    k === 'fullness' || k === 'face' ? `${n2(v * 100, k === 'face' ? 2 : 1)}% · ${n2(v * height * 1000, 0)} mm`
     : k === 'stoop' ? `${n2(v * 180 / Math.PI, 1)}°`
     : `×${n2(v)}`;
 
 /** The body this figure wears: what the presets asked for, what the limits allowed, and where it came from. */
 function bodySection(f: Figure, who: Subject, top: number): InfoSection {
     const m = f.model as Model;
-    const asked = { ...AGE_PRESETS[f.shaped.shown] };
-    const build = buildAt(f.spec.pos);
-    const wanted: Record<keyof Body, number> = {
-        height: asked.height, width: build.width * asked.width, shoulders: build.shoulders * asked.shoulders, limbs: build.limbs,
-        fullness: build.fullness, head: asked.head, legs: asked.legs, stoop: asked.stoop,
-    };
+    const wanted = f.shaped.wanted;
     const held = new Set(f.shaped.held.map(h => h.key));
     const own = new Set(m.body.overridden);
     const rows: (readonly InfoCell[])[] = BODY_KEYS.map(k => {
@@ -875,10 +882,15 @@ export const MODEL: Inspectable = {
         // Scaled to the recipe's standing height, as the model crowd scales a clone.
         { kind: 'toggle', id: 'fit', label: 'crowd scale', value: false, key: 'k', rebuilds: true },
         ...compareControls,
-        PERSON_CONTROLS.arch, PERSON_CONTROLS.age, PERSON_CONTROLS.build, mobility,
+        PERSON_CONTROLS.arch, PERSON_CONTROLS.age, PERSON_CONTROLS.build,
+        // Listed and greyed rather than hidden: the panel is also the list of what models still lack.
+        { ...mobility, disabled: `mobility aids: ${NOT_ON_MODELS}` },
+        { kind: 'toggle', id: 'accessories', label: 'accessories', value: false, disabled: `hats, glasses, bags and carried things: ${NOT_ON_MODELS}` },
         PERSON_CONTROLS.agent, PERSON_CONTROLS.outfit,
     ],
     overlays: MODEL_OVERLAYS,
+    // A model has meshes, not the primitives' parts: no part gizmos, no part origins.
+    universal: [INK, RULER],
     // Seeds browse the game's people; `C` already cycles the clips.
     stepping: 'seed',
     /** The model, then the same recipe as primitives beside it: the row's default, `compare=source`. */

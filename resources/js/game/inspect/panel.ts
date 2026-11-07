@@ -187,7 +187,17 @@ export class Panel {
 
         const options = document.createElement('div');
         options.className = 'row';
+        /** What this source cannot do yet: listed, greyed, and said why, rather than hidden. */
+        const missing = document.createElement('div');
+        missing.className = 'row missing';
         for (const c of e.controls) {
+            if (c.disabled !== undefined) {
+                const b = button(c.label, () => {});
+                b.disabled = true;
+                b.title = c.disabled;
+                missing.append(b);
+                continue;
+            }
             if (c.kind === 'enum') {
                 const seg = segmented(c.options, v => this.h.setControl(c.id, v));
                 this.enums.set(c.id, seg);
@@ -198,6 +208,13 @@ export class Panel {
                 options.appendChild(b);
             }
         }
+        if (missing.childElementCount > 0) {
+            const why = [...new Set(e.controls.flatMap(c => (c.disabled === undefined ? [] : [c.disabled])))];
+            const note = document.createElement('p');
+            note.className = 'hint';
+            note.textContent = why.join(' · ');
+            this.dyn.append(label('not yet available'), missing, note);
+        }
         // The turntable's own pause sits with the entity's toggles, because that is where the eye
         // looks for it -- it is the shell's button in the entity's row.
         options.appendChild(this.pauseBtn);
@@ -205,11 +222,11 @@ export class Panel {
 
         const numbers = document.createElement('div');
         numbers.className = 'row nums';
-        for (const c of e.controls) if (c.kind === 'number') numbers.appendChild(this.numberBox(c));
+        for (const c of e.controls) if (c.kind === 'number' && c.disabled === undefined) numbers.appendChild(this.numberBox(c));
         if (numbers.childElementCount > 0) this.dyn.append(numbers);
 
         for (const c of e.controls) {
-            if (c.kind !== 'scalar') continue;
+            if (c.kind !== 'scalar' || c.disabled !== undefined) continue;
             const el = document.createElement('input');
             el.type = 'range'; el.min = '0'; el.max = '1000'; el.value = String(Math.round(c.value * 1000));
             el.setAttribute('aria-label', c.label);
@@ -361,6 +378,7 @@ function shutOnHeading(card: HTMLElement, toggle: () => void): void {
 function keysFor(e: Inspectable): string {
     const bits = ['[ ] next', '← → turn', 'space pause', 'wheel zoom', 'shift-drag pan', '0 reset view', 'L look'];
     for (const c of e.controls) {
+        if (c.disabled !== undefined) continue;
         // A scalar names two nudge keys where every other kind names one; it has no `key` at all.
         if (c.kind === 'scalar') {
             if (c.keys !== undefined) bits.push(`${c.keys.join(' ')} ${c.label}`);

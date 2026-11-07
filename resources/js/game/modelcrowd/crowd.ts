@@ -1,7 +1,7 @@
 /**
- * The crowd drawn as clones of one rigged model instead of the primitive people. **An experiment
- * behind `?people=model`, here to measure what a modeled crowd costs, not a feature.** Delete
- * `resources/js/game/modelcrowd/` and the lines in `game.ts` that name it, and the game is what it was.
+ * The crowd drawn as clones of one rigged model: **the default way people are drawn**. The primitive
+ * people remain the fallback -- `?people=prim` for the whole crowd, and always for the player and for
+ * anyone with a mobility aid or a stroller, which models cannot carry yet (`drawsAsPrimitive`).
  *
  * It reads the same interpolated pose the primitive renderer reads and writes nothing back, so it
  * can move neither determinism hash. The simulation never imports it.
@@ -29,7 +29,7 @@ import type { Agent } from '../sim/agent.ts';
 import { lerpPose, newPose } from '../sim/pose.ts';
 import { MAX } from '../world/layout.ts';
 import { PATH } from '../world/path.ts';
-import { BodyRig, LIMITS, bakeMask, drawnHeight, patchFullness, shapeRecipe } from './body.ts';
+import { BodyRig, LIMITS, bakeMask, drawnHeight, drawsAsPrimitive, patchFullness, shapeRecipe } from './body.ts';
 import type { BodyFile, FullnessUniforms, Limits } from './body.ts';
 import { recipeColours } from './regions.ts';
 import type { RegionPaint, RegionUniforms } from './regions.ts';
@@ -126,6 +126,11 @@ export class ModelCrowd {
     readonly clips: string;
     /** People whose skeleton was evaluated in the last `draw`. */
     animated = 0;
+    /**
+     * People in the last `draw` this renderer left to the primitives: anyone with a mobility aid or a
+     * stroller, which models cannot carry yet (`modelFallback`). The caller draws them.
+     */
+    fallback = 0;
     /** People drawn in the last frame, and ink shells drawn, counted by the renderer as it drew them. */
     bodyDraws = 0;
     inkDraws = 0;
@@ -242,11 +247,13 @@ export class ModelCrowd {
         this.bodyDraws = 0; this.inkDraws = 0;
         const k = this.knobs, view = this.view, frame = this.frame++;
         const far2 = k.far * k.far, every = Math.max(1, Math.round(k.every));
-        let animated = 0;
+        let animated = 0, fallback = 0;
         for (const s of this.slots) s.used = false;
         for (const a of agents) {
             const s = this.slots[a.slot];
             if (s === undefined) continue;
+            // Equipment the model cannot carry: left to the primitives, whose collider it matches.
+            if (drawsAsPrimitive(a.recipe)) { fallback++; continue; }
             s.used = true;
             lerpPose(view, a.prev, a, alpha);
             if (s.recipe !== a.recipe) this.dress(s, a.recipe);
@@ -279,6 +286,7 @@ export class ModelCrowd {
             if (!s.used && s.group.visible) { s.group.visible = false; s.recipe = null; }
         }
         this.animated = animated;
+        this.fallback = fallback;
     }
 
     /**
@@ -293,6 +301,8 @@ export class ModelCrowd {
         s.shape.apply(body);
         // Fullness is a fraction of height; the skinned vertices come out in the model's own units.
         s.full.bodyFull.value = s.inkFull.bodyFull.value = body.fullness * this.height;
+        s.full.bodyFace.value = s.inkFull.bodyFace.value = body.face * this.height;
         s.group.scale.setScalar(drawnHeight(standingHeight(r), r, body) / this.height);
     }
 }
+

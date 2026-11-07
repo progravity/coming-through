@@ -42,7 +42,8 @@ export interface Lab extends Scope {
 const entitiesOf = (c: Category): Inspectable[] => ENTITIES.filter(e => CATEGORY_OF[e.family] === c);
 
 export const LABS: Readonly<Record<Category, Lab>> = {
-    people: { id: 'people', title: 'People', path: `${LAB_ROOT}/people`, entities: entitiesOf('people'), views: ['single', 'row', 'crowd'] },
+    // Models are the default way people are drawn, so the people lab opens on its model source.
+    people: { id: 'people', title: 'People', path: `${LAB_ROOT}/people`, entities: entitiesOf('people'), views: ['single', 'row', 'crowd'], prefersModel: true },
     fixtures: { id: 'fixtures', title: 'Fixtures', path: `${LAB_ROOT}/fixtures`, entities: entitiesOf('fixtures'), views: ['single', 'row', 'placement'] },
     buildings: { id: 'buildings', title: 'Buildings', path: `${LAB_ROOT}/buildings`, entities: entitiesOf('buildings'), views: ['single', 'row', 'placement'] },
 };

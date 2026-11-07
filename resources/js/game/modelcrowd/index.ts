@@ -1,8 +1,9 @@
 /**
- * `?people=model` and `?people=prim`: which renderer draws the crowd, and an on-screen readout of
- * what it costs. **Part of a performance experiment**; see `crowd.ts`. `prim` is the shipped
- * primitive people with the same readout, so the two can be compared on one device at one crowd
- * size. With no `?people=` none of this is loaded.
+ * Which renderer draws the crowd, and an optional on-screen readout of what it costs. **Models are
+ * the default** (`?model=` picks the file, `casual-man` when it says nothing); `?people=prim` keeps
+ * the primitive people, which stay the fallback for the player, for anyone whose equipment a model
+ * cannot carry yet, and for everyone if the model fails to load. The readout shows under `?people=`
+ * or a stress run, so the two can be compared on one device at one crowd size.
  *
  * Knobs, all live: `O` (or the Ink button) is the game's own ink switch and the model follows it;
  * `L` (or the Throttle button) animates far people less often, with the distance and the interval
@@ -47,6 +48,8 @@ export interface PeopleStats {
     colours: string;
     /** The model's body type, from its body file; every clone's age and build come from its recipe. */
     body: string;
+    /** People the model renderer left to the primitives last frame: mobility aids and strollers. */
+    fallback: number;
     /** Last frame. */
     animated: number;
     bodyDraws: number;
@@ -73,7 +76,11 @@ const num = (v: string | null, fallback: number): number => {
     return v !== null && v !== '' && Number.isFinite(n) && n > 0 ? n : fallback;
 };
 
-export async function startPeople(mode: PeopleMode, scene: THREE.Scene, params: URLSearchParams, toggleInk: () => void): Promise<People> {
+/**
+ * @param readout Whether to put the cost readout on screen. The stats are kept either way, for
+ *   `game.people`; a normal run simply does not show them.
+ */
+export async function startPeople(mode: PeopleMode, scene: THREE.Scene, params: URLSearchParams, toggleInk: () => void, readout = true): Promise<People> {
     const knobs: Knobs = {
         ink: false,
         throttle: params.get('throttle') === '1',
@@ -82,7 +89,7 @@ export async function startPeople(mode: PeopleMode, scene: THREE.Scene, params: 
     };
     const stats: PeopleStats = {
         renderer: 'primitives', model: null, error: null, ink: false, throttle: knobs.throttle, far: knobs.far, every: knobs.every,
-        trisPerModel: 0, bones: 0, clips: '', colours: '', body: '', animated: 0, bodyDraws: 0, inkDraws: 0, calls: 0, triangles: 0, people: 0,
+        trisPerModel: 0, bones: 0, clips: '', colours: '', body: '', fallback: 0, animated: 0, bodyDraws: 0, inkDraws: 0, calls: 0, triangles: 0, people: 0,
         fps: 0, frameMs: 0, simMs: 0, poseMs: 0, renderMs: 0,
     };
     let models: ModelCrowd | null = null;
@@ -105,10 +112,10 @@ export async function startPeople(mode: PeopleMode, scene: THREE.Scene, params: 
             console.warn(`?people=model fell back to the primitive people: ${stats.error}`);
         }
     }
-    const panel = new Panel(stats, models !== null, toggleInk, () => setThrottle(!knobs.throttle), (far, every) => {
+    const panel = readout ? new Panel(stats, models !== null, toggleInk, () => setThrottle(!knobs.throttle), (far, every) => {
         knobs.far = far; knobs.every = every; stats.far = far; stats.every = every;
-    });
-    function setThrottle(on: boolean): void { knobs.throttle = on; stats.throttle = on; panel.sync(); }
+    }) : null;
+    function setThrottle(on: boolean): void { knobs.throttle = on; stats.throttle = on; panel?.sync(); }
     if (models !== null) {
         addEventListener('keydown', e => {
             if (e.code !== 'KeyL' || e.repeat || e.target instanceof HTMLInputElement) return;
@@ -125,12 +132,15 @@ export async function startPeople(mode: PeopleMode, scene: THREE.Scene, params: 
             frames++; time += f.frameDt; sim += f.simMs; pose += f.poseMs; render += f.renderMs;
             stats.calls = f.calls; stats.triangles = f.triangles; stats.people = f.people;
             stats.ink = models !== null ? knobs.ink : stats.ink;
-            if (models !== null) { stats.animated = models.animated; stats.bodyDraws = models.bodyDraws; stats.inkDraws = models.inkDraws; }
+            if (models !== null) {
+                stats.animated = models.animated; stats.bodyDraws = models.bodyDraws; stats.inkDraws = models.inkDraws;
+                stats.fallback = models.fallback;
+            }
             if (time < 0.5) return;
             stats.fps = frames / time; stats.frameMs = (time / frames) * 1000;
             stats.simMs = sim / frames; stats.poseMs = pose / frames; stats.renderMs = render / frames;
             frames = 0; time = 0; sim = 0; pose = 0; render = 0;
-            panel.show();
+            panel?.show();
         },
     };
 }
@@ -197,6 +207,7 @@ class Panel {
             lines.push(`animated ${s.animated} · drawn ${s.bodyDraws} bodies + ${s.inkDraws} ink`);
             lines.push(`colours: ${s.colours}`);
             lines.push(`bodies: ${s.body}`);
+            lines.push(`as primitives: ${s.fallback} (mobility aids and strollers, not yet supported on models)`);
         }
         this.text.textContent = lines.join('\n');
     }

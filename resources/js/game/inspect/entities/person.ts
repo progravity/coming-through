@@ -14,10 +14,12 @@
  * already in hand moves. `tests/js/inspect.test.ts` is what holds that.
  */
 import * as THREE from 'three';
-import { ARCH, ARCH_KEYS } from '../../archetypes.ts';
+import { AGE_MIX_DEFAULT, AID_DEFAULT, ARCH, ARCH_KEYS } from '../../archetypes.ts';
 import type { ArchKey, Archetype } from '../../archetypes.ts';
 import { OUTFITS, PALETTE } from '../../palette.ts';
+import { AGES, AGE_HEIGHT } from '../../recipe.ts';
 import type { Recipe } from '../../recipe.ts';
+import type { Range } from '../../util.ts';
 import type { Look } from '../../render/look.ts';
 import { drawPerson, eyeHeight, standingHeight } from '../../render/person.ts';
 import { PER } from '../../render/pools.ts';
@@ -100,6 +102,70 @@ export function personIdentity(w: Who): InfoSection {
 }
 
 const yesNo = (b: boolean): string => (b ? 'yes' : 'no');
+const pct = (v: number): string => `${Math.round(v * 1000) / 10}%`;
+const range = (r: Range, unit = ''): string => (typeof r === 'number' ? `${r}${unit}` : `${r[0]}–${r[1]}${unit}`);
+const title = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+
+/**
+ * What one archetype decides, in two groups: how its people **behave** -- read by the simulation --
+ * and how they **look** -- read by the recipe. An archetype bundles both, and this is the place to
+ * see which half a number belongs to. Read off `ARCH` as authored, without the lab's overrides,
+ * so it shows the archetype rather than this one person.
+ */
+export function personArchetype(w: Who): InfoSection {
+    const A = ARCH[w.type], L = A.look;
+    const total = ARCH_KEYS.reduce((t, k) => t + ARCH[k].weight, 0);
+    // An adult's stature from the height multiplier, at this person's own skeleton-and-head unit.
+    const unit = standingHeight(w.recipe) / w.recipe.h;
+    const h = typeof L.h === 'number' ? [L.h, L.h] : L.h;
+    const counts = new Map<string, number>();
+    for (const a of L.acc) counts.set(a, (counts.get(a) ?? 0) + 1);
+    const acc = [...counts].map(([a, n]) => `${a} ${Math.round((n / L.acc.length) * 100)}%`).join(', ');
+    const ages = L.age ?? AGE_MIX_DEFAULT, aid = L.aid ?? AID_DEFAULT;
+    const behavior: [string, string][] = [
+        ['spawns', `${A.weight} in ${total} of the crowd (${pct(A.weight / total)})`],
+        ['speed', `${range(A.speed, ' m/s')}, before age and mobility`],
+        ['acceleration', `${A.accel} m/s²`],
+        ['weaving', A.wander === 0 ? 'holds its line' : `drifts ×${A.wander} toward a new lane every ${range(A.wanderEvery, ' s')}`],
+        ['separation', `keeps ${A.sepR} m from others, at weight ${A.sepW}`],
+        ['avoids you', `×${A.avoidPlayer}${A.avoidPlayer < 0.3 ? ' (barely)' : A.avoidPlayer >= 1 ? ' (fully)' : ''}`],
+        ['stops', A.stopEvery !== undefined && A.stopFor !== undefined ? `every ${range(A.stopEvery, ' s')}, for ${range(A.stopFor, ' s')}` : 'never'],
+        ['group', A.group !== undefined ? `${range(A.group)} together, ${A.spacing ?? 1} m apart, abreast`
+            : A.parentType !== undefined ? `walks with a ${ARCH[A.parentType].name} parent` : 'walks alone'],
+        ['collider', `r ${A.radius} m${A.colOffset !== undefined ? `, ${A.colOffset} m ahead (the stroller)` : ''}, before mobility`],
+    ];
+    const appearance: [string, string][] = [
+        ['color family', `${L.palette}${L.sameOutfit === true ? ' · one outfit for the whole group' : ''}`],
+        ['age', AGES.map((a, i) => `${a} ${pct(ages[i] / ages.reduce((x, y) => x + y, 0))}`).join(', ')],
+        ['height', `h ${range(L.h)}: about ${n2(h[0] * unit)}–${n2(h[1] * unit)} m as an adult`],
+        ['width', `×${L.w ?? 1}`],
+        ['accessories', acc],
+        ['hat', `${pct(L.hat)}${L.hatType !== undefined ? `, always a ${L.hatType}` : ''}`],
+        ['mobility aid', `cane ${pct(aid.cane)}, wheelchair ${pct(aid.wheelchair)}, scooter ${pct(aid.scooter)}, before age`],
+        ['also', [
+            `glasses ${pct(L.glasses ?? 0.18)}`, `beard ${pct(L.beard ?? 0.2)}`, `ponytail ${pct(L.ponytail ?? 0.22)}`,
+            `jacket ${pct(L.jacket ?? 0.3)}`, `shorts ${pct(L.shorts ?? 0.28)}`, `bag ${pct(L.bag ?? 0.2)}`,
+        ].join(', ')],
+        ['gait', [`stride ×${L.stride ?? 1}`, `cadence ×${L.cadence ?? 1}`, `bob ×${L.bob ?? 1}`, ...(L.headPitch !== undefined ? [`head down ${L.headPitch} rad`] : [])].join(', ')],
+    ];
+    return {
+        id: 'archetype', title: `Archetype: ${A.name}`,
+        tables: [
+            { caption: 'Behavior: what the simulation reads', columns: ['', ''], rows: behavior },
+            { caption: 'Appearance: what the recipe rolls from', columns: ['', ''], rows: appearance },
+        ],
+        note: `${A.desc}. ARCH.${w.type} in archetypes.ts; the lab's age, build and mobility buttons edit a copy, never this.`,
+    };
+}
+
+/**
+ * A primitive person's height, and what it is made of: the skeleton with this head on it, the
+ * height roll, and the age's own share.
+ */
+export function primitiveHeight(r: Recipe): string {
+    const unit = standingHeight(r) / r.h, age = AGE_HEIGHT[r.age], roll = r.h / age;
+    return `${n2(standingHeight(r))} m = ${n2(unit)} skeleton × ${n2(roll)} height roll × ${n2(age)} ${title(r.age)}`;
+}
 
 /** Every rolled value, with the seed and the fork that rolled it. */
 export function personRecipe(w: Who, note = ''): InfoSection {
@@ -139,10 +205,11 @@ export function personRecipe(w: Who, note = ''): InfoSection {
  * The body the crowd steers, beside the body that is drawn: the collider against what the eye
  * sees, which is the "known gap" in CLAUDE.md made visible per person.
  */
-export function personGeometry(w: Who, measured: { top?: number; torso?: number; widest?: number } = {}): InfoSection {
+export function personGeometry(w: Who, measured: { top?: number; torso?: number; widest?: number; height?: string } = {}): InfoSection {
     const r = w.recipe;
     const rows: InfoRow[] = [
-        { k: 'height', v: `${n2(standingHeight(r))} m standing${measured.top !== undefined ? ` · ${n2(measured.top)} m drawn` : ''}` },
+        { k: 'height', v: measured.height ?? primitiveHeight(r) },
+        ...(measured.top !== undefined ? [{ k: 'drawn', v: `${n2(measured.top)} m to the top of everything, hat included` }] : []),
         { k: 'eye', v: `${n2(eyeHeight(r))} m` },
         { k: 'collider', v: `circle · r ${n2(w.r, 3)} m${w.colOff !== 0 ? ` · ${n2(w.colOff)} m ahead of the body` : ''}` },
         { k: 'separation', v: `r ${n2(w.sepR)} m · weight ${n2(w.arch.sepW)}` },
@@ -386,7 +453,7 @@ class PersonCast implements Cast {
             rows: [
                 ['age', `${r.age}`],
                 ['outfit', OUTFITS[r.outfit].name],
-                ['height', `${n2(top)} m tall`],
+                ['height', primitiveHeight(r)],
                 ['mobility', `${r.mobility}${r.seated ? ' · seated' : ''}`],
                 ['pace', pace],
                 ['parts', on.join(', ')],
@@ -395,6 +462,7 @@ class PersonCast implements Cast {
             line: `${OUTFITS[r.outfit].name} · ${r.age}${aid} · ${top.toFixed(2)}m`,
             sections: [
                 personIdentity(s),
+                personArchetype(s),
                 personRecipe(s, outfit >= 0 ? `Dressed from outfit #${outfit}, as the spawner dresses a whole group from one.` : ''),
                 personGeometry(s, { top, ...widths }),
                 personProvenance(s),

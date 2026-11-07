@@ -2,6 +2,8 @@
 // The browser's renderMs mixes this with whatever the driver is doing, which under headless
 // SwiftShader is most of the number; this isolates the part that a real GPU will not help with.
 // Usage: node scripts/bench-pose.mjs [crowd] [frames]
+// Primitives only, by nature: it times `drawPerson` into the instance pools, which is the fallback
+// path now that models are the default. The model renderer's CPU cost is `pose` in bench-people.mjs.
 import * as THREE from 'three';
 import { drawPerson } from '../resources/js/game/render/person.ts';
 import { PartPools } from '../resources/js/game/render/pools.ts';

@@ -21,9 +21,10 @@ import type { Lab, LabView } from '../labs/labs.ts';
 import { LOOK_NAMES, lookNamed } from '../render/look.ts';
 import { count as countOf, meshCost } from './describe.ts';
 import { PartGizmos, measure, newBounds } from './gizmos.ts';
-import { GIZMOS, INK, ORIGINS, controlOf, findKey, rowCount } from './inspectable.ts';
+import { GIZMOS, INK, ORIGINS, RULER, controlOf, findKey, rowCount } from './inspectable.ts';
 import type { ControlValue, Controls, DrawnPart, Inspectable, Readout } from './inspectable.ts';
 import { Panel } from './panel.ts';
+import { HeightRulers } from './ruler.ts';
 import { byId, modelOf } from './registry.ts';
 import { REST, Stage, ZOOM_STEP, clampView, zoomAt } from './stage.ts';
 import type { Extent } from './stage.ts';
@@ -53,7 +54,7 @@ function carried(from: Controls, to: Inspectable): Controls {
     const out: Controls = {};
     for (const c of to.controls) {
         const v = from[c.id];
-        if (v === undefined || v === c.value) continue;
+        if (v === undefined || v === c.value || c.disabled !== undefined) continue;
         if (c.kind === 'enum' && typeof v === 'string' && c.options.includes(v)) out[c.id] = v;
         else if (c.kind === 'toggle' && typeof v === 'boolean') out[c.id] = v;
         else if ((c.kind === 'scalar' || c.kind === 'number') && typeof v === 'number') out[c.id] = v;
@@ -78,6 +79,7 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
     const stage = new Stage();
     const cast = entity.mount(stage.scene);
     const gizmos = new PartGizmos(stage.scene);
+    const rulers = new HeightRulers(stage.scene);
     const bounds = newBounds();
 
     let xs: number[] = [];
@@ -175,6 +177,7 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
         if (p.overlays !== undefined) {
             state.overlays = p.overlays;
             gizmos.setVisible(state.overlays.has(GIZMOS), state.overlays.has(ORIGINS));
+            rulers.setVisible(state.overlays.has(RULER));
             cast.overlays(state.overlays);
         }
         // Reconciling the button belongs here rather than in `dressAll`, which a rebuild also calls:
@@ -400,6 +403,7 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
 
     // ---------- start ----------
     gizmos.setVisible(state.overlays.has(GIZMOS), state.overlays.has(ORIGINS));
+    rulers.setVisible(state.overlays.has(RULER));
     cast.overlays(state.overlays);
     // No dressing here: `rebuild` does it, along with re-asserting these overlays over the top. The
     // URL's `look` and its `ink` are two statements of equal standing and the button is the more
@@ -439,9 +443,12 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
             measure(parts, 0, parts.length, bounds);
             stage.setShadow(i, bounds.footMinX, bounds.footMaxX, bounds.footMinZ, bounds.footMaxZ);
             if (bounds.maxY > tops[i] + 1e-4) { tops[i] = bounds.maxY; needsReadout = true; }
+            // Labels sized off the tallest thing in the row, so a row of carts reads as well as one of people.
+            if (state.overlays.has(RULER)) rulers.set(i, xs[i] ?? 0, tops[i], extents[i]?.radius ?? 0.3, Math.max(1, Math.max(...tops) / 2));
             if (showGizmos) for (const p of parts) scratch.push(p);
         }
         stage.trimShadows(n);
+        rulers.trim(n);
         gizmos.update(scratch, scratch.length);
 
         if (needsReadout) {

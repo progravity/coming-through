@@ -38,7 +38,12 @@ export type { Family };
  * change has to build a new person, a `walk` toggle must not, and dragging a slider certainly must
  * not build seven of them a frame.
  */
-export type Control =
+/**
+ * Every control may be **disabled with a reason**: still listed, never changeable, and its reason
+ * shown beside it. A source that cannot do something yet says so in place, so the panel doubles as
+ * the list of what it still lacks. A disabled control keeps its default whatever an address says.
+ */
+export type Control = (
     | {
         kind: 'enum'; id: string; label: string;
         options: readonly string[]; value: string;
@@ -76,7 +81,8 @@ export type Control =
          */
         kind: 'number'; id: string; label: string; value: number; min: number; max: number;
         rebuilds?: boolean;
-    };
+    }
+) & { disabled?: string };
 
 export type ControlValue = string | number | boolean;
 /** Whatever the controls currently say, keyed by control id. */
@@ -93,7 +99,7 @@ export interface OverlayDef { id: string; label: string; key?: string; on?: bool
  * section ids are the shared headings, in the order a reader looks for them; an entity fills in the
  * ones it has something to say under and leaves the rest out.
  */
-export type SectionId = 'identity' | 'recipe' | 'geometry' | 'model' | 'state' | 'provenance' | 'cost';
+export type SectionId = 'identity' | 'archetype' | 'recipe' | 'geometry' | 'model' | 'state' | 'provenance' | 'cost';
 
 /** One line of a section. `v` is plain text; `color` adds a swatch, `tags` a row of chips. */
 export interface InfoRow {
@@ -185,15 +191,18 @@ export interface DrawnPart { readonly matrix: THREE.Matrix4; readonly color: num
  * The overlays the shell owns and every entity gets for nothing.
  *
  * `gizmos` is the bounding boxes, under the id the part gizmos always had, so `?gizmos=1` still
- * opens them; the origin crosses that used to come with them are their own switch now.
+ * opens them; the origin crosses that used to come with them are their own switch now. `ruler` is
+ * a height ruler behind each exhibit, its measured height labeled at the top.
  */
 export const GIZMOS = 'gizmos';
 export const ORIGINS = 'origins';
 export const INK = 'ink';
+export const RULER = 'ruler';
 export const UNIVERSAL: readonly OverlayDef[] = [
     { id: GIZMOS, label: 'bounding boxes', key: 'g' },
     { id: ORIGINS, label: 'part origins', key: 'x' },
     { id: INK, label: 'ink', key: 'o', on: true },
+    { id: RULER, label: 'height ruler', key: 'e', on: true },
 ];
 
 /**
@@ -252,6 +261,11 @@ export interface Inspectable {
     /** Beyond the universal ones. */
     overlays: readonly OverlayDef[];
     /**
+     * Which of the universal overlays this entity offers, by id, when not all of them: a model has
+     * no parts for part gizmos to mark, so it leaves those out. Omitted, it offers every one.
+     */
+    universal?: readonly string[];
+    /**
      * What next/prev browses: a fresh seed, or the next value of the named enum control. This is
      * "a count, or open-ended stepping" as one field, and it is why no variation index exists.
      */
@@ -293,8 +307,9 @@ export function defaultControls(e: Inspectable): Controls {
     return c;
 }
 
-/** Everything the panel offers for `e`: the universal overlays first, then its own. */
-export const overlaysOf = (e: Inspectable): readonly OverlayDef[] => [...UNIVERSAL, ...e.overlays];
+/** Everything the panel offers for `e`: the universal overlays it takes first, then its own. */
+export const overlaysOf = (e: Inspectable): readonly OverlayDef[] =>
+    [...UNIVERSAL.filter(o => e.universal === undefined || e.universal.includes(o.id)), ...e.overlays];
 
 export function defaultOverlays(e: Inspectable): Set<string> {
     const on = new Set<string>();
@@ -338,6 +353,7 @@ export type KeyHit =
 export function findKey(e: Inspectable, key: string): KeyHit | undefined {
     const k = key.toLowerCase();
     for (const c of e.controls) {
+        if (c.disabled !== undefined) continue;
         if (c.kind === 'scalar') {
             if (c.keys === undefined) continue;
             if (key === c.keys[0]) return { kind: 'nudge', control: c, delta: -1 };

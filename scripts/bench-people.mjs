@@ -2,7 +2,10 @@
 // (for the model) the animation throttle on and off, each as its own ?stress=1&crowd=N run.
 //
 // Usage: npm run dev & node scripts/bench-people.mjs [https://coming-through.test/play] [capSeconds]
-//        node scripts/bench-people.mjs https://coming-through.test/play 30 --gpu --sizes=60,190 --only=model
+//        node scripts/bench-people.mjs https://coming-through.test/play 30 --gpu --sizes=60,190 --only=both
+//
+// Models only by default, the way the game draws people; --only=prim runs the primitives alone and
+// --only=both sweeps the two side by side for comparison.
 //        node scripts/bench-people.mjs https://coming-through.test/play 45 --model=casual-man-low   (a name in MODELS)
 //
 // Each run waits for a few settling frames, then averages over the frames that follow, read off the
@@ -26,7 +29,7 @@ const [base = 'https://coming-through.test/play', secs = '60'] = args.filter(a =
 // The game page with this query: a bare origin means its /play page, and a trailing slash is dropped.
 const gamePage = (base, query) => { const u = new URL(base); u.pathname = u.pathname === '/' ? '/play' : u.pathname.replace(/\/$/, ''); u.search = query; return u.href; };
 const sizes = (opt('sizes') ?? '40,60,80,120,190').split(',').map(Number);
-const only = opt('only');
+const only = opt('only') ?? 'model';
 const model = opt('model');
 
 const runs = [];

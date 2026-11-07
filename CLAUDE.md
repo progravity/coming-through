@@ -30,7 +30,7 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   incoming connections for `php` and `node` the first time. Two dev servers for one checkout fight
   over `public/hot`, which is why the other one has to stop.
 - **Tests:** `npm test` type-checks the engine and its tests, runs the Math.random check, and then
-  runs everything under `tests/js/` with `node --test` (249 tests). `npm run lint` is the first two
+  runs everything under `tests/js/` with `node --test` (253 tests). `npm run lint` is the first two
   on their own. `composer test` is the Laravel side: Pint, PHPStan and Pest (`tests/Feature/`,
   `tests/Unit/`), against SQLite in memory. Both are plain commands and both must pass.
 - **Node is pinned to 26.13.0** in `.nvmrc` (and `^26.13.0` in `package.json` `engines`). Herd's
@@ -180,14 +180,14 @@ The engine:
   `redirect.ts`, `dom.ts`, and one directory per lab holding its entry; `people/` also holds the crowd
   view. The files at the top of `labs/` are shell, like the inspector's: they reach the registry and
   the interface and never an entity, which `tests/js/labs.test.ts` checks. See "The labs" below.
-- `resources/js/game/modelcrowd/` — **a performance experiment, not a feature**: `?people=model` draws the crowd
-  as clones of the rigged model, `?people=prim` keeps the primitives, and both show a cost readout.
-  `regions.ts` finds a model's colour regions and repaints them per person, and `body.ts` shapes
-  each clone by its recipe's age and build (see "Model bodies"); the people lab's model source
-  imports both, and its crowd view draws its model source with `crowd.ts`. Disposable on purpose:
-  delete the directory, `scripts/bench-people.mjs`, the lines in `game.ts` that name
-  `people`/`modelCrowd`, the people lab's model source (`inspect/entities/model.ts`) and the model
-  branch of `labs/people/crowd.ts`, and the game is unchanged. See "The modeled-crowd experiment".
+- `resources/js/game/modelcrowd/` — **the default way people are drawn**: the crowd as clones of a rigged
+  model (`casual-man` unless `?model=` names another). `?people=prim` keeps the primitive people,
+  which stay the fallback: for the player, for anyone with a mobility aid or a stroller, and for the
+  whole crowd if the model fails to load. `regions.ts` finds a model's color regions and repaints
+  them per person, `body.ts` shapes each clone by its recipe's age and build and decides who falls
+  back (see "Model bodies"), and `index.ts` chooses the renderer and keeps the cost readout, shown
+  under `?people=` or a stress run. The people lab's model source and its crowd view use all of it.
+  See "Models by default".
 - `resources/js/game/compare/` — the render-direction comparator. The six rendering directions it shows side by
   side live as data in `resources/js/game/render/look.ts`; `?look=` plays a normal run under one of them and
   reaches every surface, not just the crowd. `main.ts` names this directory only to *open* it, so
@@ -1531,8 +1531,9 @@ than markup, and remembers which sections were folded. Identity (category, famil
 placement, and the archetype's `desc`) comes from `describe.ts` for everyone, so it cannot drift
 into two vocabularies.
 
-- **People, individual and row** — the person turntable: seed stepping, archetype, age, build and
-  mobility, walk, run (the steering's own `SPEED_CAP`) or idle, gait scrub and freeze, a held
+- **People, individual and row** — the person turntable, **on its model source by default**
+  (`source=prim` for the primitives; an old `/play?inspect=` person address carries it): seed
+  stepping, archetype, age, build and mobility, walk, run (the steering's own `SPEED_CAP`) or idle, gait scrub and freeze, a held
   angle, and `agent` (the spawn index) and `outfit` (a group's shared outfit), so any agent of any
   seed stands on the turntable as the crowd built them. Collider and orientation overlays draw the
   body the crowd steers (`Subject` mirrors `Agent`'s collider numbers; `inspect.test.ts` holds them
@@ -1544,7 +1545,19 @@ into two vocabularies.
   clips, color regions (false color, color, share, role), proposed accessory anchors by bone (drawn
   as markers), triangles and bones, a table of every model's triangles, bones, file size, textures,
   estimated texture memory and load time, and the torso's half width as drawn (girth and fullness)
-  against the collider radius; `crowd scale` fits the model as the model crowd does. A model's source and
+  against the collider radius; `crowd scale` fits the model as the model crowd does. Under the
+  model source the panel shows only what applies: mobility and accessories are listed under "not
+  yet available", disabled, with the reason (`Control.disabled` -- the panel doubles as the list of
+  what models lack, and an address cannot switch them on), and the primitives' part gizmos and part
+  origins are not offered (`Inspectable.universal`). Every person's card carries an **Archetype**
+  section in two groups -- behavior (spawn share, speed, acceleration, weaving, separation, player
+  avoidance, stops, groups, collider) and appearance (color family, age mix, height range, width,
+  accessories, hats, mobility-aid chances, the other parts, gait) -- read off `ARCH` as authored.
+  **Height** reads as its parts: `1.62 m = 1.87 skeleton × 0.91 height roll × 0.955 Older` for the
+  primitives, `1.70 m = 1.75 base × 0.97 Older × 1.00 recipe height` for a model. The **height
+  ruler** (`ruler`, `E`, on by default, a shell overlay every lab has) stands beside each exhibit,
+  ticked every 10 cm and labeled with its measured height, which is how the Age and Build rows read
+  each figure's height. A model's source and
   license note is `MODEL_SOURCES` in `render/model-file.ts`; the license reads "not recorded" until
   someone records it.
 - **People, crowd** (`labs/people/`) — a `Simulation` built, primed and stepped exactly as the game
@@ -1735,7 +1748,7 @@ cast, delegated to, with the same seed, spawn index and axes.
 - **Adding a file** is dropping it in `public/models/` and one line in `MODELS` in
   `render/model-file.ts`, under the short name `?model=` uses. Nothing in a browser can list
   `public/`. Laravel serves everything there from its web root and it ships with every deploy, used
-  or not. `fetchModel` there is the one loader, shared with the `?people=model` experiment.
+  or not. `fetchModel` there is the one loader, shared with the model renderer that draws the crowd.
 - **Its clips are its controls.** `load` fetches every listed file and fills the `clip` control with
   the clip names it found, ahead of `pose` (the file's rest pose). The clip plays through an
   `AnimationMixer` advanced by `SIM_DT` in `step`, so pause and `freeze clip` work as the gait does.
@@ -1754,15 +1767,39 @@ cast, delegated to, with the same seed, spawn index and axes.
   colour, numbered as the readout lists them; `P` paints the model in the recipe of the adult the
   seed stands beside it, so in the row the two wear the same colours and a region painted the wrong
   one shows against its neighbour. `[`/`]` repaint live. The readout lists every group with its
-  colour, share and role, and says why when nothing is painted. See "The modeled-crowd experiment".
+  colour, share and role, and says why when nothing is painted. See "The model renderer".
 
-### The modeled-crowd experiment
+### Models by default
 
-`?people=model` replaces the primitive crowd with one clone of the model per crowd slot, built at
-load and hidden while a slot is empty; the player stays primitive. It reads the same interpolated
-pose `drawPerson` reads and writes nothing back, so neither hash can move, and nothing under
-`resources/js/game/sim/` imports it. It exists to answer what a modeled crowd costs, so read it as a measuring
-instrument:
+**People are drawn with models by default**, in the game (`?people=model` or nothing) and in the
+people lab (its model source, and its crowd view's). The primitive people are kept as the
+fallback: `?people=prim` (or `source=prim` in the lab) for everyone, and always for the player, for
+anyone whose recipe carries a **mobility aid or a stroller** (`drawsAsPrimitive` in
+`modelcrowd/body.ts`), and for the whole crowd if the model fails to load.
+
+The mobility fallback exists because what you see has to match what you collide with: a
+wheelchair, a scooter, a cane or a stroller widens a person's collider for the equipment, and a
+model drawn without the equipment would be someone you bump into half a metre before you reach
+them. Until models carry it, those people are primitives. It is flagged, not hidden: the cost
+readout (`?people=` or a stress run) and the crowd view's statistics count them ("as primitives"),
+and the lab says so on any such person it shows -- the model source's card and a crowd selection
+both. Expect about a fifth of a crowd: 17 of 80 and 37 of 190 at the stress seed.
+
+The cost readout is on screen only under `?people=` or a stress run, and kept either way as
+`game.people` for the bench scripts. The scripts default to models too: `stress-headless.mjs` and
+`bench-looks.mjs` take `--prim`, `bench-people.mjs` runs models alone unless given `--only=prim` or
+`--only=both`, and `bench-pose.mjs` times the primitives by nature.
+
+Measured in a visible tab at 120 Hz (`?stress=1`; frames sit on the vsync cap either way): at 80
+people, primitives pose 1.49 ms and render 1.94 ms against models 0.75 and 1.52; at 190, primitives
+3.22 and 3.66 against models 1.57 and 2.93 -- models are the cheaper of the two on the CPU, and draw
+more triangles (2.85 M against 0.59 M at 190) for the GPU to absorb.
+
+### The model renderer
+
+One clone of the model per crowd slot, built at load and hidden while a slot is empty; the player
+stays primitive. It reads the same interpolated pose `drawPerson` reads and writes nothing back, so
+neither hash can move, and nothing under `resources/js/game/sim/` imports it. Five things about it:
 
 - **The bones never move with the person.** Each clone's skeleton stays at the origin, out of the
   scene; only the skinned mesh is placed, in detached bind mode with identity bind matrices. That is
@@ -1835,13 +1872,20 @@ is unchanged, and neither hash can move. Three mechanisms, chosen so nothing cos
 
 **The presets**, every number in `BUILD_PRESETS`, `AGE_PRESETS` and `LIMITS`:
 
-| Build | recipe width | width | shoulders | limbs | fullness |
-|---|---|---|---|---|---|
-| Slim | 0.84 | 0.88 | 0.94 | 0.90 | none |
-| Trim | 0.93 | 0.94 | 0.97 | 0.95 | none |
-| Average | 1.02 | 1.00 | 1.00 | 1.00 | 0.5% of height (slight) |
-| Solid | 1.11 | 1.07 | 1.04 | 1.06 | 1.2% (light) |
-| Broad | 1.20 | 1.14 | 1.08 | 1.12 | 2.2% (moderate: about 4 cm on the torso of a 1.75 m figure) |
+| Build | recipe width | width | shoulders | limbs | fullness | face | neck |
+|---|---|---|---|---|---|---|---|
+| Slim | 0.84 | 0.88 | 0.94 | 0.90 | none | none | 1 |
+| Trim | 0.93 | 0.94 | 0.97 | 0.95 | none | none | 1 |
+| Average | 1.02 | 1.00 | 1.00 | 1.00 | 0.5% of height (slight) | 0.12% (2 mm) | 1.02 |
+| Solid | 1.11 | 1.07 | 1.04 | 1.06 | 1.2% (light) | 0.3% (5 mm) | 1.05 |
+| Broad | 1.20 | 1.14 | 1.08 | 1.12 | 2.2% (moderate: about 4 cm on the torso of a 1.75 m figure) | 0.55% (about 1 cm) | 1.09 |
+
+**Facial fullness** is tuned apart from the body's, because a face reads fuller by millimeters where
+a torso needs centimeters. It is a third channel of `bodyMask`: a vertex's weight on the head bone,
+full below 16% of the way from the head's joint (about the jaw's angle) to the crown and faded out
+by 32%, which is under the eyes -- so the cheeks, jaw and chin swell and the eyes, brow and upper
+face never move, and the face texture is never stretched across them. The neck thickens across its
+own bone (`neck`), in its bind matrix like every other girth, so the head is not carried with it.
 
 | Age | height | width | shoulders | head | legs | stoop |
 |---|---|---|---|---|---|---|
@@ -1863,8 +1907,8 @@ is unchanged, and neither hash can move. Three mechanisms, chosen so nothing cos
   "this needs a child model" wherever a child is shown.
 - **Limits** keep every combination sane and are a safety net, not a style: no shipped preset
   combination touches them, which the tests pin. Width 0.82 to 1.16, shoulders 0.88 to 1.10, limbs
-  0.86 to 1.14, fullness 0 to 2.6%, height 0.88 to 1.05, head 0.96 to 1.08, legs 0.97 to 1.05, stoop 0
-  to 0.22 rad. A value pushed past one is clamped, and the lab marks it "held back" with what was
+  0.86 to 1.14, fullness 0 to 2.6%, face 0 to 0.7%, neck 0.96 to 1.12, height 0.88 to 1.05, head
+  0.96 to 1.08, legs 0.97 to 1.05, stoop 0 to 0.22 rad. A value pushed past one is clamped, and the lab marks it "held back" with what was
   asked.
 
 **Each model's body file**, `<model>.body.json` beside its `.regions.json`:
@@ -1873,7 +1917,7 @@ is unchanged, and neither hash can move. Three mechanisms, chosen so nothing cos
   shows it. Heavier-set models will cover the fullest end of the crowd later; nothing chooses models
   by type yet.
 - `limits` -- optional, `{ "<key>": [min, max] }` for any of `height`, `width`, `shoulders`,
-  `limbs`, `fullness`, `head`, `legs`, `stoop`, overriding the global limits for this model only
+  `limbs`, `fullness`, `face`, `neck`, `head`, `legs`, `stoop`, overriding the global limits for this model only
   (some models stretch better than others). The lab marks which limits came from the file.
 - `about` -- prose for whoever opens the file. A missing file is an average body inside the global
   limits, and says so.
@@ -1902,7 +1946,7 @@ page's URL as their first argument and default to `https://coming-through.test/p
 means its `/play`); the page needs Vite running or a prior `npm run build`.
 
 Stress numbers without a visible browser: `node scripts/stress-headless.mjs https://coming-through.test/play 60`
-against a running dev server (see the note in that file about headless frame rates). That figure
+(models, as the game draws people; add `--prim` for the primitives) against a running dev server (see the note in that file about headless frame rates). That figure
 mixes CPU work with software rasterisation; `node scripts/bench-pose.mjs 190` times just the
 per-frame cost of posing a crowd into the instance buffers, with no GL context at all.
 
@@ -1916,8 +1960,8 @@ cost of toon against PBR against matcap actually shows up.
 `?seed=<uint32 or any string>` (strings are hashed), `?stress=1` (pinned seed, full crowd, no input,
 per-frame sim/render milliseconds; `&crowd=N` holds it at N people), `?debug=1` (top-down overlay),
 `?tier=low|mid|high`, `?look=<name>` (play the whole world under one rendering direction; see
-below), `?people=model|prim` (the modeled-crowd experiment and its cost readout; see "The
-modeled-crowd experiment").
+below), `?people=prim` (draw the crowd with the primitives) or `?people=model` (the default, with
+the cost readout on screen), `?model=<name>` (which model; see "Models by default").
 
 `?bob=` carries the head-bob tuning: one value per axis in `BOB_CONTROLS` order, clamped to each
 axis's own range on the way in, and dropped from the URL entirely when everything is 0 so an

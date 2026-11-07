@@ -41,6 +41,11 @@ export type PanelId = (typeof PANELS)[number];
  */
 export interface Scope {
     readonly entities: readonly Inspectable[];
+    /**
+     * Whether an address naming no source means the model one. The people lab's does: models are
+     * the default way people are drawn, so `source=prim` is what asks for the primitives there.
+     */
+    readonly prefersModel?: boolean;
 }
 
 export const EVERYTHING: Scope = { entities: [] };
@@ -110,7 +115,7 @@ export function stateFor(e: Inspectable, mode: string, search: string, pinned: C
     const overlays = defaultOverlays(e);
     for (const c of e.controls) {
         const raw = q.get(c.id);
-        if (raw === null) continue;
+        if (raw === null || c.disabled !== undefined) continue;
         if (c.kind === 'enum') { if (c.options.includes(raw)) controls[c.id] = raw; }
         else if (c.kind === 'toggle') controls[c.id] = raw === '1';
         else if (c.kind === 'number') controls[c.id] = clampNumber(c, num(raw, c.value));
@@ -163,9 +168,14 @@ export function resolveIn(search: string, scope: Scope = EVERYTHING): { entity: 
     const q = new URLSearchParams(search);
     let { entity, pinned } = resolve(q.get('entity'));
     if (!inScope(scope, entity)) { entity = scope.entities[0] ?? entity; pinned = {}; }
-    if (q.get('source') === 'model' && entity.modelOf === undefined) {
+    const source = q.get('source');
+    const prim = source === 'prim' || source === 'primitives';
+    if ((source === 'model' || (source === null && scope.prefersModel === true)) && entity.modelOf === undefined) {
         const m = modelOf(entity.id);
         if (m !== undefined && inScope(scope, m)) entity = m;
+    } else if (prim && entity.modelOf !== undefined) {
+        const p = resolve(entity.modelOf).entity;
+        if (inScope(scope, p)) entity = p;
     }
     return { entity, pinned };
 }
@@ -188,11 +198,14 @@ export function queryOf(s: InspectState, e: Inspectable, scope: Scope = EVERYTHI
     q.set('seed', String(s.seed));
     const named = e.modelOf ?? s.entity;
     if (named !== defaultOf(scope)) q.set('entity', named);
-    if (e.modelOf !== undefined) q.set('source', 'model');
+    // Whichever source this scope does not assume is the one written down.
+    if (e.modelOf !== undefined && scope.prefersModel !== true) q.set('source', 'model');
+    if (e.modelOf === undefined && scope.prefersModel === true && modelOf(e.id) !== undefined) q.set('source', 'prim');
     if (s.mode === 'row' && s.sel > 0) q.set('sel', String(s.sel));
     const gates = gateIds(e);
     for (const c of e.controls) {
         const v = s.controls[c.id];
+        if (c.disabled !== undefined) continue;
         if (c.kind === 'enum') { if (v !== c.value) q.set(c.id, String(v)); }
         else if (c.kind === 'number') { if (v !== c.value) q.set(c.id, String(v)); }
         // A gate is never written under its own name: the scalar it gates carries it.

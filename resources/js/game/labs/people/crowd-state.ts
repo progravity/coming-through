@@ -104,7 +104,8 @@ export function readCrowd(search: string): CrowdState {
         crowd: clampCrowd(Math.round(num(q.get('crowd'), DEFAULT_CROWD))),
         // A mix that restates the archetypes' own weights is no mix at all.
         mix: mix !== null && mix.some((w, i) => w !== own[i]) ? mix : null,
-        source: q.get('source') === 'model' ? 'model' : 'primitives',
+        // Models are the default renderer here as in the game; `source=prim` asks for the primitives.
+        source: q.get('source') === 'prim' || q.get('source') === 'primitives' ? 'primitives' : 'model',
         model: names.includes(model) ? model : (names[0] ?? ''),
         speed: SPEEDS.includes(num(q.get('speed'), 1)) ? num(q.get('speed'), 1) : 1,
         paused: q.get('paused') === '1',
@@ -126,7 +127,8 @@ export function crowdQuery(s: CrowdState): URLSearchParams {
     q.set('seed', String(s.seed));
     if (s.crowd !== DEFAULT_CROWD) q.set('crowd', String(s.crowd));
     if (s.mix !== null) q.set('mix', s.mix.join(','));
-    if (s.source === 'model') { q.set('source', 'model'); q.set('model', s.model); }
+    if (s.source === 'primitives') q.set('source', 'prim');
+    else if (s.model !== (Object.keys(MODELS)[0] ?? '')) q.set('model', s.model);
     if (s.speed !== 1) q.set('speed', String(s.speed));
     if (s.paused) { q.set('paused', '1'); q.set('at', String(s.at)); }
     if (s.cam !== 'top') q.set('cam', s.cam);

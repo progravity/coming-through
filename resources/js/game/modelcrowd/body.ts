@@ -51,14 +51,22 @@ export interface BuildPreset {
     limbs: number;
     /** How far the torso, hips, upper legs and upper arms swell, as a fraction of standing height. */
     fullness: number;
+    /**
+     * How far the lower face -- cheeks and jaw -- swells, as a fraction of standing height. Tuned
+     * apart from the body's because a face reads a fuller millimeter where a torso needs a
+     * centimeter, and it stops below the eyes so the face texture never stretches across them.
+     */
+    face: number;
+    /** Girth of the neck, across the bone. */
+    neck: number;
 }
 
 export const BUILD_PRESETS: Readonly<Record<Build, BuildPreset>> = {
-    slim: { w: 0.84, width: 0.88, shoulders: 0.94, limbs: 0.90, fullness: 0 },
-    trim: { w: 0.93, width: 0.94, shoulders: 0.97, limbs: 0.95, fullness: 0 },
-    average: { w: 1.02, width: 1.00, shoulders: 1.00, limbs: 1.00, fullness: 0.005 },
-    solid: { w: 1.11, width: 1.07, shoulders: 1.04, limbs: 1.06, fullness: 0.012 },
-    broad: { w: 1.20, width: 1.14, shoulders: 1.08, limbs: 1.12, fullness: 0.022 },
+    slim: { w: 0.84, width: 0.88, shoulders: 0.94, limbs: 0.90, fullness: 0, face: 0, neck: 1 },
+    trim: { w: 0.93, width: 0.94, shoulders: 0.97, limbs: 0.95, fullness: 0, face: 0, neck: 1 },
+    average: { w: 1.02, width: 1.00, shoulders: 1.00, limbs: 1.00, fullness: 0.005, face: 0.0012, neck: 1.02 },
+    solid: { w: 1.11, width: 1.07, shoulders: 1.04, limbs: 1.06, fullness: 0.012, face: 0.003, neck: 1.05 },
+    broad: { w: 1.20, width: 1.14, shoulders: 1.08, limbs: 1.12, fullness: 0.022, face: 0.0055, neck: 1.09 },
 };
 
 export interface AgePreset {
@@ -91,9 +99,9 @@ export const CHILD_NOTE = 'A child cannot be made convincingly from an adult mod
 /** One body: every value the rig and the shader take. */
 export interface Body {
     height: number; width: number; shoulders: number; limbs: number;
-    fullness: number; head: number; legs: number; stoop: number;
+    fullness: number; face: number; neck: number; head: number; legs: number; stoop: number;
 }
-export const BODY_KEYS: readonly (keyof Body)[] = ['height', 'width', 'shoulders', 'limbs', 'fullness', 'head', 'legs', 'stoop'];
+export const BODY_KEYS: readonly (keyof Body)[] = ['height', 'width', 'shoulders', 'limbs', 'fullness', 'face', 'neck', 'head', 'legs', 'stoop'];
 
 export type Limits = Readonly<Record<keyof Body, readonly [number, number]>>;
 
@@ -108,6 +116,8 @@ export const LIMITS: Limits = {
     shoulders: [0.88, 1.10],
     limbs: [0.86, 1.14],
     fullness: [0, 0.026],
+    face: [0, 0.007],
+    neck: [0.96, 1.12],
     head: [0.96, 1.08],
     legs: [0.97, 1.05],
     stoop: [0, 0.22],
@@ -144,12 +154,17 @@ export function buildAt(pos: number): BuildPreset {
     const t = Math.max(0, Math.min(1, pos - i));
     const lo = BUILD_PRESETS[BUILDS[i]], hi = BUILD_PRESETS[BUILDS[i + 1]];
     const mix = (k: keyof BuildPreset): number => lo[k] + (hi[k] - lo[k]) * t;
-    return { w: mix('w'), width: mix('width'), shoulders: mix('shoulders'), limbs: mix('limbs'), fullness: mix('fullness') };
+    return {
+        w: mix('w'), width: mix('width'), shoulders: mix('shoulders'), limbs: mix('limbs'),
+        fullness: mix('fullness'), face: mix('face'), neck: mix('neck'),
+    };
 }
 
 /** A body, and what the limits held back: the value asked for beside the value drawn. */
 export interface Shaped {
     body: Body;
+    /** What the presets asked for, before the limits. */
+    wanted: Body;
     /** The age actually drawn: a child is a teen until there is a child model. */
     shown: Age;
     held: { key: keyof Body; wanted: number; limit: number }[];
@@ -161,7 +176,7 @@ export function shape(age: Age, pos: number, limits: Limits = LIMITS): Shaped {
     const a = AGE_PRESETS[shown], b = buildAt(pos);
     const wanted: Body = {
         height: a.height, width: b.width * a.width, shoulders: b.shoulders * a.shoulders, limbs: b.limbs,
-        fullness: b.fullness, head: a.head, legs: a.legs, stoop: a.stoop,
+        fullness: b.fullness, face: b.face, neck: b.neck, head: a.head, legs: a.legs, stoop: a.stoop,
     };
     const body = { ...wanted };
     const held: Shaped['held'] = [];
@@ -171,7 +186,7 @@ export function shape(age: Age, pos: number, limits: Limits = LIMITS): Shaped {
         if (Math.abs(v - wanted[k]) > 1e-9) held.push({ key: k, wanted: wanted[k], limit: v });
         body[k] = v;
     }
-    return { body, shown, held };
+    return { body, wanted, shown, held };
 }
 
 /** The body a recipe gets in the crowd: its age, and its width placed among the Build presets. */
@@ -183,6 +198,29 @@ export const shapeRecipe = (r: Recipe, limits: Limits = LIMITS): Shaped => shape
  * recipe's own height roll still applies on top.
  */
 export const drawnHeight = (standing: number, r: Recipe, body: Body): number => standing / AGE_HEIGHT[r.age] * body.height;
+
+// ---------- what models cannot draw yet ----------
+
+/** The reason the labs give for anything a model cannot do yet. */
+export const NOT_ON_MODELS = 'not yet supported on models';
+
+/**
+ * Why this person cannot be drawn as a model yet, or null when they can.
+ *
+ * A mobility aid -- a wheelchair, a scooter, a cane -- and a stroller are equipment the models do
+ * not carry yet, and their colliders are sized for the equipment: a model drawn without it would
+ * be a person you bump into half a metre before you reach them. So until models carry it, these
+ * people are drawn as primitives even under the model renderer, and what you see matches what you
+ * collide with. The crowd's readout counts them; the lab notes it when one is selected.
+ */
+export function modelFallback(r: Recipe): string | null {
+    if (!drawsAsPrimitive(r)) return null;
+    if (r.mobility !== 'none') return `a ${r.mobility}: mobility aids are ${NOT_ON_MODELS}, so this person is drawn as primitives`;
+    return `a stroller: ${NOT_ON_MODELS}, so this person is drawn as primitives`;
+}
+
+/** The same question without the reason: two comparisons, asked of every person on every frame. */
+export const drawsAsPrimitive = (r: Recipe): boolean => r.mobility !== 'none' || r.acc === 'stroller';
 
 // ---------- the body file ----------
 
@@ -248,9 +286,18 @@ const FULL: readonly (readonly [RegExp, number, number])[] = [
 export const BELLY = 0.9;
 
 /**
+ * Where on the head the face swells, as a fraction of the way from the head's joint (the top of the
+ * neck, about level with the jaw's angle) up to the crown: fully below `FACE_FULL`, fading out by
+ * `FACE_CLEAR`, which is under the eyes. Cheeks, jaw and chin swell; the eyes, the brow and the
+ * upper face never move, so the face texture is never stretched across them.
+ */
+export const FACE_FULL = 0.16, FACE_CLEAR = 0.32;
+
+/**
  * Bake `bodyMask` into a skinned geometry: per vertex, its skin weights summed against the table
- * above, as (swell, belly). Once per geometry -- every clone of a model shares it -- and a no-op
- * for a geometry that already has one.
+ * above, as (swell, belly), and a third channel for the lower face: the vertex's weight on the head
+ * bone, faded out from `FACE_FULL` to `FACE_CLEAR` of the way up the head. Once per geometry --
+ * every clone of a model shares it -- and a no-op for a geometry that already has one.
  *
  * Beside it, `bodyNormal`: the direction to swell in, which is each vertex's normal **averaged over
  * every vertex at the same place**. A model's texture seams split one point of the surface into
@@ -263,20 +310,51 @@ export function bakeMask(mesh: THREE.SkinnedMesh): void {
     const idx = geo.getAttribute('skinIndex'), w = geo.getAttribute('skinWeight');
     if (idx === undefined || w === undefined) return;
     weldNormals(geo);
-    const per = mesh.skeleton.bones.map(b => FULL.find(([re]) => re.test(b.name)) ?? null);
-    const out = new Float32Array(idx.count * 2);
+    const bones = mesh.skeleton.bones;
+    const per = bones.map(b => FULL.find(([re]) => re.test(b.name)) ?? null);
+    const head = bones.findIndex(b => /Head$/i.test(b.name));
+    const span = headSpan(mesh, head);
+    const pos = geo.getAttribute('position');
+    const out = new Float32Array(idx.count * 3);
     for (let i = 0; i < idx.count; i++) {
-        let swell = 0, belly = 0;
+        let swell = 0, belly = 0, onHead = 0;
         for (let k = 0; k < 4; k++) {
             const wk = w.getComponent(i, k);
             if (wk === 0) continue;
-            const f = per[idx.getComponent(i, k)];
+            const bi = idx.getComponent(i, k);
+            if (bi === head) onHead += wk;
+            const f = per[bi];
             if (f === null || f === undefined) continue;
             swell += wk * f[1]; belly += wk * f[2];
         }
-        out[2 * i] = swell; out[2 * i + 1] = belly;
+        let face = 0;
+        if (onHead > 0 && span !== null) {
+            const t = (pos.getY(i) - span.base) / (span.top - span.base);
+            const fade = Math.min(1, Math.max(0, (FACE_CLEAR - t) / (FACE_CLEAR - FACE_FULL)));
+            face = onHead * fade * fade * (3 - 2 * fade);
+        }
+        out[3 * i] = swell; out[3 * i + 1] = belly; out[3 * i + 2] = face;
     }
-    geo.setAttribute('bodyMask', new THREE.BufferAttribute(out, 2));
+    geo.setAttribute('bodyMask', new THREE.BufferAttribute(out, 3));
+}
+
+/**
+ * The head's extent up the geometry: from its joint to the crown. Both read off the bind matrices
+ * -- a joint's place in the geometry is its inverse bind matrix, inverted -- so they hold whatever
+ * the armature's scale; the crown is the head-top bone where the rig has one, else the highest
+ * vertex the head carries.
+ */
+function headSpan(mesh: THREE.SkinnedMesh, head: number): { base: number; top: number } | null {
+    if (head < 0) return null;
+    const at = (i: number): number => new THREE.Matrix4().copy(mesh.skeleton.boneInverses[i]).invert().elements[13];
+    const base = at(head);
+    const end = mesh.skeleton.bones.findIndex(b => /HeadTop_End$/i.test(b.name));
+    let top = end >= 0 ? at(end) : -Infinity;
+    if (end < 0) {
+        const pos = mesh.geometry.getAttribute('position'), idx = mesh.geometry.getAttribute('skinIndex');
+        for (let i = 0; i < pos.count; i++) if (idx.getX(i) === head) top = Math.max(top, pos.getY(i));
+    }
+    return top > base ? { base, top } : null;
 }
 
 /** Average the normals of coincident vertices into `bodyNormal`, so a seam swells as one surface. */
@@ -306,12 +384,14 @@ function weldNormals(geo: THREE.BufferGeometry): void {
 /** One material's fullness, set per body. */
 export interface FullnessUniforms {
     readonly bodyFull: { value: number };
+    readonly bodyFace: { value: number };
     readonly bodyForward: { value: THREE.Vector3 };
 }
 
-const VERTEX_HEAD = `attribute vec2 bodyMask;
+const VERTEX_HEAD = `attribute vec3 bodyMask;
 attribute vec3 bodyNormal;
 uniform float bodyFull;
+uniform float bodyFace;
 uniform vec3 bodyForward;
 `;
 // The welded normal goes through the same skinning matrix the surface normal just went through.
@@ -323,7 +403,7 @@ const VERTEX_FULL = `#include <skinning_vertex>
 		vec3 bodyN = normalize( bodyNormal );
 		#endif
 		float bodyFront = max( 0.0, dot( bodyN, bodyForward ) );
-		transformed += bodyN * bodyFull * ( bodyMask.x + ${BELLY.toFixed(2)} * bodyMask.y * bodyFront );
+		transformed += bodyN * ( bodyFull * ( bodyMask.x + ${BELLY.toFixed(2)} * bodyMask.y * bodyFront ) + bodyFace * bodyMask.z );
 	}`;
 
 /**
@@ -332,7 +412,7 @@ const VERTEX_FULL = `#include <skinning_vertex>
  * fullness comes before the shell's own push, and the outline still stands proud of the body.
  */
 export function patchFullness(material: THREE.Material): FullnessUniforms {
-    const u: FullnessUniforms = { bodyFull: { value: 0 }, bodyForward: { value: new THREE.Vector3(0, 0, 1) } };
+    const u: FullnessUniforms = { bodyFull: { value: 0 }, bodyFace: { value: 0 }, bodyForward: { value: new THREE.Vector3(0, 0, 1) } };
     const before = material.onBeforeCompile;
     const key = material.customProgramCacheKey();
     material.onBeforeCompile = (shader, renderer) => {
@@ -462,6 +542,8 @@ export class BodyRig {
         limb(f.lArm, b.limbs); limb(f.rArm, b.limbs); limb(f.lFore, b.limbs); limb(f.rFore, b.limbs);
         limb(f.lUpLeg, b.limbs, b.legs); limb(f.rUpLeg, b.limbs, b.legs); limb(f.lLeg, b.limbs, b.legs); limb(f.rLeg, b.limbs, b.legs);
         if (f.head !== undefined) scale.set(f.head, new THREE.Matrix4().makeScale(b.head, b.head, b.head));
+        // A thicker neck, across the bone: its own vertices only, so the head is not carried with it.
+        limb(f.neck, b.neck);
         for (const { skeleton, original } of this.skeletons) {
             skeleton.bones.forEach((bone, i) => {
                 const s = scale.get(bone);

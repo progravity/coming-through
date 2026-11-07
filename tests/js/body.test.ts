@@ -17,12 +17,13 @@ import { ARCH } from '../../resources/js/game/archetypes.ts';
 import { makeStreams } from '../../resources/js/game/core/rng.ts';
 import {
     AGE_PRESETS, BUILDS, BUILD_PRESETS, BodyRig, CHILD_AS, LIMITS, bakeMask, buildAt, buildPosition, drawnHeight,
-    parseBodyFile, patchFullness, shape,
+    drawsAsPrimitive, modelFallback, parseBodyFile, patchFullness, shape,
 } from '../../resources/js/game/modelcrowd/body.ts';
+import { Subject } from '../../resources/js/game/inspect/subject.ts';
 import type { Body } from '../../resources/js/game/modelcrowd/body.ts';
 import { AGE_HEIGHT, makeRecipe } from '../../resources/js/game/recipe.ts';
 
-const NEUTRAL: Body = { height: 1, width: 1, shoulders: 1, limbs: 1, fullness: 0, head: 1, legs: 1, stoop: 0 };
+const NEUTRAL: Body = { height: 1, width: 1, shoulders: 1, limbs: 1, fullness: 0, face: 0, neck: 1, head: 1, legs: 1, stoop: 0 };
 
 test("the Build presets are the crowd's own width roll, cut into fifths", () => {
     // An archetype of width 1 rolls 0.84 to 1.20: the presets have to span exactly that, or the
@@ -46,6 +47,12 @@ test("the Build presets are the crowd's own width roll, cut into fifths", () => 
     }
     assert.equal(BUILD_PRESETS.slim.fullness, 0);
     assert.equal(BUILD_PRESETS.trim.fullness, 0);
+    // The face and the neck follow the body from Average up, and stay apart below it.
+    for (const b of ['slim', 'trim'] as const) { assert.equal(BUILD_PRESETS[b].face, 0); assert.equal(BUILD_PRESETS[b].neck, 1); }
+    assert.ok(BUILD_PRESETS.average.face > 0 && BUILD_PRESETS.solid.face > BUILD_PRESETS.average.face && BUILD_PRESETS.broad.face > BUILD_PRESETS.solid.face);
+    assert.ok(BUILD_PRESETS.average.neck > 1 && BUILD_PRESETS.solid.neck > BUILD_PRESETS.average.neck && BUILD_PRESETS.broad.neck > BUILD_PRESETS.solid.neck);
+    // A face reads fuller by millimeters where a torso needs centimeters.
+    assert.ok(BUILD_PRESETS.broad.face < BUILD_PRESETS.broad.fullness / 3);
     assert.ok(BUILD_PRESETS.broad.fullness > 2 * BUILD_PRESETS.average.fullness, 'Broad has to read as heavier-set, not just wide');
 });
 
@@ -109,23 +116,25 @@ function rig(): { root: THREE.Group; mesh: THREE.SkinnedMesh; bone: Record<strin
     const root = new THREE.Group();
     const hips = make('Hips', root, 0, 1);
     const spine2 = make('Spine2', make('Spine1', make('Spine', hips, 0, 0.1), 0, 0.12), 0, 0.12);
-    make('Head', make('Neck', spine2, 0, 0.15), 0, 0.08);
+    make('HeadTop_End', make('Head', make('Neck', spine2, 0, 0.15), 0, 0.08), 0, 0.25);
     const fore = make('LeftForeArm', make('LeftArm', make('LeftShoulder', spine2, 0.03, 0.12), 0.15, 0), 0, -0.28);
     make('LeftHand', fore, 0, -0.25);
     make('LeftFoot', make('LeftLeg', make('LeftUpLeg', hips, 0.1, -0.05), 0, -0.45), 0, -0.45);
     root.updateMatrixWorld(true);
-    // One vertex per thing being checked, each wholly on one bone.
-    const at: [string, number, number, number][] = [
-        ['Spine2', 0.15, 1.32, 0], ['Head', 0, 1.6, 0.05], ['LeftForeArm', 0.22, 1.2, 0], ['LeftHand', 0.18, 0.95, 0],
-        ['LeftFoot', 0.1, 0.03, 0.05], ['Spine', 0, 1.15, 0.12],
+    // One vertex per thing being checked, each wholly on one bone. The head's joint is at 1.57 and
+    // its crown at 1.82: the cheek sits low on it, the eye 40% of the way up.
+    const at: [string, string, number, number, number][] = [
+        ['Spine2', 'Spine2', 0.15, 1.32, 0], ['Head', 'Head', 0, 1.6, 0.05], ['Eye', 'Head', 0.03, 1.67, 0.09],
+        ['Neck', 'Neck', 0.05, 1.5, 0], ['LeftForeArm', 'LeftForeArm', 0.22, 1.2, 0], ['LeftHand', 'LeftHand', 0.18, 0.95, 0],
+        ['LeftFoot', 'LeftFoot', 0.1, 0.03, 0.05], ['Spine', 'Spine', 0, 1.15, 0.12],
     ];
     const bones = Object.values(bone);
     const pos: number[] = [], nrm: number[] = [], idx: number[] = [], wt: number[] = [];
     const v: Record<string, number> = {};
-    at.forEach(([name, x, y, z], i) => {
+    at.forEach(([key, name, x, y, z], i) => {
         pos.push(x, y, z); nrm.push(0, 0, 1);
         idx.push(bones.indexOf(bone[name]), 0, 0, 0); wt.push(1, 0, 0, 0);
-        v[name] = i;
+        v[key] = i;
     });
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
@@ -226,6 +235,33 @@ test('fullness swells the torso and never the hands, the feet or the head', () =
     assert.ok(mask.getY(v.Spine) > 0.9, 'and pushed further at the front');
     assert.ok(mask.getX(v.Spine2) > 0.5);
     for (const k of ['Head', 'LeftHand', 'LeftFoot', 'LeftForeArm'] as const) assert.equal(mask.getX(v[k]), 0, `${k} swells`);
+    // The face has a channel of its own: the cheek and jaw swell, the eyes never do.
+    assert.equal(mask.getZ(v.Head), 1, 'the lower face does not swell');
+    assert.equal(mask.getZ(v.Eye), 0, 'the eyes swell, and the face texture would stretch across them');
+    for (const k of ['Spine', 'Neck', 'LeftHand'] as const) assert.equal(mask.getZ(v[k]), 0, `${k} is in the face`);
+});
+
+test('a thicker neck thickens the neck and carries nothing with it', () => {
+    const { root, mesh, bone, v } = rig();
+    const head = world(bone.Head), neckBone = world(bone.Neck), neck = vertex(mesh, v.Neck);
+    const body = new BodyRig(root, [mesh]);
+    body.apply({ ...NEUTRAL, neck: 1.09 });
+    body.pose();
+    root.updateMatrixWorld(true);
+    close(vertex(mesh, v.Neck).x - neckBone.x, (neck.x - neckBone.x) * 1.09, 'the neck thickens');
+    assert.ok(world(bone.Head).equals(head), 'the head moved');
+});
+
+test('models leave mobility aids and strollers to the primitives, and say why', () => {
+    const plain = new Subject(1, 0, 'tourist', { age: 'adult', build: 'seed', mobility: 'none' }).recipe;
+    const chair = new Subject(1, 0, 'tourist', { age: 'adult', build: 'seed', mobility: 'wheelchair' }).recipe;
+    const pram = new Subject(1, 0, 'mary', { age: 'adult', build: 'seed', mobility: 'none' }).recipe;
+    assert.equal(pram.acc, 'stroller');
+    assert.equal(drawsAsPrimitive(plain), false);
+    assert.equal(modelFallback(plain), null);
+    assert.ok(drawsAsPrimitive(chair) && drawsAsPrimitive(pram));
+    assert.match(modelFallback(chair) ?? '', /wheelchair.*not yet supported on models/);
+    assert.match(modelFallback(pram) ?? '', /stroller.*not yet supported on models/);
 });
 
 test('a seam swells as one surface: coincident vertices share the direction they are pushed', () => {
@@ -257,7 +293,8 @@ test('the fullness shader runs after whatever the material already does', () => 
     const shader = { vertexShader: 'void main() {\n#include <skinning_vertex>\n}', fragmentShader: '', uniforms: {} } as unknown as THREE.WebGLProgramParametersWithUniforms;
     m.onBeforeCompile(shader, {} as THREE.WebGLRenderer);
     const src = shader.vertexShader;
-    assert.ok(src.includes('attribute vec2 bodyMask'));
+    assert.ok(src.includes('attribute vec3 bodyMask'));
+    assert.ok(src.includes('bodyFace'), 'the face has no term of its own');
     assert.ok(src.indexOf('bodyFull') < src.indexOf('INK_PUSH'), 'the ink was pushed before the body swelled');
     assert.equal((shader.uniforms as Record<string, unknown>).bodyFull, u.bodyFull);
     assert.match(m.customProgramCacheKey(), /body-fullness/);

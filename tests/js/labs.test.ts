@@ -18,7 +18,10 @@ import { RESTAURANT_ARCHETYPES } from '../../resources/js/game/world/restaurants
 import { SHOP_ARCHETYPES } from '../../resources/js/game/world/shops.ts';
 import type { Family } from '../../resources/js/game/entity.ts';
 import type { Site } from '../../resources/js/game/inspect/inspectable.ts';
+import { personArchetype, primitiveHeight } from '../../resources/js/game/inspect/entities/person.ts';
+import { overlaysOf } from '../../resources/js/game/inspect/inspectable.ts';
 import { ENTITIES, modelOf } from '../../resources/js/game/inspect/registry.ts';
+import { Subject } from '../../resources/js/game/inspect/subject.ts';
 import { queryOf, readState, resolveIn } from '../../resources/js/game/inspect/state.ts';
 import { LABS, labFor, primaries, viewOf } from '../../resources/js/game/labs/labs.ts';
 import { labAddressFor } from '../../resources/js/game/labs/redirect.ts';
@@ -53,8 +56,9 @@ test('a model is a source of the thing it draws, not a second thing in the picke
 });
 
 test('an old inspector address opens the lab that shows what it named', () => {
-    assert.equal(labAddressFor('?inspect=1&seed=3&arch=dave&walk=1'), '/lab/people?seed=3&arch=dave&walk=1');
-    assert.equal(labAddressFor('?inspect=1'), '/lab/people');
+    // The inspector drew people as primitives, and the people lab now opens on models: it is told.
+    assert.equal(labAddressFor('?inspect=1&seed=3&arch=dave&walk=1'), '/lab/people?seed=3&arch=dave&walk=1&source=prim');
+    assert.equal(labAddressFor('?inspect=1'), '/lab/people?source=prim');
     assert.equal(labAddressFor('?inspect=row&entity=kiosk&type=drinks'), '/lab/fixtures?type=drinks&view=row');
     assert.equal(labAddressFor('?inspect=1&entity=bench&seed=2'), '/lab/fixtures?entity=bench&seed=2');
     assert.equal(labAddressFor('?inspect=row&entity=restaurant'), '/lab/buildings?entity=restaurant&view=row');
@@ -65,8 +69,12 @@ test('an old inspector address opens the lab that shows what it named', () => {
 });
 
 test('a lab stands only its own entities, and the source toggle reaches the model', () => {
-    // A stale address naming something from another lab opens this lab's default instead.
-    assert.equal(resolveIn('?entity=bench', LABS.people).entity.id, 'person');
+    // A stale address naming something from another lab opens this lab's default instead -- and
+    // the people lab's default is its model source, since models are how people are drawn.
+    assert.equal(resolveIn('?entity=bench', LABS.people).entity.id, 'model');
+    assert.equal(resolveIn('', LABS.people).entity.id, 'model');
+    assert.equal(resolveIn('?source=prim', LABS.people).entity.id, 'person');
+    assert.equal(resolveIn('?source=primitives&entity=model', LABS.people).entity.id, 'person');
     assert.equal(resolveIn('?entity=person', LABS.fixtures).entity.id, 'kiosk');
     assert.equal(resolveIn('?entity=lamp', LABS.fixtures).entity.id, 'furniture');
     assert.equal(resolveIn('?source=model', LABS.people).entity.id, 'model');
@@ -79,12 +87,15 @@ test('a lab stands only its own entities, and the source toggle reaches the mode
 });
 
 test('a lab writes its address without naming its default, and a model as its source', () => {
+    // In the people lab the model is the default source and goes unnamed; the primitives are named.
     const model = readState('row', '?source=model&seed=4', LABS.people);
     const m = ENTITIES.find(e => e.id === 'model');
     assert.ok(m !== undefined);
     const q = queryOf(model, m, LABS.people);
-    assert.equal(q.get('source'), 'model');
+    assert.equal(q.get('source'), null);
     assert.equal(q.get('entity'), null);
+    const prim = readState('single', '?source=prim', LABS.people);
+    assert.equal(queryOf(prim, ENTITIES[0], LABS.people).get('source'), 'prim');
     assert.equal(q.get('view'), 'row');
     assert.equal(q.get('seed'), '4');
 
@@ -99,10 +110,12 @@ test('a lab writes its address without naming its default, and a model as its so
 });
 
 test('a row remembers which figure its card describes, and single mode has only one', () => {
-    assert.equal(readState('row', '?sel=3', LABS.people).sel, 3);
-    assert.equal(readState('single', '?sel=3', LABS.people).sel, 0);
+    assert.equal(readState('row', '?source=prim&sel=3', LABS.people).sel, 3);
+    assert.equal(readState('single', '?source=prim&sel=3', LABS.people).sel, 0);
     // Clamped to the row: there is no eighth archetype to describe.
-    assert.equal(readState('row', '?sel=40', LABS.people).sel, ENTITIES[0].row - 1);
+    assert.equal(readState('row', '?source=prim&sel=40', LABS.people).sel, ENTITIES[0].row - 1);
+    // And to a row whose length follows a control: the model's Build row is five long.
+    assert.equal(readState('row', '?compare=build&sel=9', LABS.people).sel, 4);
 });
 
 test('a view a lab does not offer opens its individual view', () => {
@@ -187,4 +200,39 @@ test('the placement view stands each type where the world built it, and nowhere 
     for (const b of benches) assert.ok(b.collider && b.spans.length === 0);
     // People walk; they have no place to stand on.
     assert.equal(ENTITIES.find(x => x.id === 'person')?.sites, undefined);
+});
+
+test('the model source lists what models cannot do yet, and an address cannot switch it on', () => {
+    const m = ENTITIES.find(e => e.id === 'model');
+    assert.ok(m !== undefined);
+    const disabled = m.controls.filter(c => c.disabled !== undefined).map(c => c.id).sort();
+    assert.deepEqual(disabled, ['accessories', 'mob']);
+    for (const c of m.controls) if (c.disabled !== undefined) assert.match(c.disabled, /not yet supported on models/);
+    // A mobility aid named in the address does nothing to the model, and is never written back.
+    const s = readState('single', '?mob=cane', LABS.people);
+    assert.equal(s.entity, 'model');
+    assert.equal(s.controls.mob, 'seed');
+    assert.equal(queryOf(s, m, LABS.people).get('mob'), null);
+    // Part gizmos mark the primitives' parts, which a model does not have.
+    assert.deepEqual(overlaysOf(m).map(o => o.id).filter(id => ['gizmos', 'origins'].includes(id)), []);
+    assert.ok(overlaysOf(ENTITIES[0]).some(o => o.id === 'gizmos'), 'the primitives lost their gizmos');
+});
+
+test('an archetype shows what it decides, behavior apart from appearance, and a height shows its parts', () => {
+    const who = new Subject(7, 0, 'linda', { age: 'older', build: 'seed', mobility: 'none' });
+    const sec = personArchetype(who);
+    assert.equal(sec.title, 'Archetype: Linda');
+    const [behavior, appearance] = sec.tables ?? [];
+    assert.match(behavior.caption ?? '', /^Behavior/);
+    assert.match(appearance.caption ?? '', /^Appearance/);
+    const keys = (t: typeof behavior): string[] => t.rows.map(r => String(r[0]));
+    for (const k of ['speed', 'weaving', 'separation', 'avoids you', 'stops', 'group']) assert.ok(keys(behavior).includes(k), `no ${k}`);
+    for (const k of ['color family', 'age', 'height', 'accessories', 'mobility aid']) assert.ok(keys(appearance).includes(k), `no ${k}`);
+    // Linda stops for photos: the stop is read off the archetype, not restated.
+    assert.match(String(behavior.rows.find(r => r[0] === 'stops')?.[1]), /every 4–8 s, for 1.5–3 s/);
+    // The height adds up: skeleton × height roll × age, to the standing height it states.
+    const h = primitiveHeight(who.recipe);
+    const nums = [...h.matchAll(/(\d+\.\d+)/g)].map(x => Number(x[1]));
+    assert.ok(Math.abs(nums[1] * nums[2] * nums[3] - nums[0]) < 0.02, h);
+    assert.match(h, /Older$/);
 });
