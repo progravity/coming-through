@@ -1,0 +1,17 @@
+{
+    "version": 1,
+    "locked_at": "2026-11-07T04:34:49Z",
+    "fingerprint": "sha256:8cbcd80307c32d82aff189fd649c2387072441dcbdf553a17c8dabb8627e1152",
+    "config": {
+        "separator": "_",
+        "body": {
+            "length": 18,
+            "alphabet": "lowercase_alphanumeric"
+        },
+        "checksum": {
+            "enabled": true,
+            "length": 2,
+            "strategy": "JamesGifford\\Auth\\PublicId\\Checksum\\PositionalSumChecksum"
+        }
+    }
+}

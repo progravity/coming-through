@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "611757d48ea9b91f673b885c9e8d3e06",
+    "content-hash": "61ccc338f279dfa276276e134304030e",
     "packages": [
         {
             "name": "bacon/bacon-qr-code",
@@ -1227,6 +1227,99 @@
             ],
             "time": "2026-08-24T17:13:02+00:00",
             "published-time": "2026-08-24T17:13:22+00:00"
+        },
+        {
+            "name": "jamesgifford/auth",
+            "version": "v1.3.2",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/jamesgifford/auth.git",
+                "reference": "79f1ff9c100830dcdba9aa096edad2830cd97b43"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/jamesgifford/auth/zipball/79f1ff9c100830dcdba9aa096edad2830cd97b43",
+                "reference": "79f1ff9c100830dcdba9aa096edad2830cd97b43",
+                "shasum": ""
+            },
+            "require": {
+                "illuminate/console": "^13.0",
+                "illuminate/contracts": "^13.0",
+                "illuminate/database": "^13.0",
+                "illuminate/support": "^13.0",
+                "nikic/php-parser": "^5.0",
+                "php": "^8.4"
+            },
+            "require-dev": {
+                "larastan/larastan": "^3.0",
+                "laravel/pint": "^1.13",
+                "mockery/mockery": "^1.6",
+                "orchestra/testbench": "^11.0",
+                "phpunit/phpunit": "^11.0"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "providers": [
+                        "JamesGifford\\Auth\\AuthServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "JamesGifford\\Auth\\": "src/"
+                }
+            },
+            "autoload-dev": {
+                "psr-4": {
+                    "JamesGifford\\Auth\\Tests\\": "tests/"
+                }
+            },
+            "scripts": {
+                "test": [
+                    "Composer\\Config::disableProcessTimeout",
+                    "vendor/bin/phpunit"
+                ],
+                "test:sqlite": [
+                    "Composer\\Config::disableProcessTimeout",
+                    "@putenv DB_CONNECTION=testing",
+                    "vendor/bin/phpunit"
+                ],
+                "format": [
+                    "vendor/bin/pint"
+                ],
+                "format:check": [
+                    "vendor/bin/pint --test"
+                ],
+                "analyse": [
+                    "vendor/bin/phpstan analyse"
+                ],
+                "check": [
+                    "@format:check",
+                    "@analyse",
+                    "@test:sqlite"
+                ],
+                "check:full": [
+                    "@format:check",
+                    "@analyse",
+                    "@test"
+                ]
+            },
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "James Gifford",
+                    "email": "james@jamesgifford.com"
+                }
+            ],
+            "description": "Reusable authentication scaffolding for Laravel applications. Provides public ID generation, accounts and memberships with roles, and automatic account creation on registration.",
+            "support": {
+                "source": "https://github.com/jamesgifford/auth/tree/v1.3.2",
+                "issues": "https://github.com/jamesgifford/auth/issues"
+            },
+            "time": "2026-11-01T02:56:54+00:00"
         },
         {
             "name": "laravel/chisel",
@@ -11942,7 +12035,7 @@
     "prefer-stable": true,
     "prefer-lowest": false,
     "platform": {
-        "php": "^8.3"
+        "php": "^8.5"
     },
     "platform-dev": {},
     "plugin-api-version": "2.11.0"
