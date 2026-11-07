@@ -1,28 +1,99 @@
 # Coming Through!
 
 A small three.js crowd game: get from the blue pad to the green pad without bumping into anyone.
-`npm run dev` is the only command needed to play. `npm test` type-checks, runs the Math.random
-check, and then runs everything under `test/`. `npm run lint` is the first two on their own.
+It is a Laravel 13 app: Laravel serves the page and will later own accounts, and the game itself is
+plain TypeScript and three.js, built by Laravel's Vite integration and mounted on a Blade page at
+`/play`. The structure follows Dimidium (`~/Projects/Progravity/Dimidium/dimidium`).
+
+## Running it
+
+- **Play:** `composer run dev`, then open `https://coming-through.test/play`. Herd serves the site
+  (linked and secured, like Dimidium); `composer run dev` runs `php artisan dev`, which is the Vite+
+  dev server (`npm run dev`, which writes `public/hot`) plus `artisan serve`, the queue and Pail.
+  Herd may already be running it for this site: Herd's dev tools started `php artisan dev` on their
+  own when the site was linked. Without a dev server the page falls back to the last
+  `npm run build`.
+- **Every mode is a query string on that page:** `/play?inspect=1`, `/play?inspect=row&entity=shop`,
+  `/play?compare=1`, `/play?people=model`, `/play?stress=1`, `/play?look=current`, `/play?debug=1`.
+  See "URL parameters" below. `/` is the starter kit's welcome page, with login and registration.
+- **On a phone:** stop any other dev server for the site first (including one Herd started), then
+  run `composer run dev:lan` and open `http://<this Mac's LAN IP>:8000/play` on the phone, which
+  must be on the same network. It runs `php artisan serve --host=0.0.0.0 --port=8000` beside
+  `npm run dev:lan`, which serves Vite on every interface over plain HTTP and writes the LAN address
+  into `public/hot` (`vite.config.js`, `lanServer`). The address is detected; set `VITE_LAN_HOST`
+  when the Mac has more than one. Vite prints it on its `Network:` line. macOS may ask to allow
+  incoming connections for `php` and `node` the first time. Two dev servers for one checkout fight
+  over `public/hot`, which is why the other one has to stop.
+- **Tests:** `npm test` type-checks the engine and its tests, runs the Math.random check, and then
+  runs everything under `tests/js/` with `node --test` (219 tests). `npm run lint` is the first two
+  on their own. Run them with Node 26 (`/opt/homebrew/bin` first on `PATH`): Herd's Node 22 does
+  not take a directory as `node --test`'s argument. `composer test` is the Laravel side: Pint,
+  PHPStan and Pest (`tests/Feature/`, `tests/Unit/`), against SQLite in memory. Run it with Herd's
+  PHP, not with `/opt/homebrew/bin` first: Homebrew's PHP has a 128 MB `memory_limit` and PHPStan's
+  workers crash on it. Both suites must pass.
+- **Build:** `npm run build` runs `npm run lint` and then `vp build` into `public/build/`.
+- **Database:** MySQL from Herd, database `coming_through_local` as root with no password, as
+  Dimidium uses `dimidium_local`. `php artisan migrate:refresh --seed` rebuilds it with the auth
+  package's dev cast.
+
+## Hard constraints
+
+- **Laravel 13 on PHP 8.5.** `composer.json` requires `php: ^8.5`. The base is the Livewire starter
+  kit exactly as the installer produced it; build on it rather than editing it into something else.
+- **`jamesgifford/auth` is installed as Dimidium installs it**, from its GitHub repository as a
+  Composer VCS repository, with the token in Composer's global `auth.json` and never in the repo.
+  `jamesgifford/hold` is deliberately not installed.
+- **The game page is standalone**: no Livewire, Flux, Tailwind or UI framework on
+  `resources/views/game.blade.php` or its layout. The game's UI is plain TypeScript and DOM.
+- **American spelling for everything new** (color, not colour) in code, comments, UI text and docs.
+  Existing identifiers keep their British spelling until a dedicated cleanup pass; do not rename
+  them piecemeal, and leave existing prose alone unless you are rewriting it anyway.
+- **Determinism is not negotiable.** Both hashes in `tests/js/determinism.expected.json` move only
+  on purpose, never to silence a failure, and `identity` never moves at all. See "Determinism rules"
+  and "Two hashes" below.
+- **The simulation stays pure.** Nothing in the transitive import closure of
+  `resources/js/game/sim/` may reach three.js, the DOM, or the mutable `BOB`; `npm run lint` fails
+  on `Math.random` anywhere under `resources/js/game/` except `core/rng.ts`. `tests/js/purity.test.ts`,
+  `tests/js/bob.test.ts` and `scripts/check-math-random.mjs` enforce this, and must stay green.
 
 ## Layout
 
-- `src/core/` — `rng.ts` (seeded RNG and named streams), `time.ts` (`SIM_DT`), `hash.ts` (state hashing).
-- `src/entity.ts` — the entity taxonomy: the four axes every entity declares itself on, and the
+The Laravel side is the starter kit's, plus:
+
+- `routes/web.php` — `/play` (route `play`), public, served by `Route::view` from
+  `resources/views/game.blade.php`.
+- `resources/views/game.blade.php` — the game's HUD and overlay markup, which `ui.ts` finds by id,
+  inside `resources/views/layouts/game.blade.php`, the standalone page shell that loads
+  `resources/css/game.css` and the entry, `resources/js/game/main.ts`, through `@vite`.
+- `resources/js/game/` — the engine, described below. Paths in this file are written from the
+  repository root, except bare file names inside a section that is already about one directory.
+- `tests/js/` — the engine's tests, run by `node --test`. `tests/Feature/PlayPageTest.php` checks the
+  page itself.
+- `public/models/` — the `.glb` files and their `.regions.json`, served by Laravel from its web root
+  at `/models/` (`MODEL_DIR` in `render/model-file.ts`).
+- `scripts/` — the Math.random check and the stress and bench scripts.
+- `vite.config.js` — the starter kit's, with the game's stylesheet and entry added as inputs and the
+  LAN switch for phone testing.
+
+The engine:
+
+- `resources/js/game/core/` — `rng.ts` (seeded RNG and named streams), `time.ts` (`SIM_DT`), `hash.ts` (state hashing).
+- `resources/js/game/entity.ts` — the entity taxonomy: the four axes every entity declares itself on, and the
   whole property vocabulary. Imports nothing, so `sim/`, `world/`, `archetypes.ts` and `inspect/`
   can all read it without any of them dragging a dependency in behind them.
-- `src/palette.ts` — every colour in the game, as one 24-entry palette plus named families, and the
+- `resources/js/game/palette.ts` — every colour in the game, as one 24-entry palette plus named families, and the
   ground tones blended out of it.
-- `src/archetypes.ts` — who exists: behaviour numbers and look constraints per archetype.
-- `src/recipe.ts` — the appearance and gait roll for one person, and the age/mobility profiles.
-- `src/sim/` — pure simulation, no DOM or three.js: `simulation.ts` is the whole game state and its
+- `resources/js/game/archetypes.ts` — who exists: behaviour numbers and look constraints per archetype.
+- `resources/js/game/recipe.ts` — the appearance and gait roll for one person, and the age/mobility profiles.
+- `resources/js/game/sim/` — pure simulation, no DOM or three.js: `simulation.ts` is the whole game state and its
   fixed step; `crowd.ts`, `agent.ts`, `spawner.ts`, `steering.ts`, `player.ts`, `pose.ts`,
   `grid.ts` (the spatial index, moving layer and fixed), `obstacles.ts` (the colliders of everything
   standing on the walkway).
   That "no three.js" is checked rather than hoped for: `world/edge.ts` holds the edge layer's data
   and `world/kit.ts` its meshes precisely so the simulation can read the furniture's placement
   without pulling a renderer in behind it.
-- `src/input/` — adapters, per-step sampling, and `recorder.ts` (the input log).
-- `src/world/` — the path and everything standing on it: `layout.ts` (dimensions and landmarks, in
+- `resources/js/game/input/` — adapters, per-step sampling, and `recorder.ts` (the input log).
+- `resources/js/game/world/` — the path and everything standing on it: `layout.ts` (dimensions and landmarks, in
   path coordinates), `path.ts` (the centreline curve, the width and height profiles over it, and
   the conversion to world space; pure, no three.js, so the simulation can import it), `ground.ts` (the surface, swept along that curve),
   `edge.ts` (what a piece of the path's edge *is*; pure, so the simulation can read it),
@@ -36,21 +107,21 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
   which the renderer draws and the simulation takes footprints out of),
   `props.ts` (the distant skyline, and nothing else since the shops got a layer of their own),
   `box.ts`, `material.ts` (the one shading model the whole world takes).
-- `src/feel.ts` — every number that decides how the *player* feels, and nothing else: speeds,
+- `resources/js/game/feel.ts` — every number that decides how the *player* feels, and nothing else: speeds,
   accel/decel, turn rates, camera follow and sprint cues, bump shove and recovery, the stamina meter
   that gates the run, and the head-bob tuning. Imports nothing,
   so `sim/player.ts` reads it without the purity boundary noticing and the camera reads the same
   numbers rather than keeping a second copy. Two of its blocks are the exceptions worth knowing:
   `STAMINA` is the only **gameplay** thing in it — read by the fixed step and hashed — and `BOB` is
   the only **mutable** one, a live tuning bench rather than a constant, which is why nothing under
-  `src/sim/` may read it. See "Player feel", "Stamina" and "Head bob" below.
-- `src/render/`, `src/camera.ts`, `src/ui.ts`, `src/debug.ts` — presentation only.
-- `src/main.ts` — the entry point and nothing else: it dynamic-imports the game, the entity
+  `resources/js/game/sim/` may read it. See "Player feel", "Stamina" and "Head bob" below.
+- `resources/js/game/render/`, `resources/js/game/camera.ts`, `resources/js/game/ui.ts`, `resources/js/game/debug.ts` — presentation only.
+- `resources/js/game/main.ts` — the entry point and nothing else: it dynamic-imports the game, the entity
   inspector when `?inspect=` is present, or the render comparator when `?compare=` is, so a normal
   run never loads a dev tool.
-- `src/game.ts` — wires the game together: fixed-step accumulator loop, interpolated rendering,
+- `resources/js/game/game.ts` — wires the game together: fixed-step accumulator loop, interpolated rendering,
   stress mode.
-- `src/inspect/` — the entity inspector. `inspectable.ts` is the interface every entity type
+- `resources/js/game/inspect/` — the entity inspector. `inspectable.ts` is the interface every entity type
   conforms to, `registry.ts` the only file that knows they exist, `entities/` the conformances,
   and `index.ts`/`panel.ts`/`state.ts` a shell that has never heard of any of them. A driver for
   the game's own assemblers, never a copy of them; see "Entity inspection" below.
@@ -59,105 +130,105 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
   own assembler" quietly stops being true for one of them.
   `entities/model.ts` is the one exception to "the game's own assembler": a `.glb` from
   `public/models/` beside one of the game's people. See "Models from files" below.
-- `src/modelcrowd/` — **a performance experiment, not a feature**: `?people=model` draws the crowd
+- `resources/js/game/modelcrowd/` — **a performance experiment, not a feature**: `?people=model` draws the crowd
   as clones of the rigged model, `?people=prim` keeps the primitives, and both show a cost readout.
   `regions.ts` finds a model's colour regions and repaints them per person; the model inspector
   imports it too, to show and check them. Disposable on purpose: delete the directory,
   `scripts/bench-people.mjs`, the lines in `game.ts` that name `people`/`modelCrowd` and the region
   rows and toggles in `inspect/entities/model.ts`, and the game is unchanged. See "The
   modeled-crowd experiment".
-- `src/compare/` — the render-direction comparator. The six rendering directions it shows side by
-  side live as data in `src/render/look.ts`; `?look=` plays a normal run under one of them and
+- `resources/js/game/compare/` — the render-direction comparator. The six rendering directions it shows side by
+  side live as data in `resources/js/game/render/look.ts`; `?look=` plays a normal run under one of them and
   reaches every surface, not just the crowd. `main.ts` names this directory only to *open* it, so
   nothing here is load-bearing and the game keeps compiling and playing without it. See "URL
   parameters" and "Looks" below.
-- `test/determinism.test.ts` — headless run with a fixed seed and scripted input, hashed against
-  `test/determinism.expected.json`, which stores two values: `hash` (whole state) and `identity`
+- `tests/js/determinism.test.ts` — headless run with a fixed seed and scripted input, hashed against
+  `tests/js/determinism.expected.json`, which stores two values: `hash` (whole state) and `identity`
   (the crowd a seed produces). See "Two hashes" below.
-- `test/purity.test.ts` — that the simulation reaches no renderer and no DOM, walking the
-  **transitive** closure of `src/sim/` rather than its own import list: nobody writes `THREE` into
+- `tests/js/purity.test.ts` — that the simulation reaches no renderer and no DOM, walking the
+  **transitive** closure of `resources/js/game/sim/` rather than its own import list: nobody writes `THREE` into
   `sim/agent.ts`, but the simulation reads `world/plan.ts`, and half of `world/` imports three.js
   quite legitimately. It is checked rather than trusted because a breach here fails nothing else —
   three.js loads happily under `node` with no GL context, so a renderer dragged in would go green
   all the way and be found only by whoever next tried to run the sim without a canvas.
-- `test/bob.test.ts` — the head-bob bench: that zeroing every axis is a camera that does not move,
+- `tests/js/bob.test.ts` — the head-bob bench: that zeroing every axis is a camera that does not move,
   that each amplitude moves its own axis and no other, that sway and roll run at half the vertical's rate, that the frequency
   cap holds at a sprint, and — the half that has to be checked rather than trusted — that nothing in
   the simulation's transitive import closure reads the mutable `BOB`. It also drives the real
   `CameraRig` headlessly, because `bobAt` being right proves nothing if the rig never calls it.
-- `test/stamina.test.ts` — the run gate: that the three rates are the ones `feel.ts` asks for, that
+- `tests/js/stamina.test.ts` — the run gate: that the three rates are the ones `feel.ts` asks for, that
   turning on the spot is standing rather than walking, that a low meter refuses to start a sprint
   and an emptied one drops the player to a walk, that twenty seconds of one held button works the
   gate exactly twice (the flicker the hysteresis pair exists to prevent), that the meter reaches
   `hash()` and never reaches who is in the crowd, and that the HUD state is the gate's own branch
   read back. Every rate is read out of `STAMINA` rather than written down again, so retuning the
   meter never reddens the file.
-- `test/inspect.test.ts` — proves a turntable person is byte-identical to the crowd's agent,
+- `tests/js/inspect.test.ts` — proves a turntable person is byte-identical to the crowd's agent,
   guarding `Subject` against `Agent` specifically.
-- `test/attachment.test.ts` — where equipment meets the body, all of it measured off the drawn
+- `tests/js/attachment.test.ts` — where equipment meets the body, all of it measured off the drawn
   parts: that nothing a person stands or rides on sinks through the ground, that it holds still
   while the body bobs through a stride — a grip placed at the bobbing hand height rather than its
   rest height drives a cane through the pavement twice a step — that overlapping boxes are buried
   inside each other rather than left flush, and that a pram body sits on its wheels.
-- `test/elbow.test.ts` — which way an elbow bends. A held pose is two absolute pitches and nothing
+- `tests/js/elbow.test.ts` — which way an elbow bends. A held pose is two absolute pitches and nothing
   in that pair says which of them has to be further forward, so the invariant is read back off the
   arm cylinders rather than off the constants: no elbow is forward of the shoulder-to-wrist line by
   more than a real one hyperextends, in any pose, and a handle out in front of the body is reached
   with a bent arm rather than a straight one.
-- `test/inspectable.test.ts` — that the inspector's shell depends only on the interface: its
+- `tests/js/inspectable.test.ts` — that the inspector's shell depends only on the interface: its
   imports reach no entity, a hypothetical entity nobody has written is driven through the shell's
   state, URL and keymap, every person URL that worked before still works and nothing a cast writes
   back reaches one, every registered entity declares something the panel can render, the stage
   frames what it measures rather than what a person is, and an object placed by the path's frame
   lands where the staging says on the stage.
-- `test/path.test.ts` — the path-coordinate convention, including the exactness today's straight,
+- `tests/js/path.test.ts` — the path-coordinate convention, including the exactness today's straight,
   level, uniform-width path gives; that a bent centreline still measures along and across itself;
   and that a test-only curve which bends, widens and climbs puts edge elements and world heights
   where its own profiles say.
-- `test/ground.test.ts` — sweeps the ground's cross-section along curves the game never draws (a
+- `tests/js/ground.test.ts` — sweeps the ground's cross-section along curves the game never draws (a
   right-angled bend, and one that also widens and rises) and checks every vertex and normal came
   out of the frame rather than out of world x, a world y, or a remembered width.
-- `test/edge.test.ts` — the same treatment for the railings and the furniture: plans them along a
+- `tests/js/edge.test.ts` — the same treatment for the railings and the furniture: plans them along a
   bending, widening, climbing stub and measures every post, rail, bench, lamp and bin back off the
   frame there, then checks the gaps are read off where the buildings are.
-- `test/shops.test.ts` — the five shopfronts: that one archetype fixes a shop completely and only
+- `tests/js/shops.test.ts` — the five shopfronts: that one archetype fixes a shop completely and only
   the paint rolls, that all five are the same storefront under a different symbol, that **no two
   symbols are alike** (the only way the feature really fails, a shop being identified by an emblem
   and nothing else), that a shop wears one coordinated livery while its symbol comes from its own
   product set, that the livery costs no extra draw, that a shop has a footprint and **no collider**,
   and that the whole layer planned along a bending, widening, climbing stub measures back off the
   frame there.
-- `test/restaurants.test.ts` — the five restaurants: that the storefront is `facade()`'s and neither
+- `tests/js/restaurants.test.ts` — the five restaurants: that the storefront is `facade()`'s and neither
   building type owns a copy of it, that every restaurant is gabled and no shop is, that a restaurant
   stands further back than the lamp posts (which is what lets it open a doorway rather than a
   frontage), that **no two of the ten building symbols are alike** and that the noodle bowl and the
   salad bowl differ in proportion, in colour and in what stands out of them, that all three spots
   land somewhere they mean something, and that the whole layer **costs the promenade nothing** —
   measured against the same layers planned with the doorways taken back out.
-- `test/kiosks.test.ts` — that an archetype fixes a cart's form completely and only colour rolls,
+- `tests/js/kiosks.test.ts` — that an archetype fixes a cart's form completely and only colour rolls,
   that a roll cannot leave the curated set, that a collider is the cart and never the topper, that
   the service and staff points land on the right sides of it, and that a cart is solid without
   ever being a bump.
-- `test/obstacles.test.ts` — that the furniture is solid and that being solid never touches the
+- `tests/js/obstacles.test.ts` — that the furniture is solid and that being solid never touches the
   score: colliders match the drawn objects, the crowd goes round them, the player is stopped by
   them, and a bump is still player-versus-person contact and nothing else.
-- `test/look.test.ts` — that the six looks are one list, named once, in panel order; that the
+- `tests/js/look.test.ts` — that the six looks are one list, named once, in panel order; that the
   shipped look is the absence of one, so `current` restores rather than describes; that a look's
   ink weight folds into a part's shell growth exactly as the per-frame sweep it replaced used to;
   that every surface dresses and undresses without disposing a material it did not create; and
-  that nothing outside `src/compare/` reaches into it, which is what keeps the comparator optional.
-- `test/compare.test.ts` — the structural figure a comparator panel prints beside each look, which
+  that nothing outside `resources/js/game/compare/` reaches into it, which is what keeps the comparator optional.
+- `tests/js/compare.test.ts` — the structural figure a comparator panel prints beside each look, which
   is the one number on a card claimed as exact rather than measured: each pool draws its shell as a
   second mesh, so the ink is exactly half of what a person costs, in draw calls and in instances
-  alike. The looks themselves and their `?look=` names are guarded in `test/look.test.ts`, being
-  data in `src/render/look.ts` rather than anything in that directory.
-- `test/model.test.ts` — the model bench, with a skinned figure built in code standing in for a
+  alike. The looks themselves and their `?look=` names are guarded in `tests/js/look.test.ts`, being
+  data in `resources/js/game/render/look.ts` rather than anything in that directory.
+- `tests/js/model.test.ts` — the model bench, with a skinned figure built in code standing in for a
   file: that a missing file still stands something the stage can frame and says why, that a skinned
   figure is measured in its pose rather than its bind pose, that the rest pose comes back at its own
   size on an armature scaled by 0.01 (where `Skeleton.pose()` measurably makes a 17 mm figure), that
   the file's materials come back by identity and only what the bench made is disposed, and that the
   row's second exhibit is the game's own person.
-- `test/regions.test.ts` — a model's colour regions, on atlases built in code: that the groups are
+- `tests/js/regions.test.ts` — a model's colour regions, on atlases built in code: that the groups are
   the patches and never the gutter, that every used texel is labelled, edges included, that two
   colours as close as the casual man's skin and khaki are pulled apart by the bandwidth search, that a
   bandwidth too wide to do so is reported and refused rather than painted, that a role file matches
@@ -166,8 +237,8 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
 ## The entity taxonomy
 
 Every entity in the game states what kind of thing it is, on four axes kept **independent of one
-another**. The vocabulary is `src/entity.ts` and nothing else; a second copy of it would compile,
-break nothing and be found by nobody, which is why `test/taxonomy.test.ts` reads the source and
+another**. The vocabulary is `resources/js/game/entity.ts` and nothing else; a second copy of it would compile,
+break nothing and be found by nobody, which is why `tests/js/taxonomy.test.ts` reads the source and
 fails on one.
 
 - **family** — the structural kind: `person`, `kiosk`, `building`, `furniture`. All four are
@@ -334,7 +405,7 @@ Three conventions hold the scheme together:
   straight run anchored there, so `toWorld` and `toPath` are exact inverses: the conversion is
   arithmetic on zeros and ones and every position round-trips to the same bits. That is what let the
   whole game be rewritten in path coordinates with both determinism hashes untouched, and it is what
-  `test/path.test.ts` guards. Bending the path is expected to move `hash()` and to change that test
+  `tests/js/path.test.ts` guards. Bending the path is expected to move `hash()` and to change that test
   with it.
 - **Only path-shaped decisions are in path space.** Which lane to walk in, how far along a leader
   is, where the railings are, where a run ends: those are `(s, n)`. The distance between two bodies
@@ -454,7 +525,7 @@ numbers and the simulation never imports it -- so **neither hash moves when it c
 included: it is a function of place, reads no stream and takes no seed, so the world is grained
 identically in every run.
 
-`test/ground.test.ts` is what keeps the sweep honest, and it works the only way it can: by sweeping
+`tests/js/ground.test.ts` is what keeps the sweep honest, and it works the only way it can: by sweeping
 the section along curves the game has never drawn -- a right-angled bend, and one that also widens
 as it goes and carries a hill over it -- and measuring every vertex back off the frame there. A
 straight-line, fixed-width or flat-ground shortcut in here would look perfect on today's walkway and
@@ -468,7 +539,7 @@ between them -- is one layer, built the way the ground is: described in the path
 and placed through `frameAt`. `edge.ts` says what a piece *is*, `kit.ts` how one lands and gets
 drawn, and `railings.ts` and `furniture.ts` where the pieces go -- the last three of those pure
 functions of the curve that return placements and touch no three.js. That split is what lets
-`test/edge.test.ts` plan the whole edge along a walkway the game has never drawn and measure it,
+`tests/js/edge.test.ts` plan the whole edge along a walkway the game has never drawn and measure it,
 and it is also what lets `sim/obstacles.ts` read the same placements without a renderer coming with
 them; see "Solid furniture" below. A `furniturePlan` returns a third list beside the parts and the
 bars -- the `Solid` footprints -- and every part carries the `piece` id of the object it belongs to,
@@ -568,7 +639,7 @@ computes where every piece stands in path coordinates, and emits a `Solid` per o
 parts it draws, sharing a `piece` id with them; `buildObstacles` reads `edgePlans` -- the same list
 the renderer draws -- and turns those through the same `frameAt` the visuals go through. So the thing that stops you and the thing you can see are two
 readings of one number -- move a bench, lengthen it, widen the path under it, and both move
-together. `test/obstacles.test.ts` measures the capsule against the bounding box of the parts
+together. `tests/js/obstacles.test.ts` measures the capsule against the bounding box of the parts
 carrying its `piece` id, so a collider that outgrew its object fails. Which of those footprints
 becomes a collider is the object's own statement rather than an assumption: `buildObstacles` takes
 the solids of entities declaring `static-obstacle`. The **buildings** are the things with a footprint
@@ -657,14 +728,14 @@ accessory, and re-tuning the crowd against it. The furniture's colliders already
 judgement about gaps, and a gap reads truthfully only from where the player's own eyes are. `C`
 still cycles shoulder and top-down. It is not a purely cosmetic default -- `updatePlayer` steers by
 yaw at `MOVE.lookTurn` in first person and by heading in the shoulder view, so the same stick walks
-a different path -- but it moves no stored hash, because `test/determinism.test.ts` scripts
+a different path -- but it moves no stored hash, because `tests/js/determinism.test.ts` scripts
 `cmd.cam` explicitly rather than reading whatever the rig defaults to. **`CAMERA_MODES` must not be
 reordered** for a separate reason: `input/recorder.ts` encodes the mode into the input log by its
 index in that list.
 
 The player is **arcade, and the crowd is not**. The people keep their believable speeds, their
 acceleration and their steering; the player is quick, crisp and slightly implausible on purpose, and
-every number that decides that is in `src/feel.ts` as `MOVE`, `CAMERA`, `BUMP` and `STAMINA`. They are
+every number that decides that is in `resources/js/game/feel.ts` as `MOVE`, `CAMERA`, `BUMP` and `STAMINA`. They are
 playtest-tuned and are always retuned against each other, which is why they are one file and not
 scattered across the three that read them.
 
@@ -729,7 +800,7 @@ ever moves it, something has reached a stream it has no business in.
 
 `STAMINA` in `feel.ts` is the one **gameplay** block in a file of feel numbers, and that difference
 is why it is a section of its own rather than a paragraph of the one above. The head bob is mutable,
-frame-timed, forbidden to `src/sim/` and invisible to both hashes; stamina is `as const`, read and
+frame-timed, forbidden to `resources/js/game/sim/` and invisible to both hashes; stamina is `as const`, read and
 written by the fixed step, and part of `Simulation.hash()`. It decides where the player can get to,
 which makes it state in exactly the sense `kx`/`kz`/`knock` are.
 
@@ -798,7 +869,7 @@ person used to carry a hardcoded 3 cm bounce locked to the gait phase, and shoul
 around them: that zeroing every axis is a camera that does not move (the bench has an off position,
 and `Reset` reaches it), that each amplitude moves its own axis and no other, and that the shipped
 values are inside their own controls' ranges — a value past a slider's range is one the panel
-silently clamps the moment it is touched. `withBob` in `test/bob.test.ts` zeroes every axis before
+silently clamps the moment it is touched. `withBob` in `tests/js/bob.test.ts` zeroes every axis before
 setting the ones a test is about, for exactly this reason: a test that assumed the rest were off
 would pass or fail on whatever the file happened to be tuned to.
 
@@ -834,7 +905,7 @@ neither hash moves. The real risk is that `BOB` is mutable while `feel.ts` is al
 simulation's import closure (`sim/player.ts` reads `MOVE` and `BUMP`): one `import { BOB }` in a step
 function and a replay stops being reproducible, and **nothing else in the repo would fail** — the
 stored hashes are recorded in one process with the sliders untouched, so they would agree with
-themselves and the breach would only surface on somebody else's machine. `test/bob.test.ts` walks
+themselves and the breach would only surface on somebody else's machine. `tests/js/bob.test.ts` walks
 the closure and fails on it.
 
 ## Structures and kiosks
@@ -847,7 +918,7 @@ it is drawn on: wall, plinth, cornice, corner pilasters, door, framed windows, s
 **What scales with the box and what does not is the design there.** A door is a human-sized thing, so
 heights and openings are absolute and only the frontage-derived numbers move -- which is why an 8.5 m
 restaurant does not get a 2.5 m door or an awning out of reach. Given the shop's own box it
-reproduces the shopfront exactly as it was written by hand, and `test/restaurants.test.ts` checks
+reproduces the shopfront exactly as it was written by hand, and `tests/js/restaurants.test.ts` checks
 both types against `facade()` itself rather than against each other, because a copy that has not
 diverged yet still passes a comparison between the two.
 
@@ -922,7 +993,7 @@ Three of them were rebuilt after looking at them from the path, and the reasons 
 landmark. Two types appear twice, which is the only way "colour varies within a type" is visible
 from inside the game. The placements sit **in the gaps in the bench rhythm**: a cart takes a stretch
 of its own side out of the layer inside the railings through `KIOSK_SPANS`, so nine carts placed
-without regard for the interval halved the seating before the list was chosen. `test/kiosks.test.ts`
+without regard for the interval halved the seating before the list was chosen. `tests/js/kiosks.test.ts`
 pins that the carts cost no benches. The spans name one side, and the *lamp posts are exempt* --
 they stand outside the railings where a cart can never reach them.
 
@@ -967,7 +1038,7 @@ holds for both, and the section after this one is only what a restaurant does *d
 
 **The template is one function and every shop calls it**: wall, plinth, cornice, two corner
 pilasters, a centred door in its frame, two framed windows with panes in one fixed glassy literal, a
-blank sign board, and an awning. Only the symbol and the paint differ, and `test/shops.test.ts`
+blank sign board, and an awning. Only the symbol and the paint differ, and `tests/js/shops.test.ts`
 holds that by comparing every archetype's storefront parts against the first. **Striped or solid is
 fixed by the archetype, never rolled** -- whether a thing has one band or seven is *form*, and the
 whole pattern rests on type fixing form.
@@ -1041,7 +1112,7 @@ because its span swallows the ice-cream cart at `s = -27`.
 on `identityHash`: adding an entry changes which doorway a given spawn event selects, and agent N
 becomes a different person standing somewhere else. A layer of the world has to be able to grow
 without changing who walks onto the promenade. Every doorway still has a shop behind it, which
-`test/shops.test.ts` pins; the converse is not required, and today the fifth shop has no doorway.
+`tests/js/shops.test.ts` pins; the converse is not required, and today the fifth shop has no doorway.
 Giving it one is a deliberate change to the crowd with a hash regeneration to match.
 
 **What it cost.** The shops draw through the shared instanced kit, so their parts join the existing
@@ -1131,7 +1202,7 @@ fallen 284 mm by the board's edge and it is sunk 320 mm.
 the length of the walkway, three on one edge and two on the other, and the list that came back
 **costs the promenade nothing at all** -- not a bench, not a bin, not a lamp post, not a railing post,
 not a cart. Every doorway falls in a gap the bench rhythm already left. That is why adding a whole
-building type left both determinism hashes byte-identical, and `test/restaurants.test.ts` pins it by
+building type left both determinism hashes byte-identical, and `tests/js/restaurants.test.ts` pins it by
 re-planning the same layers with the doorways taken back out rather than by restating today's totals.
 
 Two filters chose the list, and the second is the one that moved two of them:
@@ -1353,9 +1424,9 @@ Its entire value rests on one rule: **it renders everything through the game's o
 `makeRecipe` and `drawPerson` for people, `placeStructure` and `buildEdge` for the carts and both
 kinds of building, the `bench`/`lamp`/`bin` builders and `buildEdge` for the furniture. There is no inspection-only copy
 of any of it and there must never be one — a turntable that draws a thing differently from the game
-is worse than no turntable. `test/inspect.test.ts` compares `Subject` against a real `Agent`,
-`test/edge.test.ts` rebuilds `furniturePlan` out of the three builders the inspector calls, and
-`test/kiosks.test.ts` pins that a cart on the stage is its archetype with only the paint rolled.
+is worse than no turntable. `tests/js/inspect.test.ts` compares `Subject` against a real `Agent`,
+`tests/js/edge.test.ts` rebuilds `furniturePlan` out of the three builders the inspector calls, and
+`tests/js/kiosks.test.ts` pins that a cart on the stage is its archetype with only the paint rolled.
 
 **The stage measures what it holds rather than assuming a size.** After each rebuild the shell
 draws the cast once with every anchor at the origin and measures each exhibit there, then hands
@@ -1372,7 +1443,7 @@ at 0.95 — cropped the topper off every cart, which is the one view a cart exis
 
 **The shell knows nothing about any of them.** `index.ts`, `panel.ts` and `state.ts` drive one
 small interface in `inspectable.ts` and import `registry.ts` and nothing else entity-shaped —
-`test/inspectable.test.ts` reads their imports and fails if an entity ever appears in one. What is
+`tests/js/inspectable.test.ts` reads their imports and fails if an entity ever appears in one. What is
 shared is the stage, the camera, the turntable, the pause, the seed, the bounding boxes, the origin
 crosses, the ground shadow, the measured height, the keymap and the address bar. What an entity
 declares is: its controls (an **enum** is a segmented row, a **toggle** a button, a **scalar** a
@@ -1432,11 +1503,11 @@ peak pointed at the viewer, and every symbol was less than half the size it need
 seven-metre frontage. None of
 that is visible from the walkway until it is too late to fix cheaply. `?inspect=row&entity=shop` is the view that answers "can you tell these five apart".
 
-**Adding an entity is two steps.** Write `src/inspect/entities/<thing>.ts` exporting an
+**Adding an entity is two steps.** Write `resources/js/game/inspect/entities/<thing>.ts` exporting an
 `Inspectable` whose `Cast` builds through the game's own assembler and reports its parts, then add
 one line to `registry.ts`. If it stands on the path, `entities/edge.ts` already does the staging,
 the collider overlay and the orientation overlay. Nothing in `index.ts`, `panel.ts` or `state.ts`
-changes — and the test in `test/inspectable.test.ts` that drives a hypothetical entity through the
+changes — and the test in `tests/js/inspectable.test.ts` that drives a hypothetical entity through the
 shell's own state, URL and keymap is what keeps that true.
 
 **An entity whose declaration depends on a file declares `load`**, and the shell awaits it before it
@@ -1483,8 +1554,8 @@ adult so the reference is a fair one, with the seed choosing which.
 
 - **Adding a file** is dropping it in `public/models/` and one line in `MODELS` in
   `render/model-file.ts`, under the short name `?model=` uses. Nothing in a browser can list
-  `public/`. Anything there ships in `vite build`, used or not. `fetchModel` there is the one loader,
-  shared with the `?people=model` experiment.
+  `public/`. Laravel serves everything there from its web root and it ships with every deploy, used
+  or not. `fetchModel` there is the one loader, shared with the `?people=model` experiment.
 - **Its clips are its controls.** `load` fetches every listed file and fills the `clip` control with
   the clip names it found, ahead of `pose` (the file's rest pose). The clip plays through an
   `AnimationMixer` advanced by `SIM_DT` in `step`, so pause and `freeze clip` work as the gait does.
@@ -1497,8 +1568,8 @@ adult so the reference is a fair one, with the seed choosing which.
   carrying the file's texture across. `own materials` (`N`) shows the file as authored. There is no
   ink shell on the model, and the readout's draw-call figure is per figure: this answers "does it
   look right", not "can the promenade afford a crowd of it" -- three.js has no instanced skinning.
-- **Vite answers a missing file with index.html and a 200**, so `load` reads the content type, not
-  the status, to say "not found".
+- **A missing file comes back as an HTML page** (Laravel's 404, or a 200 from a server that falls
+  back to the app's page), so `load` reads the content type, not the status, to say "not found".
 - **Its colour regions are checked here.** `R` shows each detected group flat in its own false
   colour, numbered as the readout lists them; `P` paints the model in the recipe of the adult the
   seed stands beside it, so in the row the two wear the same colours and a region painted the wrong
@@ -1510,7 +1581,7 @@ adult so the reference is a fair one, with the seed choosing which.
 `?people=model` replaces the primitive crowd with one clone of the model per crowd slot, built at
 load and hidden while a slot is empty; the player stays primitive. It reads the same interpolated
 pose `drawPerson` reads and writes nothing back, so neither hash can move, and nothing under
-`src/sim/` imports it. It exists to answer what a modeled crowd costs, so read it as a measuring
+`resources/js/game/sim/` imports it. It exists to answer what a modeled crowd costs, so read it as a measuring
 instrument:
 
 - **The bones never move with the person.** Each clone's skeleton stays at the origin, out of the
@@ -1568,12 +1639,16 @@ carries it through unchanged. If it moves, a draw was added, removed or reordere
 
 ## URL parameters
 
-Stress numbers without a visible browser: `node scripts/stress-headless.mjs http://localhost:5173 60`
+Every parameter here goes on the game page, `/play`. The stress and bench scripts below take that
+page's URL as their first argument and default to `https://coming-through.test/play` (a bare origin
+means its `/play`); the page needs Vite running or a prior `npm run build`.
+
+Stress numbers without a visible browser: `node scripts/stress-headless.mjs https://coming-through.test/play 60`
 against a running dev server (see the note in that file about headless frame rates). That figure
 mixes CPU work with software rasterisation; `node scripts/bench-pose.mjs 190` times just the
 per-frame cost of posing a crowd into the instance buffers, with no GL context at all.
 
-`npm run bench:looks -- http://localhost:5198` sweeps all six looks through `?stress=1&look=` at a
+`npm run bench:looks -- https://coming-through.test/play` sweeps all six looks through `?stress=1&look=` at a
 full crowd and prints them as a table. Read its columns knowing where each comes from: `pose` is CPU
 only and is trustworthy headless, `render` is everything the driver did and under SwiftShader is
 software rasterisation saying nothing about a real GPU. Add `--gpu` to run Chrome headed on the real
@@ -1606,7 +1681,7 @@ line costs nothing a shipped frame was not paying for already.
 `?look=<name>` plays a **normal run** under one rendering direction applied to everything on
 screen -- the crowd, the benches and lamps, the carts, the shopfronts and the ground -- rather than
 the crowd alone: `current`, `toon-bare`, `soft-ink`, `soft`, `soft-thin`, `matcap`. The six live as
-data in `src/render/look.ts`, and `?look=` names them by the same slug the comparator's panels
+data in `resources/js/game/render/look.ts`, and `?look=` names them by the same slug the comparator's panels
 print, so the loop is to read a panel and then type what it says. Six still turntables cannot
 answer how a direction holds up in motion, at crowd distance, from the game's own camera under the
 game's own lights, and that is the only place it has to hold up. `game.ts` calls `World.dress`
@@ -1652,9 +1727,9 @@ measuring apparatus and reports the shipped look as the slowest of the six. And 
 pass before the first measurement, or whichever look leads the list carries the JIT's first sight of
 a crowd and reads a few percent high for being first.
 
-`src/compare/` is therefore genuinely disposable, on purpose. Nothing outside it depends on
+`resources/js/game/compare/` is therefore genuinely disposable, on purpose. Nothing outside it depends on
 anything inside it: `main.ts` names the directory only to *open* it, exactly as it opens the
-inspector, and `test/look.test.ts` walks every file under `src/` and fails the moment that stops
+inspector, and `tests/js/look.test.ts` walks every file under `resources/js/game/` and fails the moment that stops
 being true. The six looks and their names live in `render/look.ts`, not here; what `treatments.ts`
 keeps is the one thing a comparator panel still wants that a look does not answer -- picking a
 bare `PartPools`'s meshes back out of the scene it just put them in, to caption their structure.
@@ -1681,9 +1756,9 @@ why toggling one re-frames rather than rebuilds — the cast has not changed, on
 A given seed must produce the same crowd, in the same order, with the same personalities and
 decisions, on any machine and at any frame rate. Everything below exists to keep that true.
 
-- All gameplay randomness comes from named RNG streams (`Streams` in `src/core/rng.ts`: `spawn`,
+- All gameplay randomness comes from named RNG streams (`Streams` in `resources/js/game/core/rng.ts`: `spawn`,
   `recipe`, `behavior`, `cosmetic`); never `Math.random`. `npm run lint` fails on any `Math.random`
-  under `src/` outside `core/rng.ts`.
+  under `resources/js/game/` outside `core/rng.ts`.
 - Per-agent randomness uses a fork named after the agent's spawn index (`stream.fork('agent:N')`),
   and per-spawn-event randomness a fork named after the event (`'spawn:N'`). Never draw from a
   shared stream inside an update loop: the draw order would then depend on who else exists.
@@ -1732,3 +1807,180 @@ decisions, on any machine and at any frame rate. Everything below exists to keep
   the determinism test. If a change is meant to alter behaviour, update the stored hash with
   `npm run test:update-hash` in the same commit and say so in the commit message. Never update it
   to silence a failure you do not understand, and never regenerate the `identity` value at all.
+
+===
+
+<laravel-boost-guidelines>
+=== foundation rules ===
+
+# Laravel Boost Guidelines
+
+## Foundational Context
+
+This application is a Laravel application running on PHP 8.5. Always use the APIs that match the installed major version of each package — do not assume a version.
+
+Before relying on a package's API, confirm its installed version:
+- PHP packages: run `composer show --direct` to list direct dependencies with versions, or `composer show <vendor/package>` for a single package.
+- JS packages: check `package.json` for the installed versions.
+
+## Skills Activation
+
+This project has domain-specific skills available in `**/skills/**`. You MUST activate the relevant skill whenever you work in that domain—don't wait until you're stuck.
+
+## Conventions
+
+- You must follow all existing code conventions used in this application. When creating or editing a file, check sibling files for the correct structure, approach, and naming.
+- Use descriptive names for variables and methods. For example, `isRegisteredForDiscounts`, not `discount()`.
+- Check for existing components to reuse before writing a new one.
+
+## Verification Scripts
+
+- Do not create verification scripts or tinker when tests cover that functionality and prove they work. Unit and feature tests are more important.
+
+## Application Structure & Architecture
+
+- Stick to existing directory structure; don't create new base folders without approval.
+- Do not change the application's dependencies without approval.
+
+## Frontend Bundling
+
+- If a frontend change doesn't show in the UI or you get a "Unable to locate file in Vite manifest" error, run `npm run build` or ask the user to run `npm run dev` or `composer run dev`.
+
+## Documentation Files
+
+- You must only create documentation files if explicitly requested by the user.
+
+=== boost rules ===
+
+# Laravel Boost
+
+## Tools
+
+- Laravel Boost is an MCP server with tools designed specifically for this application. Prefer Boost tools over manual alternatives like shell commands or file reads.
+- Use `database-query` to run read-only queries against the database instead of writing raw SQL in tinker.
+- Use `database-schema` to inspect table structure before writing migrations or models.
+- Use `get-absolute-url` to resolve the correct scheme, domain, and port for project URLs. Always use this before sharing a URL with the user.
+- Use `browser-logs` to read browser logs, errors, and exceptions. Only recent logs are useful, ignore old entries.
+
+## Searching Documentation (IMPORTANT)
+
+- Use `search-docs` before changes that depend on Laravel ecosystem APIs, behavior, configuration, or version-specific syntax. Skip it for copy-only edits and other changes where package documentation is irrelevant. Reuse sufficient results already in context instead of searching again.
+- Pass a `packages` array to scope results when you know which packages are relevant.
+- Use multiple broad, topic-based queries: `['rate limiting', 'routing rate limiting', 'routing']`. Expect the most relevant results first.
+- Do not add package names to queries because package info is already shared. Use `test resource table`, not `filament 4 test resource table`.
+
+### Search Syntax
+
+1. Use words for auto-stemmed AND logic: `rate limit` matches both "rate" AND "limit".
+2. Use `"quoted phrases"` for exact position matching: `"infinite scroll"` requires adjacent words in order.
+3. Combine words and phrases for mixed queries: `middleware "rate limit"`.
+4. Use multiple queries for OR logic: `queries=["authentication", "middleware"]`.
+
+## Project Rules
+
+- This project contains committed, area-grouped rules in `.ai/rules` when that directory exists, including path-scoped framework guidelines under `.ai/rules/boost`. Before you enter plan mode or create/edit any file, you MUST first: open @.ai/rules/index.md (it maps file globs to rule files), read every rule file whose globs cover the path(s) in scope, and run `grep -rin 'keyword' .ai/rules` to catch what a path match alone misses. Do not write code until you have read and are following every matching rule. If `.ai/rules` does not exist, continue without it.
+
+## Artisan
+
+- Run Artisan commands directly via the command line (e.g., `php artisan route:list`). Use `php artisan list` to discover available commands and `php artisan [command] --help` to check parameters.
+- Inspect routes with `php artisan route:list`. Filter with: `--method=GET`, `--name=users`, `--path=api`, `--except-vendor`, `--only-vendor`.
+- Read configuration values using dot notation: `php artisan config:show app.name`, `php artisan config:show database.default`. Or read config files directly from the `config/` directory.
+
+## Tinker
+
+- Execute PHP in app context for debugging and testing code. Do not create models without user approval, prefer tests with factories instead. Prefer existing Artisan commands over custom tinker code.
+- Always use single quotes to prevent shell expansion: `php artisan tinker --execute 'Your::code();'`
+  - Double quotes for PHP strings inside: `php artisan tinker --execute 'User::where("active", true)->count();'`
+
+=== php rules ===
+
+# PHP
+
+- Always use curly braces for control structures, even for single-line bodies.
+- Use PHP 8 constructor property promotion: `public function __construct(public GitHub $github) { }`. Do not leave empty zero-parameter `__construct()` methods unless the constructor is private.
+- Use explicit return type declarations and type hints for all method parameters: `function isAccessible(User $user, ?string $path = null): bool`
+- Use TitleCase for Enum keys: `FavoritePerson`, `BestLake`, `Monthly`.
+- Prefer PHPDoc blocks over inline comments. Only add inline comments for exceptionally complex logic.
+- Use array shape type definitions in PHPDoc blocks.
+
+=== deployments rules ===
+
+# Deployment
+
+- Laravel can be deployed using [Laravel Cloud](https://cloud.laravel.com/), which is the fastest way to deploy and scale production Laravel applications.
+- Activate the `deploying-to-cloud` skill whenever deploying to Laravel Cloud, configuring Cloud environments or resources, using the Cloud CLI, or troubleshooting Cloud deployments.
+
+=== herd rules ===
+
+# Laravel Herd
+
+- The application is served by Laravel Herd at `https?://[kebab-case-project-dir].test`. Use the `get-absolute-url` tool to generate valid URLs. Never run commands to serve the site. It is always available.
+- Use the `herd` CLI to manage services, PHP versions, and sites (e.g. `herd sites`, `herd services:start <service>`, `herd php:list`). Run `herd list` to discover all available commands.
+
+=== tests rules ===
+
+# Test Enforcement
+
+- Add or update tests for behavior and logic changes when a test provides meaningful regression coverage.
+- Pure copy, styling, and layout-only changes do not require new or updated tests.
+- When test coverage applies, run the affected tests and ensure they pass.
+- Test the changed behavior and its important failure modes, but do not add tests beyond them.
+- Read the `testing-best-practices` skill before writing tests.
+
+=== laravel/core rules ===
+
+# Do Things the Laravel Way
+
+- Use `php artisan make:` commands to create new files (i.e. migrations, controllers, models, etc.). You can list available Artisan commands using `php artisan list` and check their parameters with `php artisan [command] --help`.
+- If you're creating a generic PHP class, use `php artisan make:class`.
+- Pass `--no-interaction` to all Artisan commands to ensure they work without user input. You should also pass the correct `--options` to ensure correct behavior.
+
+### Model Creation
+
+- When creating new models, create useful factories and seeders for them too. Ask the user if they need any other things, using `php artisan make:model --help` to check the available options.
+
+## APIs & Eloquent Resources
+
+- For APIs, default to using Eloquent API Resources and API versioning unless existing API routes do not, then you should follow existing application convention.
+
+## URL Generation
+
+- When generating links to other pages, prefer named routes and the `route()` function.
+
+## Testing
+
+- When creating models for tests, use the factories for the models. Check if the factory has custom states that can be used before manually setting up the model.
+- Faker: Use methods such as `$this->faker->word()` or `fake()->randomDigit()`. Follow existing conventions whether to use `$this->faker` or `fake()`.
+- When creating tests, make use of `php artisan make:test [options] {name}` to create a feature test, and pass `--unit` to create a unit test. Most tests should be feature tests.
+
+=== livewire/core rules ===
+
+# Livewire
+
+- Livewire allows you to build dynamic, reactive interfaces in PHP without writing JavaScript.
+- You can use Alpine.js for client-side interactions instead of JavaScript frameworks.
+- Keep state server-side so the UI reflects it. Validate and authorize in actions as you would in HTTP requests.
+
+=== pint/core rules ===
+
+# Laravel Pint Code Formatter
+
+- If you have modified any PHP files, you must run `vendor/bin/pint --dirty --format agent` before finalizing changes to ensure your code matches the project's expected style.
+- Do not run `vendor/bin/pint --test --format agent`, simply run `vendor/bin/pint --format agent` to fix any formatting issues.
+
+=== pest/core rules ===
+
+# Pest
+
+- This project uses Pest. Create tests with `php artisan make:test --pest {name}`.
+- Do not include the test suite directory in `{name}`. Use `SomeFeatureTest`, not `Feature/SomeFeatureTest`.
+- Read the `testing-best-practices` skill for guidance on coverage, naming, structure, dependency isolation, and review.
+- Do not delete tests or test files without approval. They are part of the application.
+
+## Running Tests
+
+- Run the narrowest set of tests that covers the change. Pass a file path or `--filter=testName` to `php artisan test --compact`.
+- Rerun a test after each change to it.
+- Run `vendor/bin/pest` to call the test runner directly. It accepts the same file path and `--filter=testName` arguments.
+
+</laravel-boost-guidelines>
