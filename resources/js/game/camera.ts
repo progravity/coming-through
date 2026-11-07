@@ -35,7 +35,7 @@ export class CameraRig {
      * It changes what the stick means -- `updatePlayer` steers by yaw at `MOVE.lookTurn` here and
      * by heading in the shoulder view -- so it changes the path a given input walks. That is a
      * simulation input carried on `StepCommand.cam` and hashed through the player's position, but
-     * it moves no stored hash: `test/determinism.test.ts` scripts `cmd.cam` explicitly rather than
+     * it moves no stored hash: `tests/js/determinism.test.ts` scripts `cmd.cam` explicitly rather than
      * reading whatever the rig happens to default to. **`CAMERA_MODES` is a different matter and
      * must not be reordered** -- `input/recorder.ts` encodes the mode into the input log by its
      * index in that list.

@@ -2,10 +2,10 @@
  * Guards the boundary every headless test in this directory stands on: the simulation cannot see
  * the renderer.
  *
- * `src/sim/` is pure by design -- no three.js, no DOM -- which is what lets `test/determinism.test.ts`
+ * `resources/js/game/sim/` is pure by design -- no three.js, no DOM -- which is what lets `tests/js/determinism.test.ts`
  * run a full crowd for thousands of steps under `node --test` with no canvas anywhere. Two other
- * boundaries are already checked by reading the source this way: `test/look.test.ts` pins that
- * nothing outside the comparator depends on it, and `test/inspectable.test.ts` that no file in the
+ * boundaries are already checked by reading the source this way: `tests/js/look.test.ts` pins that
+ * nothing outside the comparator depends on it, and `tests/js/inspectable.test.ts` that no file in the
  * inspector's shell reaches an entity. This is the third, and it is the one that most needs
  * checking rather than trusting, because **a breach here fails nothing.** Importing three.js under
  * node works: it builds a scene graph quite happily with no GL context, and these tests import it
@@ -26,7 +26,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { test } from 'node:test';
 import { dirname, join, relative, resolve } from 'node:path';
 
-const SRC = new URL('../src/', import.meta.url).pathname;
+const SRC = new URL('../../resources/js/game/', import.meta.url).pathname;
 const rel = (file: string): string => relative(SRC, file);
 
 /** Every `.ts` file under `dir`, recursively. */
@@ -96,11 +96,11 @@ test('the simulation reaches no renderer, however far down the chain', () => {
     // came back empty -- a broken resolver, a renamed directory -- would satisfy every assertion
     // below and guard precisely nothing, which is worse than having no test here at all, because
     // it would read as a green light. So: it found sim's own files, and it left the directory.
-    assert.ok(entries.length >= 8, `only found ${entries.length} files in src/sim/`);
+    assert.ok(entries.length >= 8, `only found ${entries.length} files in resources/js/game/sim/`);
     assert.ok(reached.size > 20, `the closure came out at ${reached.size} nodes, too few to be real`);
     const intoWorld = [...reached.keys()].filter(n => n.endsWith('.ts') && rel(n).startsWith('world/'));
     assert.ok(intoWorld.length > 0,
-        'the closure never left src/sim/, so a transitive walk is not being tested -- has the ' +
+        'the closure never left resources/js/game/sim/, so a transitive walk is not being tested -- has the ' +
         'simulation stopped reading the path and the edge layer, or has this walk broken?');
 
     // The assertion itself. Reported with the chain, because "something under sim/ imports three"

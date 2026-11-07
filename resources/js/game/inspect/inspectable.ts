@@ -10,7 +10,7 @@
  * So the shell was turned round to face an interface instead: a **declaration**, which is nearly
  * all plain data and is read by the panel and the address bar, and a **cast**, which is the live
  * thing standing on the stage. A new kind of entity becomes inspectable by conforming to these two,
- * and `test/inspectable.test.ts` is what stops the shell from ever learning about one of them.
+ * and `tests/js/inspectable.test.ts` is what stops the shell from ever learning about one of them.
  *
  * The rule the tool exists for is unchanged and is not expressible here: **a cast must build
  * through the game's own assembler**. A turntable that draws a thing differently from the game is

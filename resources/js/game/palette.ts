@@ -651,7 +651,7 @@ export const SHOP = {
  * the two are curated as opposites rather than as two helpings of one set. Both symbols are a bowl,
  * which at path distance is one silhouette; what has to tell them apart is warm against green, and
  * a roll that let either wander toward the other would cost the pair the only cue that survives the
- * distance. `test/restaurants.test.ts` pins that no colour is in both and that the two sets sit on
+ * distance. `tests/js/restaurants.test.ts` pins that no colour is in both and that the two sets sit on
  * opposite sides of the warm/green split.
  */
 export const RESTAURANT = {

@@ -501,13 +501,13 @@ export async function fetchRoles(file: string): Promise<{ roles: RoleFile | null
     const path = rolePath(file);
     try {
         const res = await fetch(MODEL_DIR + path);
-        // Vite answers a missing file with index.html and a 200; only the content type says so.
+        // A missing file can come back as an HTML page with a 200; only the content type says so.
         if (!res.ok || (res.headers.get('content-type') ?? '').includes('text/html')) {
-            return { roles: null, error: `no role file at public/${MODEL_DIR}${path}` };
+            return { roles: null, error: `no role file at public${MODEL_DIR}${path}` };
         }
         return parseRoles(await res.text(), path);
     } catch (e) {
-        return { roles: null, error: `could not read public/${MODEL_DIR}${path}: ${e instanceof Error ? e.message : String(e)}` };
+        return { roles: null, error: `could not read public${MODEL_DIR}${path}: ${e instanceof Error ? e.message : String(e)}` };
     }
 }
 
@@ -754,7 +754,7 @@ export async function prepareRegions(file: string, root: THREE.Object3D): Promis
     const summary = roles.usable ? `${found}, painted from the recipe` : `${found}; not painted: ${roles.problems[0]}`;
     if (seg.failure === null && (!roles.usable || roles.warnings.length > 0)) {
         console.info(`Colour regions of ${file}: ${summary}\n${[...roles.problems, ...roles.warnings].map(s => `- ${s}`).join('\n')}\n`
-            + `A starting point for public/${MODEL_DIR}${rolePath(file)}:\n${starterRoles(seg, roles)}`);
+            + `A starting point for public${MODEL_DIR}${rolePath(file)}:\n${starterRoles(seg, roles)}`);
     }
     return { seg, roles, paint, mesh, file: rolePath(file), ms, summary };
 }

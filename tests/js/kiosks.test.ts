@@ -22,29 +22,29 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
-import { Rng } from '../src/core/rng.ts';
-import { KIOSK } from '../src/palette.ts';
-import { Agent } from '../src/sim/agent.ts';
-import { SpatialGrid } from '../src/sim/grid.ts';
-import { buildObstacles, insideFurniture, pushOutOf, reachOf } from '../src/sim/obstacles.ts';
-import type { Obstacle, Push } from '../src/sim/obstacles.ts';
-import { createPlayer, updatePlayer } from '../src/sim/player.ts';
-import { IDLE_COMMAND, Simulation } from '../src/sim/simulation.ts';
-import type { StepCommand } from '../src/sim/simulation.ts';
-import type { Standing } from '../src/world/edge.ts';
-import { furniturePlan } from '../src/world/furniture.ts';
-import { KIOSK_ARCHETYPES, KIOSK_PLACEMENTS, KIOSK_TYPES, kioskPlan, kiosks } from '../src/world/kiosks.ts';
-import type { Kiosk } from '../src/world/kiosks.ts';
-import { standingMatrix } from '../src/world/kit.ts';
-import { PAD_SPANS, W } from '../src/world/layout.ts';
-import { PATH, PathCurve, newPathFrame, newWorldPoint, pathPlace } from '../src/world/path.ts';
-import type { Along, PathRun } from '../src/world/path.ts';
-import { SHOP_SPANS } from '../src/world/shops.ts';
-import { SLOTS, footprintOf, placeStructure, structurePaint } from '../src/world/structure.ts';
-import type { Paint, Slot, StructureArchetype } from '../src/world/structure.ts';
+import { Rng } from '../../resources/js/game/core/rng.ts';
+import { KIOSK } from '../../resources/js/game/palette.ts';
+import { Agent } from '../../resources/js/game/sim/agent.ts';
+import { SpatialGrid } from '../../resources/js/game/sim/grid.ts';
+import { buildObstacles, insideFurniture, pushOutOf, reachOf } from '../../resources/js/game/sim/obstacles.ts';
+import type { Obstacle, Push } from '../../resources/js/game/sim/obstacles.ts';
+import { createPlayer, updatePlayer } from '../../resources/js/game/sim/player.ts';
+import { IDLE_COMMAND, Simulation } from '../../resources/js/game/sim/simulation.ts';
+import type { StepCommand } from '../../resources/js/game/sim/simulation.ts';
+import type { Standing } from '../../resources/js/game/world/edge.ts';
+import { furniturePlan } from '../../resources/js/game/world/furniture.ts';
+import { KIOSK_ARCHETYPES, KIOSK_PLACEMENTS, KIOSK_TYPES, kioskPlan, kiosks } from '../../resources/js/game/world/kiosks.ts';
+import type { Kiosk } from '../../resources/js/game/world/kiosks.ts';
+import { standingMatrix } from '../../resources/js/game/world/kit.ts';
+import { PAD_SPANS, W } from '../../resources/js/game/world/layout.ts';
+import { PATH, PathCurve, newPathFrame, newWorldPoint, pathPlace } from '../../resources/js/game/world/path.ts';
+import type { Along, PathRun } from '../../resources/js/game/world/path.ts';
+import { SHOP_SPANS } from '../../resources/js/game/world/shops.ts';
+import { SLOTS, footprintOf, placeStructure, structurePaint } from '../../resources/js/game/world/structure.ts';
+import type { Paint, Slot, StructureArchetype } from '../../resources/js/game/world/structure.ts';
 // `KIOSK` is already taken in this file -- it is the palette's kiosk colours.
-import { KIOSK as KIOSK_ENTITY } from '../src/inspect/entities/kiosk.ts';
-import { defaultControls } from '../src/inspect/inspectable.ts';
+import { KIOSK as KIOSK_ENTITY } from '../../resources/js/game/inspect/entities/kiosk.ts';
+import { defaultControls } from '../../resources/js/game/inspect/inspectable.ts';
 
 /** A walkway the game has never drawn: a right-angled bend that also widens and carries a hill. */
 const BEND: readonly PathRun[] = [

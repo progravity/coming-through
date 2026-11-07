@@ -1,0 +1,65 @@
+/*
+ * The game page: the HUD, the touch stick, the hit and scrape cues, and the start/results
+ * overlay, over a full-bleed canvas. Standalone from app.css: no Tailwind, no Flux.
+ *
+ * Moved here verbatim from the inline <style> of the Vite app's index.html.
+ */
+html,body{margin:0;height:100%;overflow:hidden;background:#20242c;font-family:-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;color:#f2f0ea;touch-action:none;-webkit-user-select:none;user-select:none}
+canvas{display:block}
+.chip{position:fixed;background:rgba(20,22,28,.72);border-radius:12px;padding:8px 12px;font-size:14px;line-height:1.35;pointer-events:none}
+#stats{top:max(12px,env(safe-area-inset-top));left:max(12px,env(safe-area-inset-left))}
+#stats b{font-weight:500;font-size:20px;display:block}
+#controls{position:fixed;top:max(12px,env(safe-area-inset-top));right:max(12px,env(safe-area-inset-right));display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:60vw}
+button{font:inherit;font-size:14px;color:#f2f0ea;background:rgba(20,22,28,.72);border:0;border-radius:12px;padding:8px 12px;min-width:40px;touch-action:manipulation}
+button:active{background:rgba(60,64,72,.9)}
+#legend{bottom:max(12px,env(safe-area-inset-bottom));right:max(12px,env(safe-area-inset-right));font-size:13px}
+#legend div{display:flex;align-items:center;gap:8px}
+#legend i{width:12px;height:12px;border-radius:3px;display:inline-block;flex:none}
+#legend span{color:#b9b6ad}
+#stick{position:fixed;width:120px;height:120px;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.25);display:none;pointer-events:none}
+#knob{position:absolute;left:35px;top:35px;width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.35)}
+/* The stamina meter. Deliberately arcade rather than subtle, and for one reason: the game opens
+   in first person, so the player's eyes are on the crowd and not on the corner of the screen.
+   A bar that only reads when looked at would answer "why is hurry doing nothing" too late, so
+   the low state pulses, the locked state pulses and glows, and the locked state says the word.
+   The notch is where the fill has to climb back to; ui.ts places it from STAMINA.runStart. */
+#stamina{position:relative;margin-top:8px;width:140px;height:13px;border-radius:7px;background:rgba(255,255,255,.13);box-shadow:inset 0 0 0 1px rgba(255,255,255,.13)}
+#staminaFill{position:absolute;left:0;top:0;bottom:0;width:100%;border-radius:7px}
+#staminaMark{position:absolute;top:1px;bottom:1px;width:2px;margin-left:-1px;border-radius:1px;background:rgba(20,22,28,.6)}
+#staminaTag{position:absolute;inset:0;display:none;align-items:center;justify-content:center;font-size:9px;font-weight:700;font-style:normal;letter-spacing:.18em;text-transform:uppercase;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.7)}
+#stamina[data-state="ok"] #staminaFill{background:#e8c34a}
+#stamina[data-state="low"] #staminaFill{background:#f2913c;animation:staminaLow .42s ease-in-out infinite}
+#stamina[data-state="spent"]{animation:staminaSpent .42s ease-in-out infinite}
+#stamina[data-state="spent"] #staminaFill{background:#ec5440}
+#stamina[data-state="spent"] #staminaTag{display:flex}
+@keyframes staminaLow{50%{opacity:.3}}
+@keyframes staminaSpent{50%{box-shadow:inset 0 0 0 1px rgba(255,255,255,.13),0 0 0 3px rgba(236,84,64,.55)}}
+/* Hitting a person. Struck rather than pulsed: UI.flash suppresses this transition to put the
+   hit on screen in one frame, and only the fade back out is animated. It reaches further in and
+   lands harder than the scrape below, because a bump is the one thing in the game that counts. */
+#flash{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 30%,rgba(236,84,64,.42) 66%,rgba(206,40,32,.92));opacity:0;transition:opacity .2s cubic-bezier(.2,.6,.35,1)}
+/* Walking into the scenery. Deliberately nothing like the bump: no red, half the strength, and
+   hugging the very edge of the screen, so it reads as "that is solid" rather than "that counted". */
+#scrape{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 74%,rgba(120,112,96,.4));opacity:0;transition:opacity .18s}
+#overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,22,28,.8);text-align:center;padding:24px}
+#overlay h1{font-weight:500;font-size:26px;margin:0 0 12px}
+#overlay p{margin:6px auto;font-size:15px;color:#c9c6bd;max-width:420px}
+#overlay .seednote{font-size:13px;color:#9a978f}
+#overlay .seedline{font-size:13px;color:#9a978f;display:flex;align-items:center;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:14px}
+#overlay .seedline input{font:inherit;font-size:14px;color:#f2f0ea;background:rgba(20,22,28,.72);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:6px 10px;text-align:center}
+#overlay .seedline input:focus{outline:none;border-color:#e8c34a}
+#overlay .seedline button{font-size:12px;padding:5px 10px}
+#overlay .go{margin-top:18px;font-size:17px;padding:12px 24px;background:#e8c34a;color:#2b2200}
+#fps{bottom:max(12px,env(safe-area-inset-bottom));left:max(12px,env(safe-area-inset-left));font-size:12px;color:#9a978f}
+#debugCanvas[hidden]{display:none}
+#debugCanvas{position:fixed;left:max(12px,env(safe-area-inset-left));top:50%;transform:translateY(-50%);width:200px;height:min(70vh,560px);background:rgba(20,22,28,.78);border-radius:12px;pointer-events:none}
+/* The head-bob tuning bench. A flex item spanning the controls row rather than a chip of its
+   own, so it tracks the buttons down the screen when they wrap instead of overlapping them. */
+#bobPanel{flex-basis:100%;max-width:240px;margin-top:2px;background:rgba(20,22,28,.82);border-radius:12px;padding:10px 12px;font-size:12px;display:grid;gap:7px}
+#bobPanel[hidden]{display:none}
+#bobPanel label{display:grid;grid-template-columns:1fr auto;align-items:baseline;gap:2px 8px;color:#c9c6bd}
+#bobPanel label>span{justify-self:end;color:#e8c34a;font-variant-numeric:tabular-nums}
+#bobPanel em{font-style:normal;color:#7e7b74}
+#bobPanel input{grid-column:1/-1;width:100%;accent-color:#e8c34a;margin:0}
+#bobPanel button{font-size:12px;padding:5px 10px;justify-self:start}
+@media (max-width:640px){#legend{display:none}}

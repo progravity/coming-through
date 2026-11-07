@@ -180,7 +180,7 @@ function colour(hex: number): THREE.Color {
  * triangles of a quad are wound so their face normal agrees with it.
  *
  * Vertices come out band-major: band, then sample, then the band's two stops, which is the order
- * `test/ground.test.ts` reads them back in.
+ * `tests/js/ground.test.ts` reads them back in.
  */
 export function ribbon(shape: Section, samples: readonly number[], frames: readonly PathFrame[]): THREE.BufferGeometry {
     const sections = frames.map(f => shape(f.w));

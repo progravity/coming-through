@@ -18,27 +18,27 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Rng } from '../src/core/rng.ts';
-import { hasProperty } from '../src/entity.ts';
-import { BUILDING_LIVERY, RESTAURANT } from '../src/palette.ts';
-import { buildObstacles } from '../src/sim/obstacles.ts';
-import { clearOf } from '../src/world/edge.ts';
-import { BUILDING_SPANS } from '../src/world/buildings.ts';
-import { facade } from '../src/world/facade.ts';
-import { FURNITURE_ENTITIES, furniturePlan } from '../src/world/furniture.ts';
-import { kiosks } from '../src/world/kiosks.ts';
-import { L, PAD_SPANS, W } from '../src/world/layout.ts';
-import { PATH, PathCurve, newPathFrame, newWorldPoint, pathPlace } from '../src/world/path.ts';
-import type { Along, PathRun } from '../src/world/path.ts';
-import { edgePlans } from '../src/world/plan.ts';
-import { railingPlan } from '../src/world/railings.ts';
+import { Rng } from '../../resources/js/game/core/rng.ts';
+import { hasProperty } from '../../resources/js/game/entity.ts';
+import { BUILDING_LIVERY, RESTAURANT } from '../../resources/js/game/palette.ts';
+import { buildObstacles } from '../../resources/js/game/sim/obstacles.ts';
+import { clearOf } from '../../resources/js/game/world/edge.ts';
+import { BUILDING_SPANS } from '../../resources/js/game/world/buildings.ts';
+import { facade } from '../../resources/js/game/world/facade.ts';
+import { FURNITURE_ENTITIES, furniturePlan } from '../../resources/js/game/world/furniture.ts';
+import { kiosks } from '../../resources/js/game/world/kiosks.ts';
+import { L, PAD_SPANS, W } from '../../resources/js/game/world/layout.ts';
+import { PATH, PathCurve, newPathFrame, newWorldPoint, pathPlace } from '../../resources/js/game/world/path.ts';
+import type { Along, PathRun } from '../../resources/js/game/world/path.ts';
+import { edgePlans } from '../../resources/js/game/world/plan.ts';
+import { railingPlan } from '../../resources/js/game/world/railings.ts';
 import {
     RESTAURANT_ARCHETYPES, RESTAURANT_BOX, RESTAURANT_PLACEMENTS, RESTAURANT_SPANS,
     RESTAURANT_SYMBOLS, RESTAURANT_TYPES, restaurantPlan, restaurants,
-} from '../src/world/restaurants.ts';
-import { SHOP_ARCHETYPES, SHOP_BOX, SHOP_PLACEMENTS, SHOP_SYMBOLS, SHOP_TYPES } from '../src/world/shops.ts';
-import { SLOTS, liveryFor, structurePaint } from '../src/world/structure.ts';
-import type { Prim } from '../src/world/structure.ts';
+} from '../../resources/js/game/world/restaurants.ts';
+import { SHOP_ARCHETYPES, SHOP_BOX, SHOP_PLACEMENTS, SHOP_SYMBOLS, SHOP_TYPES } from '../../resources/js/game/world/shops.ts';
+import { SLOTS, liveryFor, structurePaint } from '../../resources/js/game/world/structure.ts';
+import type { Prim } from '../../resources/js/game/world/structure.ts';
 
 const BEND: readonly PathRun[] = [
     { sAt: 0, x: 0, z: 0, tx: 0, tz: 1, sMin: -60, sMax: 0 },

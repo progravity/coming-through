@@ -10,20 +10,20 @@
  * would then depend on where somebody left a slider. Nothing else in the repo would fail -- both
  * determinism hashes are recorded from one process with the sliders untouched, so they would agree
  * with themselves perfectly and the breach would surface as a run that will not reproduce on
- * somebody else's machine. That is exactly the class of bug `test/purity.test.ts` exists for, so
+ * somebody else's machine. That is exactly the class of bug `tests/js/purity.test.ts` exists for, so
  * this borrows its walk.
  */
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import { test } from 'node:test';
 import { dirname, join, relative, resolve } from 'node:path';
-import { CameraRig } from '../src/camera.ts';
-import type { PlayerView } from '../src/camera.ts';
-import { BOB, BOB_CONTROLS, bobAt, bobHz, newBobOffsets, resetBob } from '../src/feel.ts';
-import type { BobKey } from '../src/feel.ts';
-import { newPose } from '../src/sim/pose.ts';
+import { CameraRig } from '../../resources/js/game/camera.ts';
+import type { PlayerView } from '../../resources/js/game/camera.ts';
+import { BOB, BOB_CONTROLS, bobAt, bobHz, newBobOffsets, resetBob } from '../../resources/js/game/feel.ts';
+import type { BobKey } from '../../resources/js/game/feel.ts';
+import { newPose } from '../../resources/js/game/sim/pose.ts';
 
-const SRC = new URL('../src/', import.meta.url).pathname;
+const SRC = new URL('../../resources/js/game/', import.meta.url).pathname;
 const rel = (file: string): string => relative(SRC, file);
 const out = newBobOffsets();
 const NEAR = 1e-12;
@@ -193,7 +193,7 @@ test('the frequency cap is what stops a sprint running the cycle away, and 0 mea
 
 // ---------- the determinism boundary ----------
 
-/** Every `.ts` file under `dir`, recursively. Same walk `test/purity.test.ts` uses. */
+/** Every `.ts` file under `dir`, recursively. Same walk `tests/js/purity.test.ts` uses. */
 function sources(dir: string, acc: string[] = []): string[] {
     for (const name of readdirSync(dir)) {
         const full = join(dir, name);

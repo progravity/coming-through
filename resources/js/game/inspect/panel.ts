@@ -2,7 +2,8 @@
  * The inspector's chrome: the control strip, the readout, and the status line.
  *
  * All of it is injected from here -- including the rules that hide the game's own HUD -- so
- * index.html carries nothing for a tool that a normal run never loads.
+ * the game page's markup (resources/views/game.blade.php) carries nothing for a tool that a
+ * normal run never loads.
  */
 import { LOOKS } from '../render/look.ts';
 import { overlaysOf } from './inspectable.ts';

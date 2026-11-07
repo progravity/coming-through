@@ -60,7 +60,7 @@ function postsIn(s0: number, s1: number): number[] {
  * The railings, as posts and the bars between them.
  *
  * Pure: it reads the curve and returns placements. Nothing here touches three.js, which is what
- * lets `test/edge.test.ts` sweep the same plan along a walkway that bends, widens and climbs and
+ * lets `tests/js/edge.test.ts` sweep the same plan along a walkway that bends, widens and climbs and
  * measure every piece back off the frame there.
  */
 export function railingPlan(curve: PathCurve = PATH, spans: readonly EdgeSpan[] = BUILDING_SPANS): EdgePlan {

@@ -23,7 +23,7 @@
  *
  * **This file imports nothing, and that is load-bearing.** It is read by `archetypes.ts`, by
  * `world/`, by `sim/` and by `inspect/`, and the simulation's purity boundary means anything it
- * pulled in would come with it. `test/taxonomy.test.ts` pins it.
+ * pulled in would come with it. `tests/js/taxonomy.test.ts` pins it.
  */
 
 /**
@@ -95,7 +95,7 @@ export interface EntityMeta {
     family: Family;
     /**
      * The archetype id -- the same string the archetype already files itself under, never a second
-     * name for it. `test/taxonomy.test.ts` pins that they match for every entity in the game.
+     * name for it. `tests/js/taxonomy.test.ts` pins that they match for every entity in the game.
      */
     type: string;
     properties: ReadonlySet<Property>;

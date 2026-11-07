@@ -2,7 +2,7 @@
  * The stamina meter: the resource that gates running, and the one piece of the player's feel that
  * is **gameplay state** rather than a camera effect.
  *
- * That distinction is the whole reason this file is not `test/bob.test.ts`. The head bob is
+ * That distinction is the whole reason this file is not `tests/js/bob.test.ts`. The head bob is
  * mutable, frame-timed, forbidden to the simulation and invisible to both hashes; stamina is the
  * opposite of all four -- it lives in the fixed step, it decides where the player can get to, and
  * it is hashed. So what is pinned here is not "the camera moved" but "the gate opened", and the
@@ -15,13 +15,13 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { SIM_DT } from '../src/core/time.ts';
-import { MOVE, STAMINA } from '../src/feel.ts';
-import type { FixedQuery } from '../src/sim/obstacles.ts';
-import { createPlayer, staminaState, updatePlayer } from '../src/sim/player.ts';
-import type { CameraMode, MoveInput, Player } from '../src/sim/player.ts';
-import { Simulation } from '../src/sim/simulation.ts';
-import type { StepCommand } from '../src/sim/simulation.ts';
+import { SIM_DT } from '../../resources/js/game/core/time.ts';
+import { MOVE, STAMINA } from '../../resources/js/game/feel.ts';
+import type { FixedQuery } from '../../resources/js/game/sim/obstacles.ts';
+import { createPlayer, staminaState, updatePlayer } from '../../resources/js/game/sim/player.ts';
+import type { CameraMode, MoveInput, Player } from '../../resources/js/game/sim/player.ts';
+import { Simulation } from '../../resources/js/game/sim/simulation.ts';
+import type { StepCommand } from '../../resources/js/game/sim/simulation.ts';
 
 /** A walkway with nothing standing on it. */
 const EMPTY: FixedQuery = { forFixed: () => {} };
@@ -191,15 +191,17 @@ test('the HUD state is the gate read back, so the bar cannot disagree with the c
 
 test('every state the meter can be in has something drawing it', () => {
     // The bar itself needs a DOM, but the failure worth catching here does not: a state the sim can
-    // return that nothing in the markup paints is a player told nothing at the moment it matters.
+    // return that nothing on the page paints is a player told nothing at the moment it matters.
+    // The markup is the game's Blade view and the rules that paint it are its stylesheet.
     const read = (p: string): string => readFileSync(new URL(p, import.meta.url), 'utf8');
-    const html = read('../index.html'), ui = read('../src/ui.ts'), game = read('../src/game.ts');
+    const html = read('../../resources/views/game.blade.php'), css = read('../../resources/css/game.css');
+    const ui = read('../../resources/js/game/ui.ts'), game = read('../../resources/js/game/game.ts');
     for (const id of ['stamina', 'staminaFill', 'staminaTag', 'staminaMark']) {
         assert.ok(html.includes(`id="${id}"`), `#${id} is looked up by ui.ts but is not in the markup`);
         assert.ok(ui.includes(`'${id}'`), `#${id} is in the markup but ui.ts never reaches it`);
     }
     for (const state of ['ok', 'low', 'spent']) {
-        assert.ok(html.includes(`data-state="${state}"`), `the meter can read '${state}' and no rule draws it`);
+        assert.ok(css.includes(`data-state="${state}"`), `the meter can read '${state}' and no rule draws it`);
     }
     // The threshold notch is where the fill has to climb back to, so it is derived from the gate's
     // own constant. Authored as a percentage it would lie the first time the threshold was retuned.

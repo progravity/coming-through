@@ -1,9 +1,9 @@
 // The `?people=` experiment's sweep: both crowd renderers at several crowd sizes, with ink and
 // (for the model) the animation throttle on and off, each as its own ?stress=1&crowd=N run.
 //
-// Usage: npm run dev -- --port 5198 & node scripts/bench-people.mjs http://localhost:5198 [capSeconds]
-//        node scripts/bench-people.mjs http://localhost:5198 30 --gpu --sizes=60,190 --only=model
-//        node scripts/bench-people.mjs http://localhost:5198 45 --model=casual-man-low   (a name in MODELS)
+// Usage: npm run dev & node scripts/bench-people.mjs [https://coming-through.test/play] [capSeconds]
+//        node scripts/bench-people.mjs https://coming-through.test/play 30 --gpu --sizes=60,190 --only=model
+//        node scripts/bench-people.mjs https://coming-through.test/play 45 --model=casual-man-low   (a name in MODELS)
 //
 // Each run waits for a few settling frames, then averages over the frames that follow, read off the
 // running totals game.ts keeps in `game.stress` -- so shader compiles at the start are never in the
@@ -22,7 +22,9 @@ import { spawn } from 'node:child_process';
 const args = process.argv.slice(2);
 const gpu = args.includes('--gpu');
 const opt = name => args.find(a => a.startsWith(`--${name}=`))?.split('=')[1];
-const [base = 'http://localhost:5173', secs = '60'] = args.filter(a => !a.startsWith('--'));
+const [base = 'https://coming-through.test/play', secs = '60'] = args.filter(a => !a.startsWith('--'));
+// The game page with this query: a bare origin means its /play page, and a trailing slash is dropped.
+const gamePage = (base, query) => { const u = new URL(base); u.pathname = u.pathname === '/' ? '/play' : u.pathname.replace(/\/$/, ''); u.search = query; return u.href; };
 const sizes = (opt('sizes') ?? '40,60,80,120,190').split(',').map(Number);
 const only = opt('only');
 const model = opt('model');
@@ -64,7 +66,7 @@ const SETTLE = 3, MIN_FRAMES = 15, MIN_SECS = 8;
 const rows = [];
 for (const run of runs) {
     // The shipped look has no ink anywhere; `current` is the shipped look with it, on the world and the people alike.
-    const url = base.replace(/\/$/, '') + `/?stress=1&tier=high&people=${run.people}&crowd=${run.crowd}`
+    const url = gamePage(base, `stress=1&tier=high&people=${run.people}&crowd=${run.crowd}`)
         + (run.ink ? '&look=current' : '') + (run.throttle ? '&throttle=1' : '')
         + (model !== undefined && run.people === 'model' ? `&model=${encodeURIComponent(model)}` : '');
     const { result: { targetId } } = await send('Target.createTarget', { url: 'about:blank' });

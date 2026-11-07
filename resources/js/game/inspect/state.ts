@@ -79,7 +79,7 @@ const num = (v: string | null, fallback: number): number => {
 /**
  * Read a state for one particular entity. Takes the entity rather than looking it up so the whole
  * module can be driven headlessly by an entity that is not registered -- which is how
- * `test/inspectable.test.ts` proves a hypothetical one is inspectable.
+ * `tests/js/inspectable.test.ts` proves a hypothetical one is inspectable.
  */
 export function stateFor(e: Inspectable, mode: string, search: string, pinned: Controls = {}): InspectState {
     const q = new URLSearchParams(search);

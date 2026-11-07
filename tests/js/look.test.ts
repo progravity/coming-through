@@ -12,13 +12,13 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { test } from 'node:test';
 import { join } from 'node:path';
 import * as THREE from 'three';
-import { LOOKS, LOOK_NAMES, SHELL_FLOOR, SHELL_OVER, inkClearance, lookNamed } from '../src/render/look.ts';
-import { PartPools } from '../src/render/pools.ts';
-import { buildEdge } from '../src/world/kit.ts';
-import { edgePlans } from '../src/world/plan.ts';
-import { worldToon } from '../src/world/material.ts';
-import { buildProps } from '../src/world/props.ts';
-import { buildGround } from '../src/world/ground.ts';
+import { LOOKS, LOOK_NAMES, SHELL_FLOOR, SHELL_OVER, inkClearance, lookNamed } from '../../resources/js/game/render/look.ts';
+import { PartPools } from '../../resources/js/game/render/pools.ts';
+import { buildEdge } from '../../resources/js/game/world/kit.ts';
+import { edgePlans } from '../../resources/js/game/world/plan.ts';
+import { worldToon } from '../../resources/js/game/world/material.ts';
+import { buildProps } from '../../resources/js/game/world/props.ts';
+import { buildGround } from '../../resources/js/game/world/ground.ts';
 
 test('the six are one list, named once, in the order their panels print', () => {
     assert.deepEqual(LOOK_NAMES, ['current', 'toon-bare', 'soft-ink', 'soft', 'soft-thin', 'matcap']);
@@ -165,7 +165,7 @@ test('setInk clears a shell on a real transition but leaves one alone on a same-
     assert.ok(afterNoop.equals(kept), 'a same-state setInk cleared a shell it should have left alone');
 });
 
-/** Every `.ts` file under `src/`, recursively. */
+/** Every `.ts` file under `resources/js/game/`, recursively. */
 function sources(dir: string, out: string[] = []): string[] {
     for (const name of readdirSync(dir)) {
         const full = join(dir, name);
@@ -179,7 +179,7 @@ test('nothing outside the comparator depends on the comparator', () => {
     // A dev tool should be reachable, not load-bearing. The one dependency there was -- the game
     // reaching in for the treatments -- is what moving them was for, and a dependency nobody is
     // watching grows back the first time someone finds a useful helper in there.
-    const root = new URL('../src/', import.meta.url).pathname;
+    const root = new URL('../../resources/js/game/', import.meta.url).pathname;
     let checked = 0;
     for (const file of sources(root)) {
         const rel = file.slice(root.length);
@@ -194,7 +194,7 @@ test('nothing outside the comparator depends on the comparator', () => {
         assert.deepEqual(reaches, allowed, `${rel} reaches into the comparator: ${reaches.join(', ')}`);
         checked++;
     }
-    assert.ok(checked > 20, `only scanned ${checked} files under src/`);
+    assert.ok(checked > 20, `only scanned ${checked} files under resources/js/game/`);
 });
 
 /** Every body mesh one instanced layer put under a scene: its shells wear the back-face ink. */

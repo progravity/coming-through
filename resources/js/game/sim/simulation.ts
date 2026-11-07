@@ -1,6 +1,6 @@
 /**
  * The whole game state and its fixed-step update, with no renderer or DOM dependency so it can be
- * run headlessly (see test/determinism.test.ts) and, later, replayed from a seed plus an input log.
+ * run headlessly (see tests/js/determinism.test.ts) and, later, replayed from a seed plus an input log.
  */
 import { ARCH_KEYS } from '../archetypes.ts';
 import { Hasher } from '../core/hash.ts';

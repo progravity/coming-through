@@ -17,17 +17,17 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
-import { clearOf, freeRuns } from '../src/world/edge.ts';
-import type { Bar, EdgePlan, PlacedEntity, Solid, Standing } from '../src/world/edge.ts';
-import { barMatrix, standingMatrix } from '../src/world/kit.ts';
-import { bench, bin, furniturePlan, lamp } from '../src/world/furniture.ts';
-import { KIOSK_SPANS } from '../src/world/kiosks.ts';
-import { L, PAD_SPANS, W } from '../src/world/layout.ts';
-import type { EdgeSpan } from '../src/world/layout.ts';
-import { railingPlan } from '../src/world/railings.ts';
-import { SHOP_SPANS } from '../src/world/shops.ts';
-import { PATH, PathCurve, newPathFrame, newWorldPoint, pathPlace } from '../src/world/path.ts';
-import type { Along, PathRun } from '../src/world/path.ts';
+import { clearOf, freeRuns } from '../../resources/js/game/world/edge.ts';
+import type { Bar, EdgePlan, PlacedEntity, Solid, Standing } from '../../resources/js/game/world/edge.ts';
+import { barMatrix, standingMatrix } from '../../resources/js/game/world/kit.ts';
+import { bench, bin, furniturePlan, lamp } from '../../resources/js/game/world/furniture.ts';
+import { KIOSK_SPANS } from '../../resources/js/game/world/kiosks.ts';
+import { L, PAD_SPANS, W } from '../../resources/js/game/world/layout.ts';
+import type { EdgeSpan } from '../../resources/js/game/world/layout.ts';
+import { railingPlan } from '../../resources/js/game/world/railings.ts';
+import { SHOP_SPANS } from '../../resources/js/game/world/shops.ts';
+import { PATH, PathCurve, newPathFrame, newWorldPoint, pathPlace } from '../../resources/js/game/world/path.ts';
+import type { Along, PathRun } from '../../resources/js/game/world/path.ts';
 
 /** A right-angled bend at the origin, long enough to carry the whole railing run either way. */
 const BEND: readonly PathRun[] = [

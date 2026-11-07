@@ -15,8 +15,8 @@
  *
  * This file belongs to none of the three tools that read it. The game plays under a look, the
  * inspector switches between them and the comparator shows all six at once -- and **nothing
- * outside `src/compare/` may depend on anything inside it**, which is what moving these out of
- * there was for. `test/look.test.ts` holds that.
+ * outside `resources/js/game/compare/` may depend on anything inside it**, which is what moving these out of
+ * there was for. `tests/js/look.test.ts` holds that.
  *
  * A look reaches materials and matrices at render time, draws no random numbers, and is not
  * reachable from `sim/`. It cannot move either determinism hash.

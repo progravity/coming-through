@@ -3,9 +3,9 @@
  *
  * The six rendering directions used to live here as functions that did surgery on a `PartPools` --
  * that was the right shape while a treatment was a question about *people*. It is the wrong shape
- * now the question is about the game, so they moved to `src/render/look.ts` as data: `LOOKS`,
+ * now the question is about the game, so they moved to `resources/js/game/render/look.ts` as data: `LOOKS`,
  * `LOOK_NAMES`, `lookNamed` and the `Look` type, plus `PartPools.dress`, which is what applies one.
- * Nothing outside `src/compare/` may depend on anything inside it, which is what that move was for.
+ * Nothing outside `resources/js/game/compare/` may depend on anything inside it, which is what that move was for.
  *
  * What is left here is the one thing the comparator still wants that a look does not answer: each
  * panel builds a bare `PartPools` with no world around it, and needs to pick the character meshes

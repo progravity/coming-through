@@ -3,15 +3,15 @@
  *
  * The structural line is the one number on a card that is claimed as exact rather than measured,
  * so it is worth pinning to the behaviour it describes. The `?look=` names and the looks themselves
- * are guarded in `test/look.test.ts` now -- they are data in `src/render/look.ts`, not surgery in
+ * are guarded in `tests/js/look.test.ts` now -- they are data in `resources/js/game/render/look.ts`, not surgery in
  * this directory.
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
-import { structureOf } from '../src/compare/bench.ts';
-import { poolMeshes } from '../src/compare/treatments.ts';
-import { PartPools } from '../src/render/pools.ts';
+import { structureOf } from '../../resources/js/game/compare/bench.ts';
+import { poolMeshes } from '../../resources/js/game/compare/treatments.ts';
+import { PartPools } from '../../resources/js/game/render/pools.ts';
 
 test('the ink shells are half of what a person costs to draw', () => {
     const scene = new THREE.Scene();

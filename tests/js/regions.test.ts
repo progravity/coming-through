@@ -12,8 +12,8 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { assignRoles, parseRoles, recipeColours, segment } from '../src/modelcrowd/regions.ts';
-import type { Pixels, RoleFile, Segmentation } from '../src/modelcrowd/regions.ts';
+import { assignRoles, parseRoles, recipeColours, segment } from '../../resources/js/game/modelcrowd/regions.ts';
+import type { Pixels, RoleFile, Segmentation } from '../../resources/js/game/modelcrowd/regions.ts';
 
 const SIZE = 96, PATCH = 40, GAP = 6;
 

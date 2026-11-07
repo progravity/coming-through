@@ -134,7 +134,7 @@ const PHONE_RISE = 0.105, PHONE_OUT = 0.03;
  * extension and no further, which puts roughly 120 degrees in the elbow -- a hand resting on a
  * handle rather than an arm pointing at one.
  *
- * `test/elbow.test.ts` measures this off the drawn bones rather than off these numbers, so it also
+ * `tests/js/elbow.test.ts` measures this off the drawn bones rather than off these numbers, so it also
  * covers whatever the age and build axes do to the arm underneath them.
  */
 /** A stroller handle: the upper arm hangs at the ribs and only the forearm goes out to the bar. */
@@ -732,7 +732,7 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
         // twice over: the ink shell adds about 0.0125 at each face whatever the part's size, so a
         // thin plate is mostly outline, and the seat post is buried in this plate to its
         // mid-plane, so thinning it brings the post's own foot up towards the plate's underside
-        // and the two start to fight (`test/attachment.test.ts` measures exactly that).
+        // and the two start to fight (`tests/js/attachment.test.ts` measures exactly that).
         //
         // Sinking the shoe instead costs nothing to look at, because the foot is a rounded nub:
         // it meets a plane at a tangent point, so the bottom of it -- and DECK_SINK is about a

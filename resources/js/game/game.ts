@@ -55,7 +55,7 @@ const pools = new PartPools(world.scene);
 const debug = new DebugOverlay(ui.debugCanvas);
 /**
  * `?people=model` draws the crowd with a rigged model, and `?people=prim` keeps the primitive people;
- * either shows a cost readout. A performance experiment, kept entirely in `src/modelcrowd/`: with no
+ * either shows a cost readout. A performance experiment, kept entirely in `resources/js/game/modelcrowd/`: with no
  * `?people=` it is never loaded. The player stays a primitive person in every mode.
  */
 const peopleParam = params.get('people');

@@ -51,7 +51,7 @@ export const ROAM_S = L + 1;
  * fork draws or in what order; this is the same principle one step further out -- nor may a
  * decorative layer change what a draw *selects*.
  *
- * Every doorway still has a shop behind it, which `test/shops.test.ts` pins. The converse is not
+ * Every doorway still has a shop behind it, which `tests/js/shops.test.ts` pins. The converse is not
  * required: a shop added later stands on the promenade without becoming a place people appear from,
  * and giving it one is a deliberate change to the crowd with a hash regeneration to match.
  */

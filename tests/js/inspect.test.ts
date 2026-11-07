@@ -2,20 +2,20 @@
  * Guards the one property the character turntable (`?inspect=1`) exists for: it must show the
  * person the crowd would build, not a lookalike.
  *
- * `src/inspect/` is a driver for the game's character code, never a copy of it. The moment
+ * `resources/js/game/inspect/` is a driver for the game's character code, never a copy of it. The moment
  * `Subject` drifts from `Agent` -- a reordered draw, a missed follow-up roll, an override that
  * reaches further than its own axis -- the tool starts lying about how people look, and nothing
  * else in the suite would notice.
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ARCH_KEYS } from '../src/archetypes.ts';
-import { makeStreams } from '../src/core/rng.ts';
-import { AGES } from '../src/recipe.ts';
-import type { Mobility } from '../src/recipe.ts';
-import { Agent } from '../src/sim/agent.ts';
-import { Subject } from '../src/inspect/subject.ts';
-import type { Overrides } from '../src/inspect/subject.ts';
+import { ARCH_KEYS } from '../../resources/js/game/archetypes.ts';
+import { makeStreams } from '../../resources/js/game/core/rng.ts';
+import { AGES } from '../../resources/js/game/recipe.ts';
+import type { Mobility } from '../../resources/js/game/recipe.ts';
+import { Agent } from '../../resources/js/game/sim/agent.ts';
+import { Subject } from '../../resources/js/game/inspect/subject.ts';
+import type { Overrides } from '../../resources/js/game/inspect/subject.ts';
 
 const SEEDS = [1, 3, 9, 20260904, 4294967295];
 const NONE: Overrides = { age: 'seed', build: 'seed', mobility: 'seed' };

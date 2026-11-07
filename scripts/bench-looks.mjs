@@ -2,8 +2,8 @@
 // printed as a table. This is the half the comparator cannot measure -- fill cost scales with the
 // pixels people cover, and a comparison panel covers almost none.
 //
-// Usage: npm run dev -- --port 5198 & node scripts/bench-looks.mjs http://localhost:5198 [seconds]
-//        node scripts/bench-looks.mjs http://localhost:5198 30 --gpu
+// Usage: npm run dev & node scripts/bench-looks.mjs [https://coming-through.test/play] [seconds]
+//        node scripts/bench-looks.mjs https://coming-through.test/play 30 --gpu
 //
 // `seconds` is a cap per look, not a duration: each one is read as soon as its ring holds only
 // settled frames, and the cap is what stops a slow machine running forever. Headless SwiftShader
@@ -28,9 +28,11 @@ import { spawn } from 'node:child_process';
 
 const args = process.argv.slice(2);
 const gpu = args.includes('--gpu');
-const [base = 'http://localhost:5173', secs = gpu ? '20' : '120'] = args.filter(a => !a.startsWith('--'));
+const [base = 'https://coming-through.test/play', secs = gpu ? '20' : '120'] = args.filter(a => !a.startsWith('--'));
+// The game page with this query: a bare origin means its /play page, and a trailing slash is dropped.
+const gamePage = (base, query) => { const u = new URL(base); u.pathname = u.pathname === '/' ? '/play' : u.pathname.replace(/\/$/, ''); u.search = query; return u.href; };
 // The one hand-kept copy of the slugs: this is plain node and cannot import the .ts. Keep it in
-// step with `LOOKS` in src/render/look.ts -- a seventh look added there and not here is simply
+// step with `LOOKS` in resources/js/game/render/look.ts -- a seventh look added there and not here is simply
 // never benched, and nothing complains.
 const LOOKS = ['current', 'toon-bare', 'soft-ink', 'soft', 'soft-thin', 'matcap'];
 
@@ -60,7 +62,7 @@ const send = (method, params = {}, sessionId) => new Promise(r => {
 const rows = [];
 for (const look of LOOKS) {
     // A fresh target per look, so nothing a previous look left on the pools can carry over.
-    const url = base.replace(/\/$/, '') + `/?stress=1&tier=high&look=${look}`;
+    const url = gamePage(base, `stress=1&tier=high&look=${look}`);
     const { result: { targetId } } = await send('Target.createTarget', { url: 'about:blank' });
     const { result: { sessionId } } = await send('Target.attachToTarget', { targetId, flatten: true });
     await send('Runtime.enable', {}, sessionId);

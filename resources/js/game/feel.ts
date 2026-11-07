@@ -208,9 +208,9 @@ export const hitStrength = (force: number): number => BUMP.hitFloor + (1 - BUMP.
  *
  * **This object is mutable, and it is the only mutable thing in this file.** Everything else here
  * is `as const` because it is a tuning constant; these are tuning *variables*, written by the panel
- * between frames. That makes one rule absolute: **nothing under `src/sim/` may ever read `BOB`.**
+ * between frames. That makes one rule absolute: **nothing under `resources/js/game/sim/` may ever read `BOB`.**
  * A fixed step that reads a value the player can drag is a replay that cannot be reproduced, which
- * is the one way a camera effect could reach a determinism hash. `test/bob.test.ts` walks the
+ * is the one way a camera effect could reach a determinism hash. `tests/js/bob.test.ts` walks the
  * simulation's transitive imports and fails if it ever does.
  */
 export const BOB = {

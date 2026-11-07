@@ -16,12 +16,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
-import { RecordingPools } from '../src/inspect/gizmos.ts';
-import { Subject } from '../src/inspect/subject.ts';
-import type { Overrides } from '../src/inspect/subject.ts';
-import type { ArchKey } from '../src/archetypes.ts';
-import { INK } from '../src/palette.ts';
-import { drawPerson } from '../src/render/person.ts';
+import { RecordingPools } from '../../resources/js/game/inspect/gizmos.ts';
+import { Subject } from '../../resources/js/game/inspect/subject.ts';
+import type { Overrides } from '../../resources/js/game/inspect/subject.ts';
+import type { ArchKey } from '../../resources/js/game/archetypes.ts';
+import { INK } from '../../resources/js/game/palette.ts';
+import { drawPerson } from '../../resources/js/game/render/person.ts';
 
 const SEED = 9;
 const NONE: Overrides = { age: 'seed', build: 'seed', mobility: 'seed' };

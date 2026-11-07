@@ -22,7 +22,7 @@
  *   game with a footprint that is not a wall, which is the case that file's filter exists for.
  *
  *   There is a hard reason as well as an unreachable one. A shop's capsule has `r = 3`, and
- *   `test/obstacles.test.ts` pins `biggest obstacle + widest body + OBSTACLE_ROOM < grid.reach`.
+ *   `tests/js/obstacles.test.ts` pins `biggest obstacle + widest body + OBSTACLE_ROOM < grid.reach`.
  *   A shop admitted to the fixed grid would break the promise the grid makes about how far a query
  *   can find something from, which is a real invariant and not a tidiness one.
  *
@@ -242,7 +242,7 @@ const DRINKS_SYMBOL: readonly Prim[] = [
  *
  * Kept as lists of their own rather than inlined into the archetypes because two readers want them
  * and neither can recover one from `parts`: the inspector's readout says how much of a shop is its
- * emblem, and `test/shops.test.ts` compares the five against each other to hold the promise that no
+ * emblem, and `tests/js/shops.test.ts` compares the five against each other to hold the promise that no
  * two are confusable at path distance. Subtracting a storefront's length back out would work only
  * until one archetype's awning had a different number of bands from another's -- and three of them
  * already do.

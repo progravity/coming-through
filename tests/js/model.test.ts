@@ -12,11 +12,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
-import { MODEL, POSE, adopt } from '../src/inspect/entities/model.ts';
-import { measure, newBounds } from '../src/inspect/gizmos.ts';
-import { controlOf, defaultControls } from '../src/inspect/inspectable.ts';
-import type { Cast, Controls } from '../src/inspect/inspectable.ts';
-import { lookNamed } from '../src/render/look.ts';
+import { MODEL, POSE, adopt } from '../../resources/js/game/inspect/entities/model.ts';
+import { measure, newBounds } from '../../resources/js/game/inspect/gizmos.ts';
+import { controlOf, defaultControls } from '../../resources/js/game/inspect/inspectable.ts';
+import type { Cast, Controls } from '../../resources/js/game/inspect/inspectable.ts';
+import { lookNamed } from '../../resources/js/game/render/look.ts';
 
 const NAME = 'test-figure';
 

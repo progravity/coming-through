@@ -351,7 +351,7 @@ class ModelCast implements Cast {
             const why = esc(failures.get(this.name) ?? 'not loaded');
             return {
                 title: name, sub: 'no model on stage',
-                rows: [['file', `public/${DIR}${file}`], ['status', why]],
+                rows: [['file', `public${DIR}${file}`], ['status', why]],
                 line: `${name} · ${why}`,
             };
         }

@@ -1,7 +1,7 @@
 /**
  * The crowd drawn as clones of one rigged model instead of the primitive people. **An experiment
  * behind `?people=model`, here to measure what a modeled crowd costs, not a feature.** Delete
- * `src/modelcrowd/` and the lines in `game.ts` that name it, and the game is what it was.
+ * `resources/js/game/modelcrowd/` and the lines in `game.ts` that name it, and the game is what it was.
  *
  * It reads the same interpolated pose the primitive renderer reads and writes nothing back, so it
  * can move neither determinism hash. The simulation never imports it.

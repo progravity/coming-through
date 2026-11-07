@@ -1,6 +1,6 @@
 /**
  * Runs the simulation headlessly with a fixed seed and scripted input, hashes the resulting state,
- * and compares it to test/determinism.expected.json.
+ * and compares it to tests/js/determinism.expected.json.
  *
  * If a behaviour change is intended, regenerate the stored hash on purpose:
  *     npm run test:update-hash
@@ -10,11 +10,11 @@
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { test } from 'node:test';
-import { Rng, hashString, parseSeed } from '../src/core/rng.ts';
-import { PRIME_STEPS } from '../src/sim/simulation.ts';
-import { Recorder } from '../src/input/recorder.ts';
-import { Simulation } from '../src/sim/simulation.ts';
-import type { StepCommand } from '../src/sim/simulation.ts';
+import { Rng, hashString, parseSeed } from '../../resources/js/game/core/rng.ts';
+import { PRIME_STEPS } from '../../resources/js/game/sim/simulation.ts';
+import { Recorder } from '../../resources/js/game/input/recorder.ts';
+import { Simulation } from '../../resources/js/game/sim/simulation.ts';
+import type { StepCommand } from '../../resources/js/game/sim/simulation.ts';
 
 const EXPECTED_PATH = new URL('./determinism.expected.json', import.meta.url);
 interface Expected { seed: number; steps: number; crowd: number; hash: string; identity: string; }

@@ -14,8 +14,11 @@ export const MODELS: Readonly<Record<string, string>> = {
     'casual-man-low': 'Meshy_AI_casual_man_30s_remesh_rigged_20261107_animated_mixamo_All_animation.glb',
 };
 
-/** Relative to the page rather than to the host, so it holds wherever the build is served from. */
-export const MODEL_DIR = 'models/';
+/**
+ * Root-relative, because Laravel serves `public/` as the web root: the game page is a route (`/play`)
+ * rather than a file beside the models, so a page-relative path would move with the route.
+ */
+export const MODEL_DIR = '/models/';
 
 /** A parsed file: its scene, its clips, and how big it was on the wire. */
 export interface ModelFile {
@@ -27,15 +30,16 @@ export interface ModelFile {
 /**
  * Fetch and parse one file. Rejects with a readable reason when the file is not there.
  *
- * Vite answers a missing public file with the app's own index.html and a 200, so the status cannot
- * say "not there" on its own -- the content type can. The loader is imported dynamically, so it is
+ * A missing file can come back as an HTML page: Laravel's 404, or, from a server that falls back to
+ * the app's own page, a 200 -- so the status cannot say "not there" on its own; the content type
+ * can. The loader is imported dynamically, so it is
  * fetched only when a model is asked for and never under `node`.
  */
 export async function fetchModel(file: string): Promise<ModelFile> {
     const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
     const res = await fetch(MODEL_DIR + file);
     if (!res.ok || (res.headers.get('content-type') ?? '').includes('text/html')) {
-        throw new Error(`not found at public/${MODEL_DIR}${file}`);
+        throw new Error(`not found at public${MODEL_DIR}${file}`);
     }
     const buf = await res.arrayBuffer();
     const gltf = await new GLTFLoader().parseAsync(buf, MODEL_DIR);

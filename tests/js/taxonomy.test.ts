@@ -3,7 +3,7 @@
  * independent of one another, and that the behaviour which now asks a property gets the same answer
  * it used to get by assuming one.
  *
- * The vocabulary tests read the source the way `test/purity.test.ts` reads imports, for the same
+ * The vocabulary tests read the source the way `tests/js/purity.test.ts` reads imports, for the same
  * reason: "the vocabulary lives in one place" is a fact about the files, and a second copy of it
  * would compile, would break nothing, and would be found by nobody.
  */
@@ -11,22 +11,22 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { test } from 'node:test';
 import { join, relative } from 'node:path';
-import { ARCH, ARCH_KEYS } from '../src/archetypes.ts';
-import { buildObstacles, obstaclesFrom } from '../src/sim/obstacles.ts';
-import { Simulation } from '../src/sim/simulation.ts';
-import { PROPERTIES, entityMeta, hasProperty } from '../src/entity.ts';
-import { ENTITIES } from '../src/inspect/registry.ts';
-import { FURNITURE_ENTITIES } from '../src/world/furniture.ts';
-import { KIOSK_ARCHETYPES, KIOSK_TYPES, kiosks } from '../src/world/kiosks.ts';
-import { RESTAURANT_ARCHETYPES, RESTAURANT_TYPES, restaurants } from '../src/world/restaurants.ts';
-import { SHOP_ARCHETYPES, SHOP_TYPES, shops } from '../src/world/shops.ts';
-import { edgePlans } from '../src/world/plan.ts';
-import { railingPlan } from '../src/world/railings.ts';
-import { PATH } from '../src/world/path.ts';
-import type { Property } from '../src/entity.ts';
-import type { PlacedEntity } from '../src/world/edge.ts';
+import { ARCH, ARCH_KEYS } from '../../resources/js/game/archetypes.ts';
+import { buildObstacles, obstaclesFrom } from '../../resources/js/game/sim/obstacles.ts';
+import { Simulation } from '../../resources/js/game/sim/simulation.ts';
+import { PROPERTIES, entityMeta, hasProperty } from '../../resources/js/game/entity.ts';
+import { ENTITIES } from '../../resources/js/game/inspect/registry.ts';
+import { FURNITURE_ENTITIES } from '../../resources/js/game/world/furniture.ts';
+import { KIOSK_ARCHETYPES, KIOSK_TYPES, kiosks } from '../../resources/js/game/world/kiosks.ts';
+import { RESTAURANT_ARCHETYPES, RESTAURANT_TYPES, restaurants } from '../../resources/js/game/world/restaurants.ts';
+import { SHOP_ARCHETYPES, SHOP_TYPES, shops } from '../../resources/js/game/world/shops.ts';
+import { edgePlans } from '../../resources/js/game/world/plan.ts';
+import { railingPlan } from '../../resources/js/game/world/railings.ts';
+import { PATH } from '../../resources/js/game/world/path.ts';
+import type { Property } from '../../resources/js/game/entity.ts';
+import type { PlacedEntity } from '../../resources/js/game/world/edge.ts';
 
-const SRC = new URL('../src/', import.meta.url).pathname;
+const SRC = new URL('../../resources/js/game/', import.meta.url).pathname;
 
 /** Every `.ts` file under `dir`, recursively. */
 function sources(dir: string, out: string[] = []): string[] {
@@ -38,7 +38,7 @@ function sources(dir: string, out: string[] = []): string[] {
     return out;
 }
 
-/** Every file under `src/` whose source matches `re`, as paths relative to `src/`. */
+/** Every file under `resources/js/game/` whose source matches `re`, as paths relative to `resources/js/game/`. */
 const declaring = (re: RegExp): string[] =>
     sources(SRC).filter(f => re.test(readFileSync(f, 'utf8'))).map(f => relative(SRC, f));
 
@@ -151,7 +151,7 @@ test('a vendor is an entity with the vendor property, which has a service spot a
         assert.equal(typeof arch.vendor.staff.dn, 'number');
     }
     // And placed, the spots are in path coordinates -- turned with the cart rather than authored
-    // beside it. Where they land is `test/kiosks.test.ts`; that they exist at all is the capability.
+    // beside it. Where they land is `tests/js/kiosks.test.ts`; that they exist at all is the capability.
     for (const k of kiosks()) {
         assert.ok(k.vendor !== undefined, `${k.type} was placed without its vendor spots`);
         assert.equal(typeof k.vendor.service.s, 'number');

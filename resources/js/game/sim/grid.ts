@@ -34,7 +34,7 @@ export class SpatialGrid<T extends GridItem, S extends GridItem = never> {
      * See `setFixed`: an item is indexed into every cell within a cell's width of its footprint, so
      * a query one cell away still meets it. Any interaction radius larger than this would fade in
      * and out depending on where the cell boundaries happened to fall under a bench, which is a bug
-     * that only shows up in one place on the path. `test/obstacles.test.ts` pins it.
+     * that only shows up in one place on the path. `tests/js/obstacles.test.ts` pins it.
      */
     get reach(): number { return this.cellSize; }
 

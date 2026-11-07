@@ -1,3 +1,4 @@
+.DS_Store
 /.phpunit.cache
 /node_modules
 /public/build
@@ -34,7 +35,6 @@ yarn-error.log
 /.pi
 /.mcp.json
 /AGENTS.md
-/CLAUDE.md
 /boost.json
 /opencode.json
 /opencode.jsonc

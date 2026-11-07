@@ -3,10 +3,10 @@
 // SwiftShader is most of the number; this isolates the part that a real GPU will not help with.
 // Usage: node scripts/bench-pose.mjs [crowd] [frames]
 import * as THREE from 'three';
-import { drawPerson } from '../src/render/person.ts';
-import { PartPools } from '../src/render/pools.ts';
-import { lerpPose, newPose } from '../src/sim/pose.ts';
-import { Simulation } from '../src/sim/simulation.ts';
+import { drawPerson } from '../resources/js/game/render/person.ts';
+import { PartPools } from '../resources/js/game/render/pools.ts';
+import { lerpPose, newPose } from '../resources/js/game/sim/pose.ts';
+import { Simulation } from '../resources/js/game/sim/simulation.ts';
 
 const [crowdArg = '190', framesArg = '600'] = process.argv.slice(2);
 const CROWD = Number(crowdArg), FRAMES = Number(framesArg), WARMUP = 120;

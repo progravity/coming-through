@@ -2,7 +2,7 @@
  * Deterministic random numbers.
  *
  * Every gameplay random decision comes from an `Rng` derived from the run seed; see CLAUDE.md
- * ("Determinism rules"). This is the only file in `src/` allowed to touch `Math.random`, and only
+ * ("Determinism rules"). This is the only file in `resources/js/game/` allowed to touch `Math.random`, and only
  * to invent a seed for a fresh run.
  */
 

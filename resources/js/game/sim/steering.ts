@@ -45,7 +45,7 @@ export function avoidPlayer(self: Agent, A: Archetype, player: Player, out: Stee
  * `OBSTACLE_ROOM` is deliberately small -- you brush past a bench, you do not give it a two-metre
  * berth -- and it is what bounds this force's reach: `r + self.r + ROOM` has to stay inside the
  * grid's guaranteed find radius, or a bench would push harder or softer depending on where the
- * cell boundaries fell under it. `test/obstacles.test.ts` pins that.
+ * cell boundaries fell under it. `tests/js/obstacles.test.ts` pins that.
  *
  * The weight is a constant rather than the archetype's `sepW`. A bench has no opinion about who is
  * walking into it and does not step aside for anyone, so there is no personality to express here;

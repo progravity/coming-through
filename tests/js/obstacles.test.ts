@@ -13,21 +13,21 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { hasProperty } from '../src/entity.ts';
-import { Agent } from '../src/sim/agent.ts';
-import { SpatialGrid } from '../src/sim/grid.ts';
-import { buildObstacles, insideFurniture, pushOutOf, reachOf } from '../src/sim/obstacles.ts';
-import type { Obstacle, Push } from '../src/sim/obstacles.ts';
-import { createPlayer, updatePlayer } from '../src/sim/player.ts';
-import { OBSTACLE_ROOM } from '../src/sim/steering.ts';
-import { IDLE_COMMAND, Simulation } from '../src/sim/simulation.ts';
-import type { StepCommand } from '../src/sim/simulation.ts';
-import type { Solid } from '../src/world/edge.ts';
-import { furniturePlan } from '../src/world/furniture.ts';
-import { edgePlans } from '../src/world/plan.ts';
-import { W } from '../src/world/layout.ts';
-import { PATH, PathCurve, newPathFrame, newPathPoint, newWorldPoint, pathPlace } from '../src/world/path.ts';
-import type { Along, PathRun } from '../src/world/path.ts';
+import { hasProperty } from '../../resources/js/game/entity.ts';
+import { Agent } from '../../resources/js/game/sim/agent.ts';
+import { SpatialGrid } from '../../resources/js/game/sim/grid.ts';
+import { buildObstacles, insideFurniture, pushOutOf, reachOf } from '../../resources/js/game/sim/obstacles.ts';
+import type { Obstacle, Push } from '../../resources/js/game/sim/obstacles.ts';
+import { createPlayer, updatePlayer } from '../../resources/js/game/sim/player.ts';
+import { OBSTACLE_ROOM } from '../../resources/js/game/sim/steering.ts';
+import { IDLE_COMMAND, Simulation } from '../../resources/js/game/sim/simulation.ts';
+import type { StepCommand } from '../../resources/js/game/sim/simulation.ts';
+import type { Solid } from '../../resources/js/game/world/edge.ts';
+import { furniturePlan } from '../../resources/js/game/world/furniture.ts';
+import { edgePlans } from '../../resources/js/game/world/plan.ts';
+import { W } from '../../resources/js/game/world/layout.ts';
+import { PATH, PathCurve, newPathFrame, newPathPoint, newWorldPoint, pathPlace } from '../../resources/js/game/world/path.ts';
+import type { Along, PathRun } from '../../resources/js/game/world/path.ts';
 
 /** Below this a part of a prop is something a body walks into; above it, something it walks under. */
 const WALKING_HEIGHT = 1.2;

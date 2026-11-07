@@ -4,9 +4,9 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { GOAL_S, L, START_S, W } from '../src/world/layout.ts';
-import { PATH, PathCurve, newPathFrame, newPathPoint, newWorldPoint, pathDir, pathPlace } from '../src/world/path.ts';
-import type { Along, PathRun } from '../src/world/path.ts';
+import { GOAL_S, L, START_S, W } from '../../resources/js/game/world/layout.ts';
+import { PATH, PathCurve, newPathFrame, newPathPoint, newWorldPoint, pathDir, pathPlace } from '../../resources/js/game/world/path.ts';
+import type { Along, PathRun } from '../../resources/js/game/world/path.ts';
 
 const w = newWorldPoint(), q = newPathPoint(), f = newPathFrame();
 

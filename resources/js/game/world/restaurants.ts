@@ -291,7 +291,7 @@ const SALAD_SYMBOL: readonly Prim[] = [
  *
  * Kept as lists of their own for the reason `SHOP_SYMBOLS` is: two readers want them and neither can
  * recover one from `parts` -- the inspector's readout says how much of a restaurant is its emblem,
- * and `test/restaurants.test.ts` compares the five against each other to hold the promise that no
+ * and `tests/js/restaurants.test.ts` compares the five against each other to hold the promise that no
  * two are confusable at path distance.
  */
 export const RESTAURANT_SYMBOLS: Record<RestaurantType, readonly Prim[]> = {
@@ -318,7 +318,7 @@ export interface RestaurantPlacement { type: RestaurantType; s: number; side: 1 
  * Each one was checked against what it costs the promenade rather than only against where it looks
  * right, and the list is what came back: **five restaurants the length of the walkway for nothing at
  * all** -- not a bench, not a bin, not a lamp post, not a railing post, not a cart. Every doorway
- * falls in a gap the bench rhythm already left. `test/restaurants.test.ts` pins it, which is what
+ * falls in a gap the bench rhythm already left. `tests/js/restaurants.test.ts` pins it, which is what
  * stops the list being re-chosen by eye later.
  *
  * The second filter is the one that moved two of them, and it is worth knowing before moving any:

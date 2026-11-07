@@ -13,22 +13,22 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';
 import * as THREE from 'three';
-import { measure, newBounds } from '../src/inspect/gizmos.ts';
-import { REST, clampView, frameFor, placeCamera, zoomAt } from '../src/inspect/stage.ts';
-import type { Extent, View } from '../src/inspect/stage.ts';
-import type { DrawnPart } from '../src/inspect/inspectable.ts';
-import { PERSON } from '../src/inspect/entities/person.ts';
-import { Subject } from '../src/inspect/subject.ts';
-import { ARCH_KEYS } from '../src/archetypes.ts';
-import { INK, controlOf, defaultControls, findKey, overlaysOf } from '../src/inspect/inspectable.ts';
-import type { Cast, Inspectable } from '../src/inspect/inspectable.ts';
-import { ENTITIES, resolve } from '../src/inspect/registry.ts';
-import { queryOf, readState, stateFor } from '../src/inspect/state.ts';
-import { FURNITURE } from '../src/inspect/entities/furniture.ts';
-import { KIOSK } from '../src/inspect/entities/kiosk.ts';
-import { bench } from '../src/world/furniture.ts';
-import { PATH } from '../src/world/path.ts';
-import { LOOK_NAMES, lookNamed } from '../src/render/look.ts';
+import { measure, newBounds } from '../../resources/js/game/inspect/gizmos.ts';
+import { REST, clampView, frameFor, placeCamera, zoomAt } from '../../resources/js/game/inspect/stage.ts';
+import type { Extent, View } from '../../resources/js/game/inspect/stage.ts';
+import type { DrawnPart } from '../../resources/js/game/inspect/inspectable.ts';
+import { PERSON } from '../../resources/js/game/inspect/entities/person.ts';
+import { Subject } from '../../resources/js/game/inspect/subject.ts';
+import { ARCH_KEYS } from '../../resources/js/game/archetypes.ts';
+import { INK, controlOf, defaultControls, findKey, overlaysOf } from '../../resources/js/game/inspect/inspectable.ts';
+import type { Cast, Inspectable } from '../../resources/js/game/inspect/inspectable.ts';
+import { ENTITIES, resolve } from '../../resources/js/game/inspect/registry.ts';
+import { queryOf, readState, stateFor } from '../../resources/js/game/inspect/state.ts';
+import { FURNITURE } from '../../resources/js/game/inspect/entities/furniture.ts';
+import { KIOSK } from '../../resources/js/game/inspect/entities/kiosk.ts';
+import { bench } from '../../resources/js/game/world/furniture.ts';
+import { PATH } from '../../resources/js/game/world/path.ts';
+import { LOOK_NAMES, lookNamed } from '../../resources/js/game/render/look.ts';
 
 /** A part is a unit cube under its own matrix, whichever pool or kit drew it. */
 const part = (x: number, y: number, z: number, sx: number, sy: number, sz: number): DrawnPart => ({
@@ -116,10 +116,10 @@ const FAKE: Inspectable = {
 };
 
 test('the shell knows nothing about any particular entity', () => {
-    // The whole generalisation in one assertion. Every file at the top of `src/inspect/` is shell:
+    // The whole generalisation in one assertion. Every file at the top of `resources/js/game/inspect/` is shell:
     // it may reach the registry and the interface, and must not reach an entity. `registry.ts` is
     // the one place that names them, and it has to name at least one or nothing is registered.
-    const dir = new URL('../src/inspect/', import.meta.url);
+    const dir = new URL('../../resources/js/game/inspect/', import.meta.url);
     let checked = 0;
     for (const file of readdirSync(dir).filter(f => f.endsWith('.ts'))) {
         const src = readFileSync(new URL(file, dir), 'utf8');
@@ -136,7 +136,7 @@ test('the shell knows nothing about any particular entity', () => {
         }
         checked++;
     }
-    assert.ok(checked >= 6, `only scanned ${checked} files of src/inspect/`);
+    assert.ok(checked >= 6, `only scanned ${checked} files of resources/js/game/inspect/`);
 });
 
 test('a hypothetical entity is inspectable without the shell changing', () => {
@@ -482,7 +482,7 @@ test('the ink overlay is reconciled by choosing a look and by nothing else', () 
     // `syncInk`, `dressAll` and `rebuild` are closures inside `startInspector`, which wants a
     // canvas. That unreachability is part of why the bug survived, so the shell is read here the
     // same way the import guards above read it, and the two properties the bug broke are pinned.
-    const shell = readFileSync(new URL('../src/inspect/index.ts', import.meta.url).pathname, 'utf8');
+    const shell = readFileSync(new URL('../../resources/js/game/inspect/index.ts', import.meta.url).pathname, 'utf8');
 
     // One: the reconcile happens where a look is *chosen* and nowhere else. Called from `rebuild`
     // it takes the ink away from anyone who pressed `o` and then stepped the seed or the kind.

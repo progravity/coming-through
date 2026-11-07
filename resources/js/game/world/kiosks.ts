@@ -318,7 +318,7 @@ export interface KioskPlacement { type: KioskType; s: number; side: 1 | -1; }
  * metres from a bench costs that bench -- and nine carts placed without regard for the interval
  * halved the seating on the promenade before this list was chosen. Each `s` here is far enough from
  * every bench on its own side, and far enough from the shops and the pads, that the cart costs
- * nothing but the room it stands in. `test/kiosks.test.ts` holds that.
+ * nothing but the room it stands in. `tests/js/kiosks.test.ts` holds that.
  */
 export const KIOSK_PLACEMENTS: readonly KioskPlacement[] = [
     { type: 'cotton-candy', s: 34.5, side: 1 },
@@ -355,7 +355,7 @@ export const KIOSK_SPANS: readonly EdgeSpan[] = KIOSK_PLACEMENTS.map(k => ({
  * The stream the carts are painted from.
  *
  * Seeded by a constant, not by the run: everything in `world/` is a function of place, the ground's
- * grain included, and `test/obstacles.test.ts` pins that two runs on different seeds get identical
+ * grain included, and `tests/js/obstacles.test.ts` pins that two runs on different seeds get identical
  * obstacles. So the promenade is painted the same way every time, and no roll here can be seen by
  * either determinism hash. Forking per site rather than drawing down one generator means a cart's
  * colours depend on which site it is and not on how many carts precede it.

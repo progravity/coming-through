@@ -9,7 +9,7 @@
  *
  * The four axis overrides are **archetype edits** rather than recipe edits -- see `subject.ts` --
  * so `makeRecipe` still takes every draw in its fixed order and only the selection from rolls
- * already in hand moves. `test/inspect.test.ts` is what holds that.
+ * already in hand moves. `tests/js/inspect.test.ts` is what holds that.
  */
 // Only ever a type here -- the pools are what touch three.js.
 import type * as THREE from 'three';

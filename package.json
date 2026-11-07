@@ -3,8 +3,13 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "build": "vp build",
-        "dev": "vp dev"
+        "build": "npm run lint && vp build",
+        "dev": "vp dev",
+        "dev:lan": "VITE_LAN=1 vp dev",
+        "lint": "tsc && node scripts/check-math-random.mjs",
+        "test": "npm run lint && node --test tests/js/",
+        "bench:looks": "node scripts/bench-looks.mjs",
+        "test:update-hash": "UPDATE_DETERMINISM_HASH=1 node --test tests/js/determinism.test.ts"
     },
     "dependencies": {
         "@laravel/passkeys": "^0.2.0",
@@ -12,8 +17,14 @@
         "concurrently": "^10.0.3",
         "laravel-vite-plugin": "^3.1",
         "tailwindcss": "^4.0.7",
+        "three": "^0.185.1",
         "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0",
         "vite-plus": "1.4.0"
+    },
+    "devDependencies": {
+        "@types/node": "^26.4.1",
+        "@types/three": "^0.185.4",
+        "typescript": "~6.0.2"
     },
     "optionalDependencies": {
         "@laravel/multiplex": "^0.4.1",
@@ -23,5 +34,9 @@
     },
     "overrides": {
         "vite": "npm:@voidzero-dev/vite-plus-core@1.4.0"
+    },
+    "allowScripts": {
+        "fsevents@2.3.3": true,
+        "three@0.185.1": true
     }
 }

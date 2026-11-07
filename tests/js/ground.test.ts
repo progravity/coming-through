@@ -11,11 +11,11 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { inkSectionAt, ribbon, sectionAt } from '../src/world/ground.ts';
-import type { Band, Section } from '../src/world/ground.ts';
-import { W } from '../src/world/layout.ts';
-import { PathCurve, newPathFrame } from '../src/world/path.ts';
-import type { Along, PathRun } from '../src/world/path.ts';
+import { inkSectionAt, ribbon, sectionAt } from '../../resources/js/game/world/ground.ts';
+import type { Band, Section } from '../../resources/js/game/world/ground.ts';
+import { W } from '../../resources/js/game/world/layout.ts';
+import { PathCurve, newPathFrame } from '../../resources/js/game/world/path.ts';
+import type { Along, PathRun } from '../../resources/js/game/world/path.ts';
 
 /** A right-angled bend at the origin: straight in along +z, away at 45 degrees. */
 const BEND: readonly PathRun[] = [

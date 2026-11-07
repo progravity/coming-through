@@ -3,7 +3,7 @@
  *
  * The shell imports this and `inspectable.ts` and nothing else entity-shaped, which is what makes
  * "a new entity is inspectable without touching the inspector" a fact rather than an intention --
- * `test/inspectable.test.ts` reads the shell's imports and fails if one appears.
+ * `tests/js/inspectable.test.ts` reads the shell's imports and fails if one appears.
  *
  * Adding an entity is a file in `entities/` and a line in `ENTITIES`. There is no step three.
  */
