@@ -2,6 +2,9 @@
     "$schema": "https://www.schemastore.org/package.json",
     "private": true,
     "type": "module",
+    "engines": {
+        "node": "^26.13.0"
+    },
     "scripts": {
         "build": "npm run lint && vp build",
         "dev": "vp dev",
