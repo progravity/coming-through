@@ -18,27 +18,24 @@
  *   the promenade afford a hundred and ninety of it".
  * - **No root motion.** A clip plays on the spot; one that walks forward walks off its anchor.
  *
- * Files are listed in `MODELS` by the name the address bar uses. Nothing in a browser can list
- * `public/`, so a list it is: drop the file in `public/models/` and add a line.
+ * Files are listed in `MODELS` in `render/model-file.ts` by the name the address bar uses, and
+ * fetched by its `fetchModel` -- the same file and loader the `?people=model` crowd experiment uses.
  */
 import * as THREE from 'three';
 import { SIM_DT } from '../../core/time.ts';
 import type { Look } from '../../render/look.ts';
 import { makeToonGradient } from '../../render/materials.ts';
+import { MODELS, MODEL_DIR as DIR, fetchModel } from '../../render/model-file.ts';
+import { falseHex, prepareRegions, recipeColours } from '../../modelcrowd/regions.ts';
+import type { RegionUniforms, Regions } from '../../modelcrowd/regions.ts';
+import type { Recipe } from '../../recipe.ts';
 import { defaultControls } from '../inspectable.ts';
 import type { Cast, Control, Controls, DrawnPart, Inspectable, Readout } from '../inspectable.ts';
+import { Subject, archetypeForSeed } from '../subject.ts';
 import { PERSON } from './person.ts';
-
-/** Every file the bench can show, by the name `?model=` uses, as a path under `public/models/`. */
-export const MODELS: Readonly<Record<string, string>> = {
-    'casual-man': 'Meshy_AI_casual_man_30s_rigged_20261106_animated_mixamo_All_animation.glb',
-};
 
 /** The clip option meaning no clip at all: the file's rest pose, which for a rig is usually a T. */
 export const POSE = 'pose';
-
-/** Relative to the page rather than to the host, so it holds wherever the build is served from. */
-const DIR = 'models/';
 
 /** What stands on the stage when a file did not arrive: a person-sized box, so the frame still fits. */
 const MISSING = new THREE.Vector3(0.5, 1.8, 0.3);
@@ -66,6 +63,8 @@ interface Model {
     readonly verts: number;
     readonly bones: number;
     readonly bytes: number;
+    /** Its colour regions and their roles, as the `?people=model` crowd paints them; null when not looked for. */
+    readonly regions: Regions | null;
 }
 
 const models = new Map<string, Model>();
@@ -97,7 +96,7 @@ function refreshClips(): void {
  * Take a loaded figure into the bench under `name`. What `load` does with each file that arrives,
  * and how a test stands a model on the stage without a network or a file.
  */
-export function adopt(name: string, root: THREE.Object3D, clips: readonly THREE.AnimationClip[], bytes = 0): void {
+export function adopt(name: string, root: THREE.Object3D, clips: readonly THREE.AnimationClip[], bytes = 0, regions: Regions | null = null): void {
     const meshes: THREE.Mesh[] = [];
     const shipped = new Map<THREE.Mesh, THREE.Material | THREE.Material[]>();
     const rest: [THREE.Object3D, THREE.Vector3, THREE.Quaternion, THREE.Vector3][] = [];
@@ -113,27 +112,17 @@ export function adopt(name: string, root: THREE.Object3D, clips: readonly THREE.
         o.frustumCulled = false;
         if (o instanceof THREE.SkinnedMesh) for (const b of o.skeleton.bones) bones.add(b);
     });
-    models.set(name, { root, clips, meshes, shipped, rest, verts, bones: bones.size, bytes });
+    models.set(name, { root, clips, meshes, shipped, rest, verts, bones: bones.size, bytes, regions });
     failures.delete(name);
     refreshClips();
 }
 
 /** Fetch and parse every listed file. Never rejects: a file that fails says why on the stage. */
 async function load(): Promise<void> {
-    // Dynamic, so the loader is fetched only when a model is asked for and never under `node`.
-    const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
-    const loader = new GLTFLoader();
     await Promise.all(Object.entries(MODELS).map(async ([name, file]) => {
         try {
-            const res = await fetch(DIR + file);
-            // Vite answers a missing file with the app's own index.html and a 200, so the status
-            // cannot say "not there" on its own -- the content type can.
-            if (!res.ok || (res.headers.get('content-type') ?? '').includes('text/html')) {
-                throw new Error(`not found at public/${DIR}${file}`);
-            }
-            const buf = await res.arrayBuffer();
-            const gltf = await loader.parseAsync(buf, DIR);
-            adopt(name, gltf.scene, gltf.animations, buf.byteLength);
+            const got = await fetchModel(file);
+            adopt(name, got.scene, got.animations, got.bytes, await prepareRegions(file, got.scene));
         } catch (e) {
             failures.set(name, e instanceof Error ? e.message : String(e));
         }
@@ -192,6 +181,14 @@ class ModelCast implements Cast {
     private action: THREE.AnimationAction | null = null;
     private c: Controls = {};
     private look: Look | null = null;
+    /**
+     * The recipe the model is painted in: the adult the seed stands beside it in the row, rolled the
+     * same way, so the model and the game's person wear the same colours and any region painted the
+     * wrong one shows against its neighbour.
+     */
+    private recipe: Recipe | null = null;
+    /** The repaint on the material the bench made, while it is wearing one. */
+    private regionUniforms: RegionUniforms | null = null;
 
     constructor(scene: THREE.Scene) {
         scene.add(this.anchor);
@@ -230,6 +227,7 @@ class ModelCast implements Cast {
             this.mixer.update(0);
         }
         this.person.rebuild(seed, Math.max(0, count - 1), this.pc);
+        this.recipe = new Subject(seed, 0, archetypeForSeed(seed, 0), { age: 'adult', build: 'seed', mobility: 'seed' }).recipe;
     }
 
     step(): void {
@@ -244,6 +242,12 @@ class ModelCast implements Cast {
             if (c.freeze === true) this.mixer.setTime(wrap01(Number(c.phase)) * d);
             // Written back, as the person's gait is, so the slider tracks a playing clip.
             else c.phase = d > 0 ? wrap01(action.time / d) : 0;
+        }
+        // Live, rather than a rebuild: the toggles move two uniforms and the clip keeps playing.
+        const paint = this.model?.regions?.paint ?? null, u = this.regionUniforms;
+        if (paint !== null && u !== null) {
+            paint.paint(u, c.recolour === true && this.recipe !== null ? recipeColours(this.recipe) : null);
+            paint.showFalse(u, c.regions === true);
         }
         this.anchor.position.set(xs[0] ?? 0, 0, 0);
         this.anchor.rotation.set(0, yaw, 0);
@@ -306,11 +310,15 @@ class ModelCast implements Cast {
     /** The file's own materials under `own`, the game's otherwise. Disposes only what it made. */
     private paint(m: Model): void {
         const own = this.c.own === true;
+        this.regionUniforms = null;
         for (const mesh of m.meshes) {
             const shipped = m.shipped.get(mesh) as THREE.Material | THREE.Material[];
             const want = own ? shipped
                 : Array.isArray(shipped) ? shipped.map(s => gameMaterial(this.look, s))
                 : gameMaterial(this.look, shipped);
+            // Only ever a material the bench made: the file's own is never patched.
+            const regions = m.regions?.paint ?? null;
+            if (!own && regions !== null && mesh === m.regions?.mesh && !Array.isArray(want)) this.regionUniforms = regions.patch(want);
             this.swap(mesh, shipped, want);
         }
     }
@@ -364,6 +372,7 @@ class ModelCast implements Cast {
                 ['shading', this.c.own === true ? 'its own materials' : "the game's look, with its texture"],
                 ['drawn', `${m.meshes.length} draw call${m.meshes.length === 1 ? '' : 's'} per figure · no ink`],
                 ['file', `${file}${m.bytes > 0 ? ` · ${n(m.bytes / 1e6, 1)} MB` : ''}`],
+                ...regionRows(m.regions),
             ],
             line: `${name} · ${esc(clip?.name ?? POSE)} · ${n(top)}m`,
         };
@@ -371,10 +380,43 @@ class ModelCast implements Cast {
 
     status(): string {
         const clip = this.action?.getClip();
-        if (clip === undefined) return `clip <b>${POSE}</b>`;
+        const regions = this.regionUniforms === null ? ''
+            : this.c.regions === true ? ' · <b>false colour</b>'
+            : this.c.recolour === true && this.model?.regions?.roles?.usable === true ? " · the seed's colours" : ' · as authored';
+        if (clip === undefined) return `clip <b>${POSE}</b>${regions}`;
         const p = wrap01(Number(this.c.phase));
-        return `clip <b>${esc(clip.name)}</b> ${(p * 100).toFixed(0)}%${this.c.freeze === true ? ' frozen' : ''}`;
+        return `clip <b>${esc(clip.name)}</b> ${(p * 100).toFixed(0)}%${this.c.freeze === true ? ' frozen' : ''}${regions}`;
     }
+}
+
+const swatch = (hex: string): string =>
+    `<i style="display:inline-block;width:.85em;height:.85em;border-radius:2px;vertical-align:-1px;margin-right:3px;background:${hex}"></i>`;
+const share = (v: number): string => `${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%`;
+
+/**
+ * The regions, for checking a model at a glance: one row per colour group with its false colour,
+ * its own colour and its role, then anything that stops it being painted or ought to be fixed.
+ */
+function regionRows(rg: Regions | null): [string, string][] {
+    if (rg === null) return [];
+    const seg = rg.seg, roles = rg.roles;
+    if (seg === null || roles === null) return [['regions', esc(rg.summary)]];
+    if (seg.failure !== null) return [['regions', `<b>not separable</b>: ${esc(seg.failure)}`]];
+    const rows: [string, string][] = [
+        ['regions', `${seg.groups.length} colour groups · ${rg.ms.toFixed(0)} ms · bandwidth ${+seg.bandwidth.toFixed(4)}`],
+        ['roles', roles.usable ? `painted · ${esc(rg.file).replace(/_/g, '_<wbr>')}` : `<b>not painted</b>: ${esc(roles.problems.join('; '))}`],
+    ];
+    for (const g of seg.groups) {
+        const role = roles.byGroup[g.index];
+        rows.push([`region ${g.index + 1}`, `${swatch(falseHex(g.index))}${swatch(g.hex)}${g.hex} · ${share(g.share)} · `
+            + (roles.named[g.index] ? `<b>${role}</b>` : '<span class="off">not in file</span>')]);
+    }
+    if (seg.blends.length > 0) {
+        rows.push(['blends', seg.blends.map(b => `${b.a + 1}+${b.b + 1} ${share(b.share)}`).join(', ')]);
+    }
+    const notes = [...roles.warnings, ...seg.notes];
+    if (notes.length > 0) rows.push(['check', notes.map(esc).join('<br>')]);
+    return rows;
 }
 
 export const MODEL: Inspectable = {
@@ -390,6 +432,10 @@ export const MODEL: Inspectable = {
         { kind: 'toggle', id: 'own', label: 'own materials', value: false, key: 'n', rebuilds: true },
         { kind: 'toggle', id: 'freeze', label: 'freeze clip', value: false, key: 'f' },
         { kind: 'scalar', id: 'phase', label: 'clip phase', value: 0, keys: [',', '.'], gate: 'freeze' },
+        // Painted in the recipe of the person the seed stands beside it, through the role file.
+        { kind: 'toggle', id: 'recolour', label: 'recipe colours', value: true, key: 'p' },
+        // Each detected colour group flat in its own colour, numbered as in the readout.
+        { kind: 'toggle', id: 'regions', label: 'region false colour', value: false, key: 'r' },
     ],
     overlays: [],
     // Seeds browse the game's people in the row; `C` already cycles the clips.

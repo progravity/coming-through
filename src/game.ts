@@ -53,6 +53,16 @@ document.body.appendChild(renderer.domElement);
 const rig = new CameraRig();
 const pools = new PartPools(world.scene);
 const debug = new DebugOverlay(ui.debugCanvas);
+/**
+ * `?people=model` draws the crowd with a rigged model, and `?people=prim` keeps the primitive people;
+ * either shows a cost readout. A performance experiment, kept entirely in `src/modelcrowd/`: with no
+ * `?people=` it is never loaded. The player stays a primitive person in every mode.
+ */
+const peopleParam = params.get('people');
+const people = peopleParam === 'model' || peopleParam === 'prim'
+    ? await (await import('./modelcrowd/index.ts')).startPeople(peopleParam, world.scene, params, () => input.dispatch('toggleInk'))
+    : null;
+const modelCrowd = people?.models ?? null;
 
 // ---------- loop state ----------
 const IDLE = { x: 0, y: 0, mag: 0, hurry: false } as const;
@@ -73,13 +83,26 @@ interface StressStats {
     avgPoseMs: number;
     /** Draw calls in the last frame, people and world together. Halves when the ink shells are off. */
     drawCalls: number;
+    /** Triangles in the last frame, people and world together. */
+    triangles: number;
     frames: number; people: number;
+    /**
+     * Running totals since the page loaded. A bench reads them twice and divides the difference, which
+     * averages over exactly the frames it waited for -- the ring above cannot be told to forget the
+     * shader compiles at the start of a run that only manages a frame or two a second.
+     */
+    totalFrameMs: number; totalSimMs: number; totalPoseMs: number; totalRenderMs: number; totalSteps: number;
 }
-const stressStats: StressStats = { simMs: 0, renderMs: 0, steps: 0, avgSimMs: 0, avgRenderMs: 0, avgSimPerStepMs: 0, avgPoseMs: 0, drawCalls: 0, frames: 0, people: 0 };
+const stressStats: StressStats = {
+    simMs: 0, renderMs: 0, steps: 0, avgSimMs: 0, avgRenderMs: 0, avgSimPerStepMs: 0, avgPoseMs: 0, drawCalls: 0, triangles: 0, frames: 0, people: 0,
+    totalFrameMs: 0, totalSimMs: 0, totalPoseMs: 0, totalRenderMs: 0, totalSteps: 0,
+};
+/** `?stress=1&crowd=N` holds a stress run at N people instead of the full crowd, to compare renderers at one size. */
+const stressCrowd = Number(params.get('crowd'));
 
 // ---------- settings and game state ----------
 let tier: Tier = initialTier();
-let targetCount = clampCrowd(stress ? MAX_CROWD : TIER_SETTINGS[tier].crowd);
+let targetCount = clampCrowd(stress ? (stressCrowd > 0 ? stressCrowd : MAX_CROWD) : TIER_SETTINGS[tier].crowd);
 let seed = initialSeed;
 let sim = new Simulation(seed);
 let recorder = new Recorder(seed, targetCount);
@@ -91,6 +114,8 @@ const game = {
     get sim(): Simulation { return sim; },
     get recorder(): Recorder { return recorder; },
     stress: stress ? stressStats : null,
+    /** The `?people=` experiment's readout, or null without the flag. */
+    people: people?.stats ?? null,
     restart: (s?: number | string): number => {
         startRun(s === undefined ? seed : typeof s === 'number' ? s >>> 0 : parseSeed(s));
         return seed;
@@ -331,7 +356,8 @@ function frame(now: number): void {
     // The crowd walks in the horizontal plane and is *draped* onto the walkway at the last
     // moment: the height under a body is a question about the path, asked of the interpolated
     // position rather than interpolated itself, so nobody floats over a crest between two steps.
-    for (const a of sim.crowd.agents) { lerpPose(view, a.prev, a, alpha); drawPerson(pools, a.slot, a, view, t, PATH.surfaceY(view.x, view.z)); }
+    if (modelCrowd !== null) modelCrowd.draw(sim.crowd.agents, alpha, sim.player, pools.inkOn);
+    else for (const a of sim.crowd.agents) { lerpPose(view, a.prev, a, alpha); drawPerson(pools, a.slot, a, view, t, PATH.surfaceY(view.x, view.z)); }
     const p = sim.player;
     lerpPose(playerView, p.prev, p, alpha);
     playerView.camYaw = p.prevCamYaw + wrapAngle(p.camYaw - p.prevCamYaw) * alpha;
@@ -358,7 +384,8 @@ function frame(now: number): void {
         ringIdx = (ringIdx + 1) % RING; ringCount = Math.min(RING, ringCount + 1);
         const s = stressStats;
         s.simMs = simMs; s.renderMs = renderMs; s.steps = steps; s.frames++; s.people = sim.crowd.agents.length;
-        s.drawCalls = renderer.info.render.calls;
+        s.drawCalls = renderer.info.render.calls; s.triangles = renderer.info.render.triangles;
+        s.totalFrameMs += frameDt * 1000; s.totalSimMs += simMs; s.totalPoseMs += poseMs; s.totalRenderMs += renderMs; s.totalSteps += steps;
         s.avgSimMs = ringSum.sim / ringCount; s.avgRenderMs = ringSum.render / ringCount; s.avgPoseMs = ringSum.pose / ringCount;
         s.avgSimPerStepMs = ringSum.steps > 0 ? ringSum.sim / ringSum.steps : 0;
         ui.stressLine(simMs, renderMs, s.avgSimMs, s.avgRenderMs, steps, s.people);
@@ -367,6 +394,10 @@ function frame(now: number): void {
         ui.fpsLine(fps, sim.crowd.agents.length, renderer.info.render.calls);
         fpsFrames = 0; fpsTime = 0;
     }
+    people?.report({
+        frameDt, simMs, poseMs, renderMs, calls: renderer.info.render.calls,
+        triangles: renderer.info.render.triangles, people: sim.crowd.agents.length,
+    });
     debug.draw(sim.crowd, sim.player, { fps, drawCalls: renderer.info.render.calls });
 }
 requestAnimationFrame(frame);

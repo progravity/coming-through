@@ -1,0 +1,12 @@
+{
+  "about": "Which colour group of this model's texture is which part, matched by colour (Oklab distance under 0.06). Roles: skin, top (shirt or jacket), trousers, hair, shoes, keep (left as authored). Check at ?inspect=1&entity=model with R for false colour; region numbers there follow the detector's order, not this list's.",
+  "regions": [
+    { "colour": "#cb8559", "role": "skin" },
+    { "colour": "#2d539d", "role": "top" },
+    { "colour": "#311901", "role": "hair" },
+    { "colour": "#86817b", "role": "shoes" },
+    { "colour": "#d3cdc8", "role": "shoes" },
+    { "colour": "#a58a67", "role": "trousers" },
+    { "colour": "#1f0700", "role": "keep" }
+  ]
+}

@@ -59,6 +59,13 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
   own assembler" quietly stops being true for one of them.
   `entities/model.ts` is the one exception to "the game's own assembler": a `.glb` from
   `public/models/` beside one of the game's people. See "Models from files" below.
+- `src/modelcrowd/` — **a performance experiment, not a feature**: `?people=model` draws the crowd
+  as clones of the rigged model, `?people=prim` keeps the primitives, and both show a cost readout.
+  `regions.ts` finds a model's colour regions and repaints them per person; the model inspector
+  imports it too, to show and check them. Disposable on purpose: delete the directory,
+  `scripts/bench-people.mjs`, the lines in `game.ts` that name `people`/`modelCrowd` and the region
+  rows and toggles in `inspect/entities/model.ts`, and the game is unchanged. See "The
+  modeled-crowd experiment".
 - `src/compare/` — the render-direction comparator. The six rendering directions it shows side by
   side live as data in `src/render/look.ts`; `?look=` plays a normal run under one of them and
   reaches every surface, not just the crowd. `main.ts` names this directory only to *open* it, so
@@ -150,6 +157,11 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
   size on an armature scaled by 0.01 (where `Skeleton.pose()` measurably makes a 17 mm figure), that
   the file's materials come back by identity and only what the bench made is disposed, and that the
   row's second exhibit is the game's own person.
+- `test/regions.test.ts` — a model's colour regions, on atlases built in code: that the groups are
+  the patches and never the gutter, that every used texel is labelled, edges included, that two
+  colours as close as the casual man's skin and khaki are pulled apart by the bandwidth search, that a
+  bandwidth too wide to do so is reported and refused rather than painted, that a role file matches
+  by colour and not by order, and that a blend only refuses painting across two roles.
 
 ## The entity taxonomy
 
@@ -1470,8 +1482,9 @@ the stage is still the game's -- the person beside it is `PERSON`'s own cast, de
 adult so the reference is a fair one, with the seed choosing which.
 
 - **Adding a file** is dropping it in `public/models/` and one line in `MODELS` in
-  `entities/model.ts`, under the short name `?model=` uses. Nothing in a browser can list `public/`.
-  Anything there ships in `vite build`, used or not.
+  `render/model-file.ts`, under the short name `?model=` uses. Nothing in a browser can list
+  `public/`. Anything there ships in `vite build`, used or not. `fetchModel` there is the one loader,
+  shared with the `?people=model` experiment.
 - **Its clips are its controls.** `load` fetches every listed file and fills the `clip` control with
   the clip names it found, ahead of `pose` (the file's rest pose). The clip plays through an
   `AnimationMixer` advanced by `SIM_DT` in `step`, so pause and `freeze clip` work as the gait does.
@@ -1486,6 +1499,56 @@ adult so the reference is a fair one, with the seed choosing which.
   look right", not "can the promenade afford a crowd of it" -- three.js has no instanced skinning.
 - **Vite answers a missing file with index.html and a 200**, so `load` reads the content type, not
   the status, to say "not found".
+- **Its colour regions are checked here.** `R` shows each detected group flat in its own false
+  colour, numbered as the readout lists them; `P` paints the model in the recipe of the adult the
+  seed stands beside it, so in the row the two wear the same colours and a region painted the wrong
+  one shows against its neighbour. `[`/`]` repaint live. The readout lists every group with its
+  colour, share and role, and says why when nothing is painted. See "The modeled-crowd experiment".
+
+### The modeled-crowd experiment
+
+`?people=model` replaces the primitive crowd with one clone of the model per crowd slot, built at
+load and hidden while a slot is empty; the player stays primitive. It reads the same interpolated
+pose `drawPerson` reads and writes nothing back, so neither hash can move, and nothing under
+`src/sim/` imports it. It exists to answer what a modeled crowd costs, so read it as a measuring
+instrument:
+
+- **The bones never move with the person.** Each clone's skeleton stays at the origin, out of the
+  scene; only the skinned mesh is placed, in detached bind mode with identity bind matrices. That is
+  what lets a far person skip animation frames without being left behind -- their pose goes stale,
+  their position never does -- and it lets the skipped frames skip the bone-texture upload too.
+- **The clip is driven by the gait phase**, one turn of `phase` per clip cycle, with the hips'
+  sideways and forward travel pinned and every constant translation track dropped. Above 2.2 m/s a
+  body runs (back to walking below 1.9); anyone with a mobility aid walks.
+- **Variation is the recipe's own colours and two bone scales**: skin, top (the jacket when one is
+  worn), trousers, hair and shoes repainted from the recipe's rolls, the standing height as the
+  clone's scale, the build on the spine (and given back at the neck).
+- **Colour regions are found, not authored** (`regions.ts`). The mesh's UV triangles are rasterised
+  to find the texels it uses, those are grouped by colour with a mean shift in Oklab, and a mask
+  texture labels every used texel with its group. Cells at a colour edge or an island's border are
+  left out of the grouping and labelled from their neighbours, so a blend of two colours cannot
+  become a third group. The kernel starts at 0.04 and narrows by a quarter while any group 2-means
+  into two clearly separate colours; the casual man stops at 0.017 with seven groups, which is what
+  pulls his skin and khaki shorts (0.063 apart) out of one group.
+- **What each group is lives in `<model>.regions.json` beside the `.glb`**: colours mapped to `skin`,
+  `top`, `trousers`, `hair`, `shoes` or `keep`, matched by Oklab distance under 0.06 rather than by
+  order, so a file survives the detector reordering and carries over to a regeneration in the same
+  garments. An optional `bandwidth` fixes the kernel for one model. A model with no file, or a group
+  the file does not name, prints a starting point to the console.
+- **It refuses rather than guesses.** A group still two colours at the narrowest kernel, or two
+  groups of different roles with more than 1% of the texture sitting between them, turn painting off
+  and say why -- in the inspector's readout and the crowd's. Painting keeps the texture's light and
+  dark: target colour times texel luminance over the role's centre luminance, in the material's own
+  shader, so it costs a texture read per pixel and no draw calls.
+- **Ink is the game's own switch** (`O`): a second skinned mesh per figure sharing the skeleton,
+  pushed out along its skinned normal by `SHELL_OVER`, back faces only. `?look=current` turns it on
+  with everything else's.
+- **Throttle** (`L`, `&throttle=1&far=15&every=3`): beyond `far` metres from the player a clone is
+  animated every `every`th frame, staggered by slot.
+- **`render ms` is submit time.** `renderer.render` returns before the GPU has drawn anything, so
+  the GPU's share shows only in the frame time and fps. `scripts/bench-people.mjs` sweeps both
+  renderers over crowd sizes and knobs (`--gpu` for a real GPU); `?stress=1&crowd=N` holds a stress
+  run at N people.
 
 ## Two hashes
 
@@ -1515,8 +1578,10 @@ one, which is the only way to get a `render` column worth comparing -- and the o
 cost of toon against PBR against matcap actually shows up.
 
 `?seed=<uint32 or any string>` (strings are hashed), `?stress=1` (pinned seed, full crowd, no input,
-per-frame sim/render milliseconds), `?debug=1` (top-down overlay), `?tier=low|mid|high`,
-`?look=<name>` (play the whole world under one rendering direction; see below).
+per-frame sim/render milliseconds; `&crowd=N` holds it at N people), `?debug=1` (top-down overlay),
+`?tier=low|mid|high`, `?look=<name>` (play the whole world under one rendering direction; see
+below), `?people=model|prim` (the modeled-crowd experiment and its cost readout; see "The
+modeled-crowd experiment").
 
 `?bob=` carries the head-bob tuning: one value per axis in `BOB_CONTROLS` order, clamped to each
 axis's own range on the way in, and dropped from the URL entirely when everything is 0 so an
