@@ -31,6 +31,12 @@ test('a person on the turntable is the person the crowd spawns', () => {
                 const where = `seed ${seed}, agent:${i}, ${type}`;
                 assert.deepEqual(subject.recipe, agent.recipe, `recipe differs for ${where}`);
                 assert.equal(subject.speed, agent.speed, `speed differs for ${where}`);
+                // The body the lab's collider overlay draws is the one the crowd steers.
+                assert.equal(subject.r, agent.r, `collision radius differs for ${where}`);
+                assert.equal(subject.colOff, agent.colOff, `collision offset differs for ${where}`);
+                assert.equal(subject.sepR, agent.sepR, `separation radius differs for ${where}`);
+                assert.equal(subject.accel, agent.accel, `acceleration differs for ${where}`);
+                assert.equal(subject.turn, agent.turn, `turn rate differs for ${where}`);
                 // Cosmetic draws too, so the idle fidget and the gait's starting phase match.
                 assert.equal(subject.fidget, agent.fidget, `fidget differs for ${where}`);
                 assert.equal(subject.phase, agent.phase, `gait phase differs for ${where}`);
@@ -39,6 +45,15 @@ test('a person on the turntable is the person the crowd spawns', () => {
         }
     }
     assert.equal(checked, SEEDS.length * 4 * ARCH_KEYS.length);
+});
+
+test('a group member on the turntable wears the outfit the spawner handed the group', () => {
+    // A family's outfit is a spawn decision, so the lab passes it back in to show the same Johnson.
+    for (const outfit of [0, 3, 7]) {
+        const agent = new Agent(makeStreams(5), 12, 'johnsons', 0, 0, 1, 1, { outfit });
+        const subject = new Subject(5, 12, 'johnsons', NONE, { outfit });
+        assert.deepEqual(subject.recipe, agent.recipe, `outfit ${outfit} dressed a different Johnson`);
+    }
 });
 
 test('an axis override moves that axis and leaves the rest of the person alone', () => {

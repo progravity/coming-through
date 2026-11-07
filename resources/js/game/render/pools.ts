@@ -88,6 +88,15 @@ export class PartPools {
         };
     }
 
+    /**
+     * Triangles one part of `pool` costs, read off its geometry. For the labs' rendering-cost
+     * readout; nothing in the draw path asks.
+     */
+    trianglesPer(pool: PoolName): number {
+        const geo = this.pools[pool].mesh.geometry;
+        return Math.round((geo.index !== null ? geo.index.count : geo.getAttribute('position').count) / 3);
+    }
+
     /** Set the per-person root transform used by subsequent put() calls. */
     setBase(slot: number, x: number, y: number, z: number, yaw: number, scale: number): void {
         _p.set(x, y, z); _e.set(0, yaw, 0); _q.setFromEuler(_e); _s.set(scale, scale, scale);

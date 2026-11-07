@@ -19,8 +19,9 @@ import type { AgeMix, AidChances, ArchKey, Archetype } from '../archetypes.ts';
 import { hashString, makeStreams } from '../core/rng.ts';
 import { SIM_DT } from '../core/time.ts';
 import { makeRecipe } from '../recipe.ts';
-import type { Age, Mobility, Recipe } from '../recipe.ts';
+import type { Age, Mobility, Recipe, RecipeOptions } from '../recipe.ts';
 import type { Poseable } from '../sim/agent.ts';
+import { SPEED_CAP } from '../sim/steering.ts';
 
 const TAU = Math.PI * 2;
 
@@ -88,19 +89,41 @@ export class Subject implements Poseable {
     readonly recipe: Recipe;
     /** Walking pace after the recipe's age and mobility multipliers, as `Agent` computes it. */
     readonly speed: number;
+    /**
+     * The body the simulation would give this person, as `Agent`'s constructor works it out: the
+     * collision radius, how far forward its circle sits, the separation radius it keeps, and how
+     * hard and how fast it accelerates and turns. Restated here for the lab's collider overlay and
+     * readout, and held to `Agent` by `tests/js/inspect.test.ts`.
+     */
+    readonly r: number;
+    readonly colOff: number;
+    readonly sepR: number;
+    readonly accel: number;
+    readonly turn: number;
     readonly fidget: number;
     x = 0; z = 0; yaw = 0; phase = 0; mv = 0; lean = 0;
 
-    constructor(seed: number, index: number, type: ArchKey, o: Overrides) {
+    /**
+     * @param opts What the spawner hands some people beyond their archetype: a group's shared
+     *   outfit. Passing the same one is what makes a Johnson on the turntable the Johnson in the
+     *   crowd, since the family's outfit is a spawn decision and not a recipe roll.
+     */
+    constructor(seed: number, index: number, type: ArchKey, o: Overrides, opts: RecipeOptions = {}) {
         // makeStreams builds all four streams but only `recipe` and `cosmetic` are ever read here.
         const streams = makeStreams(seed);
         const label = `agent:${index}`;
         const recipeRng = streams.recipe.fork(label), cosmetic = streams.cosmetic.fork(label);
         const A = withOverrides(ARCH[type], o);
         this.seed = seed; this.index = index; this.type = type; this.arch = A;
-        this.recipe = makeRecipe(recipeRng, A);
+        this.recipe = makeRecipe(recipeRng, A, opts);
         // Mirrors Agent's constructor: the speed draw follows the recipe on the same fork.
-        this.speed = recipeRng.sample(A.speed) * this.recipe.motion.speed;
+        const m = this.recipe.motion;
+        this.speed = recipeRng.sample(A.speed) * m.speed;
+        this.r = A.radius * m.radius;
+        this.colOff = (A.colOffset ?? 0) + m.colOffset;
+        this.sepR = A.sepR + (this.r - A.radius);
+        this.accel = A.accel * m.accel;
+        this.turn = 8 * m.turn;
         this.phase = cosmetic.range(0, TAU);
         this.fidget = cosmetic.range(0, TAU);
     }
@@ -111,9 +134,12 @@ export class Subject implements Poseable {
      * (Agent.update itself needs a player and a spatial grid, and would walk the figure off the
      * stage, so this is the one line of it the turntable has to restate.)
      */
-    step(walking: boolean): void {
+    step(walking: boolean, running = false): void {
         const dt = SIM_DT;
         this.mv += ((walking ? 1 : 0) - this.mv) * Math.min(1, dt * 10);
-        if (walking) this.phase += this.speed * dt * this.recipe.gait.cadence;
+        if (walking) this.phase += this.pace(running) * dt * this.recipe.gait.cadence;
     }
+
+    /** Metres per second at a walk, or at a run: the top speed the crowd's steering lets a body reach. */
+    pace(running: boolean): number { return running ? this.speed * SPEED_CAP : this.speed; }
 }

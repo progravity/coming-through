@@ -1,6 +1,6 @@
 /**
  * The pieces of the shared information panel that read the same for every entity: who a thing is
- * on the taxonomy's four axes, a colour with its palette index, and what drawing it costs.
+ * on the taxonomy's four axes, a color with its palette index, and what drawing it costs.
  *
  * Written once here so the identity section of a cart and of a person cannot drift into two
  * vocabularies, and so the category a thing is filed under is read off `entity.ts` rather than
@@ -38,7 +38,7 @@ export function identitySection(meta: EntityMeta, about: string, more: readonly 
     };
 }
 
-/** A colour, with where it came from: its index in `PALETTE` when it is one of the 24. */
+/** A color, with where it came from: its index in `PALETTE` when it is one of the 24. */
 export function colorRow(k: string, color: number, note = ''): InfoRow {
     const i = PALETTE.indexOf(color);
     const from = i < 0 ? '' : `palette ${i}`;

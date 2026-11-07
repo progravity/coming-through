@@ -87,12 +87,19 @@ export function wallRepulsion(n: number, r: number, frame: PathFrame, out: Steer
     out.dx += frame.nx * push; out.dz += frame.nz * push;
 }
 
+/**
+ * How far past its own walking pace a body may be pushed: the speed cap in `steerToward`, as a
+ * multiple of `Agent.speed`. Named so the people lab's "run" can mean exactly this rather than a
+ * number of its own.
+ */
+export const SPEED_CAP = 1.4;
+
 /** Accelerate the agent's velocity toward the desired velocity over one fixed step, honouring accel and speed caps. */
 export function steerToward(self: Agent, desired: Steer): void {
     let ax = desired.dx - self.vx, az = desired.dz - self.vz;
     const al = hypot(ax, az), accel = self.accel;
     if (al > accel) { ax *= accel / al; az *= accel / al; }
     self.vx += ax * SIM_DT; self.vz += az * SIM_DT;
-    const sp = hypot(self.vx, self.vz), cap = self.speed * 1.4;
+    const sp = hypot(self.vx, self.vz), cap = self.speed * SPEED_CAP;
     if (sp > cap) { self.vx *= cap / sp; self.vz *= cap / sp; }
 }

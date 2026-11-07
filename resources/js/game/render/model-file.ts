@@ -15,6 +15,25 @@ export const MODELS: Readonly<Record<string, string>> = {
 };
 
 /**
+ * Where each file came from and what it may be used under, for the people lab's provenance card.
+ *
+ * `license` is `null` until somebody records it: the lab says "not recorded" rather than guessing,
+ * because a provenance card that invents a license is worse than one that admits it does not know.
+ * The sources below are read off the file names, which is all the repo knows about them.
+ */
+export interface ModelSource { readonly source: string; readonly license: string | null }
+export const MODEL_SOURCES: Readonly<Record<string, ModelSource>> = {
+    'casual-man': {
+        source: 'Generated with Meshy AI (a casual man in his 30s), rigged and animated through Mixamo, per its file name.',
+        license: null,
+    },
+    'casual-man-low': {
+        source: 'The same Meshy AI figure, remeshed to 2,591 triangles, with the same Mixamo rig and clips.',
+        license: null,
+    },
+};
+
+/**
  * Root-relative, because Laravel serves `public/` as the web root: the game page is a route (`/play`)
  * rather than a file beside the models, so a page-relative path would move with the route.
  */
