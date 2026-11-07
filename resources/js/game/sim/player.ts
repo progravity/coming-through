@@ -1,4 +1,5 @@
 import { ARCH } from '../archetypes.ts';
+import { atan2, cos, hypot, sin } from '../core/dmath.ts';
 import { Rng } from '../core/rng.ts';
 import { SIM_DT } from '../core/time.ts';
 import { BUMP, CAMERA, MOVE, STAMINA } from '../feel.ts';
@@ -199,16 +200,16 @@ export function updatePlayer(p: Player, input: MoveInput, mode: CameraMode, grid
     let mx = 0, mz = 0;
     if (firstPerson) {
         p.yaw -= input.x * dt * MOVE.lookTurn;
-        mx = Math.sin(p.yaw) * input.y; mz = Math.cos(p.yaw) * input.y;
+        mx = sin(p.yaw) * input.y; mz = cos(p.yaw) * input.y;
     } else {
         const cy = p.camYaw;
-        const fx = -Math.sin(cy), fz = -Math.cos(cy), rx = Math.cos(cy), rz = -Math.sin(cy);
+        const fx = -sin(cy), fz = -cos(cy), rx = cos(cy), rz = -sin(cy);
         mx = fx * input.y + rx * input.x; mz = fz * input.y + rz * input.x;
     }
     // How much movement the stick is asking for, which is what the meter spends against and what
     // the body turns toward further down. In first person that is `|input.y|` alone: the lateral
     // axis is a turn, and turning on the spot goes nowhere and costs nothing.
-    const want = Math.hypot(mx, mz);
+    const want = hypot(mx, mz);
     const spd = updateStamina(p, want, input.hurry) ? MOVE.run : MOVE.walk * Math.min(1, input.mag / 0.85);
     const tvx = mx * spd, tvz = mz * spd;
     // Reaching for speed and letting go of it are two different rates, and a recent bump scales
@@ -257,7 +258,7 @@ export function updatePlayer(p: Player, input: MoveInput, mode: CameraMode, grid
     p.x = nx; p.z = nz;
     // Everything below reads the speed the body is actually travelling at, shove included, so a
     // knocked player's gait and lean belong to the movement you can see rather than to the stick.
-    const ps = Math.hypot(p.vx + p.kx, p.vz + p.kz);
+    const ps = hypot(p.vx + p.kx, p.vz + p.kz);
     // The body faces where the stick is pointing, not where the body is drifting. That is the
     // difference between steering and being steered, and it is worth more than it looks: facing
     // the velocity means a shove turns you, the camera follows the turn, and "forward" then means
@@ -265,7 +266,7 @@ export function updatePlayer(p: Player, input: MoveInput, mode: CameraMode, grid
     // it should be handing it back. Facing the intent, a bump slides you sideways while you carry
     // on aiming where you were aiming.
     if (want > MOVE.faceAt && !firstPerson) {
-        const d = wrapAngle(Math.atan2(mx, mz) - p.yaw);
+        const d = wrapAngle(atan2(mx, mz) - p.yaw);
         p.yaw += d * Math.min(1, dt * MOVE.turn); p.lean = clamp(-d * MOVE.lean, -MOVE.leanMax, MOVE.leanMax);
     } else p.lean *= 0.9;
     p.mv += (clamp(ps / MOVE.walk, 0, 1) - p.mv) * Math.min(1, dt * MOVE.gaitBlend);
@@ -285,7 +286,7 @@ export function updatePlayer(p: Player, input: MoveInput, mode: CameraMode, grid
  * bench. It also *accumulates*, so being caught between two people shoves twice.
  */
 export function knockPlayer(p: Player, nx: number, nz: number): number {
-    const speed = Math.hypot(p.vx, p.vz);
+    const speed = hypot(p.vx, p.vz);
     const shove = BUMP.shove + BUMP.shovePerSpeed * speed;
     // Three things at once, and they are three because they do three different jobs: the shove
     // carries you off your line, `keep` takes the momentum you had, and `knock` makes the instant

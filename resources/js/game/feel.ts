@@ -10,13 +10,16 @@
  * `run` outruns all of it -- deliberately faster than a person plausibly moves, because feeling
  * urgent beats being right.
  *
- * It imports nothing, so `sim/player.ts` can read it without the purity boundary noticing, and the
- * camera and the HUD read the same numbers rather than keeping their own copies.
+ * It imports only `core/dmath.ts`, which imports nothing itself, so `sim/player.ts` can read it
+ * without the purity boundary noticing, and the camera and the HUD read the same numbers rather than
+ * keeping their own copies. The head bob takes its sine from there too, although it is camera-only:
+ * the whole file is in the simulation's import closure, which may not call `Math.sin`.
  *
  * **Approach rates are per second, used as `min(1, dt * rate)`** -- the fraction of the remaining
  * gap closed each step. A rate of `k` settles in roughly `3/k` seconds, so 30 is about a tenth of a
  * second and 6 is half of one. Read them that way when retuning: doubling a rate halves the lag.
  */
+import { sin } from './core/dmath.ts';
 
 /** Speeds, and how fast the body takes up and gives up its intent. */
 export const MOVE = {
@@ -309,9 +312,9 @@ export const bobHz = (speed: number): number => {
 export function bobAt(phase: number, speed: number, mv: number, out: BobOffsets): BobOffsets {
     const a = mv / (1 + BOB.damp * Math.max(0, speed));
     const stride = Math.PI * phase;
-    out.dy = Math.sin(2 * stride) * BOB.vert * a;
-    out.dx = Math.sin(stride) * BOB.sway * a;
-    out.roll = Math.sin(stride) * BOB.roll * a;
+    out.dy = sin(2 * stride) * BOB.vert * a;
+    out.dx = sin(stride) * BOB.sway * a;
+    out.roll = sin(stride) * BOB.roll * a;
     return out;
 }
 

@@ -28,6 +28,7 @@
  * you can walk into. And they draw no random numbers -- the furniture layout is a function of the
  * path, identical in every run.
  */
+import { hypot } from '../core/dmath.ts';
 import { hasProperty } from '../entity.ts';
 import type { EdgePlan } from '../world/edge.ts';
 import { edgePlans } from '../world/plan.ts';
@@ -73,7 +74,7 @@ export function obstaclesFrom(plan: EdgePlan, curve: PathCurve): Obstacle[] {
         // The axis is the tangent flattened into the walking plane, because the simulation is
         // horizontal. On a hill that shortens the segment's ground footprint by the cosine of the
         // slope, which is exactly the shadow the bench casts on the plane the crowd moves in.
-        const len = Math.hypot(f.tx, f.tz) || 1;
+        const len = hypot(f.tx, f.tz) || 1;
         return { cx: at.x, cz: at.z, dead: false as const, ax: f.tx / len, az: f.tz / len, half: s.half, r: s.r };
     });
 }

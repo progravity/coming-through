@@ -54,6 +54,14 @@ const specifiersOf = (file: string): string[] =>
     [...readFileSync(file, 'utf8').matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)].map(m => m[1]);
 
 /**
+ * A file's source with its comments blanked, so prose about a browser or about `Math.sin` is not a
+ * finding. Worst case this also blanks something inside a string literal, which can only ever hide
+ * a violation rather than invent one -- and the import walk is what actually keeps the renderer out.
+ */
+const code = (src: string): string =>
+    src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
+
+/**
  * Everything reachable from `entries`, mapped to the chain that got there.
  *
  * Breadth-first, so the route reported for a file is the shortest one -- which is the route a
@@ -117,17 +125,38 @@ test('the simulation reaches no DOM either', () => {
     // would happen. `Math.random` is not here -- `scripts/check-math-random.mjs` owns that one, and
     // owns the single exemption it has to make for `core/rng.ts`, which this closure includes.
     const BANNED = /\b(document|window|navigator|localStorage|requestAnimationFrame|performance)\b/;
-    // Comments stripped first, so prose about a browser is not a finding. Worst case this also
-    // blanks something inside a string literal, which can only ever hide a violation rather than
-    // invent one -- and the import walk above is what actually keeps the renderer out.
-    const code = (src: string): string =>
-        src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/\/\/[^\n]*/g, ' ');
 
     const offenders: string[] = [];
     for (const [node, path] of closure(sources(join(SRC, 'sim')))) {
         if (!node.endsWith('.ts')) continue;
         const hit = BANNED.exec(code(readFileSync(node, 'utf8')));
         if (hit !== null) offenders.push(`${rel(node)} uses ${hit[1]}, reached by ${path.join(' -> ')}`);
+    }
+    assert.deepEqual(offenders, [], offenders.join('\n'));
+});
+
+test('the simulation calls no Math function an engine is allowed to approximate', () => {
+    // The determinism half of "pure". The language pins + - * / exactly, and Math.sqrt, abs, floor,
+    // trunc, round, min, max, sign and fround with them, but leaves every transcendental function
+    // "implementation-approximated": V8 on arm64 and on x64 disagree in the last bit for Math.sin,
+    // cos, atan2 and asin, which was enough for the state hash to differ between a Mac and CI, and
+    // a race shared between two kinds of machine to drift apart. `core/dmath.ts` computes the ones
+    // the simulation needs from the exact operations alone; nothing in the closure may reach past
+    // it. `**` is here for the same reason as Math.pow: the language approximates it too.
+    const APPROXIMATED =
+        /\bMath\.(sin|cos|tan|asin|acos|atan2?|sinh|cosh|tanh|asinh|acosh|atanh|exp|expm1|log|log1p|log2|log10|pow|cbrt|hypot)\b|\*\*/;
+
+    const reached = closure(sources(join(SRC, 'sim')));
+    // The replacement has to be in the closure for this to mean anything: a walk that never reached
+    // it would be guarding a simulation that does no trigonometry at all.
+    assert.ok([...reached.keys()].some(n => n.endsWith('.ts') && rel(n) === 'core/dmath.ts'),
+        'the simulation no longer reaches core/dmath.ts -- either its maths moved, or this walk is broken');
+
+    const offenders: string[] = [];
+    for (const [node, path] of reached) {
+        if (!node.endsWith('.ts')) continue;
+        const hit = APPROXIMATED.exec(code(readFileSync(node, 'utf8')));
+        if (hit !== null) offenders.push(`${rel(node)} uses ${hit[0]}, reached by ${path.join(' -> ')} -- use core/dmath.ts`);
     }
     assert.deepEqual(offenders, [], offenders.join('\n'));
 });

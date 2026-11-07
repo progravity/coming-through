@@ -24,6 +24,7 @@
  * - **They are pure.** Placement is a function of the curve; the paint is rolled from a stream of
  *   this layer's own, seeded by a constant. Nothing here reads the run seed or three.js.
  */
+import { asin, atan2, hypot } from '../core/dmath.ts';
 import { Rng, hashString } from '../core/rng.ts';
 import { entityMeta } from '../entity.ts';
 import type { Vendor } from '../entity.ts';
@@ -219,13 +220,13 @@ const BALLOONS = kiosk('balloons', 'Balloons', {
     base: KIOSK.body, trim: KIOSK.balloon, topper: KIOSK.balloon, accent: KIOSK.balloon,
 }, BALLOON_AT.flatMap(([colour, dn, dy, da, d], i): Prim[] => {
     const bob = { kind: 'bob' as const, rate: 0.9 + i * 0.07, phase: i * 1.1, amp: 0.07 };
-    const rise = dy - DECK, len = Math.hypot(dn, rise, da);
+    const rise = dy - DECK, len = hypot(dn, rise, da);
     return [
         {
             shape: 'cyl', colour: INK,
             dn: dn / 2, dy: (DECK + dy) / 2, da: da / 2,
             across: 0.025, up: len, along: 0.025,
-            lean: -Math.atan2(dn, rise), tilt: Math.asin(da / len),
+            lean: -atan2(dn, rise), tilt: asin(da / len),
         },
         ball(colour, dn, dy, da, d, bob),
     ];

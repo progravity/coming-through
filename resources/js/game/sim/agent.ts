@@ -1,5 +1,6 @@
 import { ARCH } from '../archetypes.ts';
 import type { ArchKey, Archetype } from '../archetypes.ts';
+import { atan2, cos, hypot, sin } from '../core/dmath.ts';
 import type { Rng, Streams } from '../core/rng.ts';
 import { SIM_DT } from '../core/time.ts';
 import { makeRecipe } from '../recipe.ts';
@@ -146,7 +147,7 @@ export class Agent implements GridItem, Poseable {
             const lw = PATH.halfWidth(lead.s);
             const t = PATH.toWorld(lead.s, clamp(lead.n + this.offset, -lw + 0.6, lw - 0.6), _world);
             let dx = (t.x - this.x) * 2.0 + Ld.vx, dz = (t.z - this.z) * 2.0 + Ld.vz;
-            const m = Math.hypot(dx, dz), cap = this.speed * 1.5; if (m > cap) { dx *= cap / m; dz *= cap / m; }
+            const m = hypot(dx, dz), cap = this.speed * 1.5; if (m > cap) { dx *= cap / m; dz *= cap / m; }
             out.dx = dx; out.dz = dz;
         } else if (this.parent) {
             const P = this.parent; if (P.dead) { this.dead = true; return false; }
@@ -154,7 +155,7 @@ export class Agent implements GridItem, Poseable {
             const par = PATH.toPath(P.x, P.z, _other);
             const pw = PATH.halfWidth(par.s + this.wanderS);
             const t = PATH.toWorld(par.s + this.wanderS, clamp(par.n + this.wanderN, -pw + 0.5, pw - 0.5), _world);
-            const ex = t.x - this.x, ez = t.z - this.z, d = Math.hypot(ex, ez);
+            const ex = t.x - this.x, ez = t.z - this.z, d = hypot(ex, ez);
             if (d > 0.4) { out.dx = ex / d * this.speed; out.dz = ez / d * this.speed; }
         } else {
             // A lane to aim for, picked between the railings where this body actually is. The
@@ -163,7 +164,7 @@ export class Agent implements GridItem, Poseable {
             if (this.t > this.nextWander) { this.wanderN = rng.range(-frame.w + 0.7, frame.w - 0.7); this.nextWander = this.t + rng.sample(A.wanderEvery); }
             // Along the path in my direction of travel, drifting across toward the lane I picked.
             const lat = clamp((this.wanderN - here.n) * 0.8, -1, 1) * A.wander;
-            const m = Math.hypot(lat, this.dir);
+            const m = hypot(lat, this.dir);
             const v = pathDir(frame, this.dir / m * this.speed, lat / m * this.speed, _world);
             out.dx = v.x; out.dz = v.z;
         }
@@ -222,11 +223,11 @@ export class Agent implements GridItem, Poseable {
             this.x = w.x; this.z = w.z;
         }
         // heading, lean, gait
-        const s2 = Math.hypot(this.vx, this.vz);
+        const s2 = hypot(this.vx, this.vz);
         if (s2 > 0.15) {
-            const d = wrapAngle(Math.atan2(this.vx, this.vz) - this.yaw);
+            const d = wrapAngle(atan2(this.vx, this.vz) - this.yaw);
             this.yaw += d * Math.min(1, dt * this.turn); this.lean = clamp(-d * 0.8, -0.25, 0.25);
-            this.hx = Math.sin(this.yaw); this.hz = Math.cos(this.yaw);
+            this.hx = sin(this.yaw); this.hz = cos(this.yaw);
         } else this.lean *= 0.9;
         this.mv += (clamp(s2 / this.speed, 0, 1) - this.mv) * Math.min(1, dt * 10);
         this.phase += s2 * dt * this.recipe.gait.cadence;

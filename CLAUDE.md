@@ -25,7 +25,7 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   incoming connections for `php` and `node` the first time. Two dev servers for one checkout fight
   over `public/hot`, which is why the other one has to stop.
 - **Tests:** `npm test` type-checks the engine and its tests, runs the Math.random check, and then
-  runs everything under `tests/js/` with `node --test` (219 tests). `npm run lint` is the first two
+  runs everything under `tests/js/` with `node --test` (222 tests). `npm run lint` is the first two
   on their own. `composer test` is the Laravel side: Pint, PHPStan and Pest (`tests/Feature/`,
   `tests/Unit/`), against SQLite in memory. Both are plain commands and both must pass.
 - **Node is pinned to 26.13.0** in `.nvmrc` (and `^26.13.0` in `package.json` `engines`). Herd's
@@ -78,8 +78,10 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   on purpose, never to silence a failure, and `identity` never moves at all. See "Determinism rules"
   and "Two hashes" below.
 - **The simulation stays pure.** Nothing in the transitive import closure of
-  `resources/js/game/sim/` may reach three.js, the DOM, or the mutable `BOB`; `npm run lint` fails
-  on `Math.random` anywhere under `resources/js/game/` except `core/rng.ts`. `tests/js/purity.test.ts`,
+  `resources/js/game/sim/` may reach three.js, the DOM, or the mutable `BOB`, or call a `Math`
+  function the language lets each engine approximate (`sin`, `cos`, `atan2`, `asin`, `hypot`,
+  `exp`, `pow`, `**` and the rest): use `core/dmath.ts`. `npm run lint` fails on `Math.random`
+  anywhere under `resources/js/game/` except `core/rng.ts`. `tests/js/purity.test.ts`,
   `tests/js/bob.test.ts` and `scripts/check-math-random.mjs` enforce this, and must stay green.
 
 ## Layout
@@ -103,7 +105,9 @@ The Laravel side is the starter kit's, plus:
 
 The engine:
 
-- `resources/js/game/core/` — `rng.ts` (seeded RNG and named streams), `time.ts` (`SIM_DT`), `hash.ts` (state hashing).
+- `resources/js/game/core/` — `rng.ts` (seeded RNG and named streams), `time.ts` (`SIM_DT`), `hash.ts` (state hashing),
+  and `dmath.ts`: `sin`, `cos`, `atan2`, `asin` and `hypot` computed from exact arithmetic alone, so
+  every CPU and every engine gets the same bits. See "Determinism rules".
 - `resources/js/game/entity.ts` — the entity taxonomy: the four axes every entity declares itself on, and the
   whole property vocabulary. Imports nothing, so `sim/`, `world/`, `archetypes.ts` and `inspect/`
   can all read it without any of them dragging a dependency in behind them.
@@ -135,7 +139,7 @@ The engine:
   `box.ts`, `material.ts` (the one shading model the whole world takes).
 - `resources/js/game/feel.ts` — every number that decides how the *player* feels, and nothing else: speeds,
   accel/decel, turn rates, camera follow and sprint cues, bump shove and recovery, the stamina meter
-  that gates the run, and the head-bob tuning. Imports nothing,
+  that gates the run, and the head-bob tuning. Imports only `core/dmath.ts`, which imports nothing,
   so `sim/player.ts` reads it without the purity boundary noticing and the camera reads the same
   numbers rather than keeping a second copy. Two of its blocks are the exceptions worth knowing:
   `STAMINA` is the only **gameplay** thing in it — read by the fixed step and hashed — and `BOB` is
@@ -176,7 +180,13 @@ The engine:
   `sim/agent.ts`, but the simulation reads `world/plan.ts`, and half of `world/` imports three.js
   quite legitimately. It is checked rather than trusted because a breach here fails nothing else —
   three.js loads happily under `node` with no GL context, so a renderer dragged in would go green
-  all the way and be found only by whoever next tried to run the sim without a canvas.
+  all the way and be found only by whoever next tried to run the sim without a canvas. Its third
+  test walks the same closure for the `Math` functions an engine may approximate, and names the
+  chain to any file that calls one.
+- `tests/js/dmath.test.ts` — `core/dmath.ts` against fixed bits: fdlibm's own answers (from its C
+  source compiled without fused multiply-add) for `sin`, `cos`, `atan2` and `asin`, and V8's
+  `Math.hypot` for `hypot`, including the two calls that first split arm64 from x64. Plus a sweep
+  that keeps every function within two ulp of the engine's own built-in.
 - `tests/js/bob.test.ts` — the head-bob bench: that zeroing every axis is a camera that does not move,
   that each amplitude moves its own axis and no other, that sway and roll run at half the vertical's rate, that the frequency
   cap holds at a sprint, and — the half that has to be checked rather than trusted — that nothing in
@@ -1803,9 +1813,21 @@ decisions, on any machine and at any frame rate. Everything below exists to keep
 - Anything that iterates over agents in a way that affects outcomes must iterate in a stable order
   (spawn order, which is `crowd.agents` order, or slot order), never in hash-map or Set insertion
   order that could vary.
-- Floating-point results must be identical across runs on the same platform; avoid `Date.now()`,
-  `performance.now()`, and `Math.random` in simulation paths entirely. The main loop reads the
-  clock only to decide how many fixed steps to run.
+- Floating-point results must be identical on every platform, not only across runs on one: the
+  hash is checked on Linux x64 in CI and stored from an Apple Silicon Mac, and a shared seed is
+  raced on phones and PCs alike. Avoid `Date.now()`, `performance.now()`, and `Math.random` in
+  simulation paths entirely. The main loop reads the clock only to decide how many fixed steps to
+  run.
+- **No engine-approximated `Math` in the simulation.** `+ - * /` and `Math.sqrt`, `abs`, `floor`,
+  `trunc`, `round`, `min`, `max`, `sign` and `fround` are exact by the language's definition, and
+  identical everywhere. Every transcendental function, and `**`, is "implementation-approximated",
+  and they really differ: under Node 26, V8 on arm64 and on x64 disagree in the last bit for a few
+  inputs in every thousand to `Math.sin`, `cos`, `atan2` and `asin`, because its maths library
+  takes a fused multiply-add path where the CPU has one. That alone made `hash()` differ between a
+  Mac and CI. The simulation gets them from `core/dmath.ts` instead (a port of fdlibm, plus V8's
+  own `hypot`), which `tests/js/purity.test.ts` enforces across the whole import closure.
+  Presentation code outside the closure may use the built-ins freely. Needing a new function means
+  porting it into `core/dmath.ts` and pinning it in `tests/js/dmath.test.ts`, not calling `Math`.
 - The crowd size setting, device tier, camera mode, and ink toggle must not affect the spawn,
   recipe, or behavior streams for a given seed. Crowd size may change which agents exist and when,
   but agent N in spawn order is always the same person. The player's path (and therefore

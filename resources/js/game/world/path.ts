@@ -28,6 +28,7 @@
  * Curving, widening, lifting or forking the walkway is a change to the three profiles at the bottom
  * of this file, and nothing that reads `PATH` changes with it.
  */
+import { atan2 } from '../core/dmath.ts';
 import { clamp } from '../util.ts';
 import { L, W } from './layout.ts';
 
@@ -176,7 +177,7 @@ export class PathCurve {
     /** World heading of the tangent at `s`, in the game's yaw convention (forward = sin, cos). */
     yawAt(s: number): number {
         const r = this.runAt(s);
-        return Math.atan2(r.tx, r.tz);
+        return atan2(r.tx, r.tz);
     }
 
     /** Path coordinates to world, on the walkway's surface. Use `pathPlace` to stand above it. */

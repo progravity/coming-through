@@ -1,4 +1,5 @@
 import type { Archetype } from '../archetypes.ts';
+import { hypot } from '../core/dmath.ts';
 import { SIM_DT } from '../core/time.ts';
 import type { PathFrame } from '../world/path.ts';
 import type { SpatialGrid } from './grid.ts';
@@ -89,9 +90,9 @@ export function wallRepulsion(n: number, r: number, frame: PathFrame, out: Steer
 /** Accelerate the agent's velocity toward the desired velocity over one fixed step, honouring accel and speed caps. */
 export function steerToward(self: Agent, desired: Steer): void {
     let ax = desired.dx - self.vx, az = desired.dz - self.vz;
-    const al = Math.hypot(ax, az), accel = self.accel;
+    const al = hypot(ax, az), accel = self.accel;
     if (al > accel) { ax *= accel / al; az *= accel / al; }
     self.vx += ax * SIM_DT; self.vz += az * SIM_DT;
-    const sp = Math.hypot(self.vx, self.vz), cap = self.speed * 1.4;
+    const sp = hypot(self.vx, self.vz), cap = self.speed * 1.4;
     if (sp > cap) { self.vx *= cap / sp; self.vz *= cap / sp; }
 }
