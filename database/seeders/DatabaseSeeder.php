@@ -20,17 +20,22 @@ class DatabaseSeeder extends Seeder
     {
         // Auth: required account roles — ALL environments.
         $this->call(AccountRoleSeeder::class);
-        // Auth: development fixtures — the seeder refuses outside
-        // local/staging and always in production.
+        // Auth: development fixtures. The seeder skips itself outside the
+        // environments config/jamesgifford/auth-dev.php allows: local only, and
+        // never under CI. Production is always refused.
         $this->call(DevDataSeeder::class);
         // Auth: reserve low IDs for the fixtures above. No-op when no
         // offsets are configured, and on SQLite.
         $this->call(ApplyIdOffsetsSeeder::class);
         // User::factory(10)->create();
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        // The starter kit's test user has the factory's "password" too, so it
+        // follows the dev cast's rule rather than seeding wherever db:seed runs.
+        if (app(DevDataSeeder::class)->environmentAllowed()) {
+            User::factory()->create([
+                'name' => 'Test User',
+                'email' => 'test@example.com',
+            ]);
+        }
     }
 }

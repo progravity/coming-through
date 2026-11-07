@@ -48,7 +48,16 @@ return [
     // refused, independently of this list.
     //
     // To allow another environment, add it here (e.g. 'demo').
-    'environments' => ['local', 'staging'],
+    //
+    // Coming Through: local only, and never under CI. Every seeded user shares one
+    // password ("password" unless JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD is set), so
+    // staging is dropped from the package default. CI runs `composer setup`, which
+    // copies .env.example and so reports itself as local; CI=true (set by GitHub
+    // Actions and most other CI) empties the list there. Every path into the dev
+    // cast reads this list: DevDataSeeder, jamesgifford:auth:seed-dev-data and
+    // jamesgifford:auth:setup --with-dev-data, and DatabaseSeeder's test user.
+    // tests/Feature/DevUsersTest.php pins it.
+    'environments' => env('CI') ? [] : ['local'],
 
     // Shared password for EVERY seeded dev user. Sourced from the environment
     // (JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD in your .env) so no credential is
