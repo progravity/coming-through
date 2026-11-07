@@ -13,9 +13,14 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   Herd may already be running it for this site: Herd's dev tools started `php artisan dev` on their
   own when the site was linked. Without a dev server the page falls back to the last
   `npm run build`.
-- **Every mode is a query string on that page:** `/play?inspect=1`, `/play?inspect=row&entity=shop`,
-  `/play?compare=1`, `/play?people=model`, `/play?stress=1`, `/play?look=current`, `/play?debug=1`.
-  See "URL parameters" below. `/` is the starter kit's welcome page, with login and registration.
+- **Every game mode is a query string on that page:** `/play?compare=1`, `/play?people=model`,
+  `/play?stress=1`, `/play?look=current`, `/play?debug=1`. See "URL parameters" below. `/` is the
+  starter kit's welcome page, with login and registration.
+- **The labs** are behind the login, at `/lab` (an index), `/lab/people`, `/lab/fixtures` and
+  `/lab/buildings`; every view of one is a query string on its route
+  (`/lab/people?view=crowd`, `/lab/buildings?view=row&entity=restaurant`). An old
+  `/play?inspect=` address redirects to the lab that shows what it named. Sign in locally as any
+  of the dev cast (`owner@dev.test` and the rest, password `password`). See "The labs" below.
 - **On a phone:** stop any other dev server for the site first (including one Herd started), then
   run `composer run dev:lan` and open `http://<this Mac's LAN IP>:8000/play` on the phone, which
   must be on the same network. It runs `php artisan serve --host=0.0.0.0 --port=8000` beside
@@ -25,7 +30,7 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   incoming connections for `php` and `node` the first time. Two dev servers for one checkout fight
   over `public/hot`, which is why the other one has to stop.
 - **Tests:** `npm test` type-checks the engine and its tests, runs the Math.random check, and then
-  runs everything under `tests/js/` with `node --test` (222 tests). `npm run lint` is the first two
+  runs everything under `tests/js/` with `node --test` (236 tests). `npm run lint` is the first two
   on their own. `composer test` is the Laravel side: Pint, PHPStan and Pest (`tests/Feature/`,
   `tests/Unit/`), against SQLite in memory. Both are plain commands and both must pass.
 - **Node is pinned to 26.13.0** in `.nvmrc` (and `^26.13.0` in `package.json` `engines`). Herd's
@@ -89,14 +94,20 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
 The Laravel side is the starter kit's, plus:
 
 - `routes/web.php` — `/play` (route `play`), public, served by `Route::view` from
-  `resources/views/game.blade.php`.
+  `resources/views/game.blade.php`; and the labs, `lab.index`, `lab.people`, `lab.fixtures` and
+  `lab.buildings` under `/lab`, behind `auth`.
 - `resources/views/game.blade.php` — the game's HUD and overlay markup, which `ui.ts` finds by id,
-  inside `resources/views/layouts/game.blade.php`, the standalone page shell that loads
-  `resources/css/game.css` and the entry, `resources/js/game/main.ts`, through `@vite`.
+  inside `resources/views/layouts/game.blade.php`, the standalone page shell that loads a
+  stylesheet (`css`, `resources/css/game.css` by default) and an entry (`entry`) through `@vite`.
+- `resources/views/labs/` — the lab pages: `index.blade.php` (plain Blade, no script) and one page
+  per lab, each the lab bar (`components/lab-bar.blade.php`) and a mount point, on the same
+  standalone shell with `resources/css/lab.css` and the lab's own entry,
+  `resources/js/game/labs/<lab>/main.ts`.
 - `resources/js/game/` — the engine, described below. Paths in this file are written from the
   repository root, except bare file names inside a section that is already about one directory.
 - `tests/js/` — the engine's tests, run by `node --test`. `tests/Feature/PlayPageTest.php` checks the
-  page itself.
+  page itself, and `tests/Feature/Labs/LabPagesTest.php` the lab pages: behind the login, standalone,
+  each loading its own entry and the lab stylesheet.
 - `public/models/` — the `.glb` files and their `.regions.json`, served by Laravel from its web root
   at `/models/` (`MODEL_DIR` in `render/model-file.ts`).
 - `scripts/` — the Math.random check and the stress and bench scripts.
@@ -146,27 +157,37 @@ The engine:
   the only **mutable** one, a live tuning bench rather than a constant, which is why nothing under
   `resources/js/game/sim/` may read it. See "Player feel", "Stamina" and "Head bob" below.
 - `resources/js/game/render/`, `resources/js/game/camera.ts`, `resources/js/game/ui.ts`, `resources/js/game/debug.ts` — presentation only.
-- `resources/js/game/main.ts` — the entry point and nothing else: it dynamic-imports the game, the entity
-  inspector when `?inspect=` is present, or the render comparator when `?compare=` is, so a normal
-  run never loads a dev tool.
+- `resources/js/game/main.ts` — the entry point and nothing else: it dynamic-imports the game, or the
+  render comparator when `?compare=` is present, and sends an old `?inspect=` address to the labs
+  (`labs/redirect.ts`), so a normal run never loads a dev tool.
 - `resources/js/game/game.ts` — wires the game together: fixed-step accumulator loop, interpolated rendering,
   stress mode.
-- `resources/js/game/inspect/` — the entity inspector. `inspectable.ts` is the interface every entity type
-  conforms to, `registry.ts` the only file that knows they exist, `entities/` the conformances,
-  and `index.ts`/`panel.ts`/`state.ts` a shell that has never heard of any of them. A driver for
-  the game's own assemblers, never a copy of them; see "Entity inspection" below.
+- `resources/js/game/inspect/` — the entity inspector, which the labs mount as their individual and row
+  views. `inspectable.ts` is the interface every entity type conforms to, `registry.ts` the only
+  file that knows they exist, `entities/` the conformances, and `index.ts`/`panel.ts`/`state.ts` a
+  shell that has never heard of any of them. `info.ts` is the shared information panel every lab
+  draws its left card with, `describe.ts` the sections that read the same for every entity, and
+  `markers.ts` the overlay marks. A driver for the game's own assemblers, never a copy of them; see
+  "Entity inspection" below.
   `entities/structure.ts` is the cast the carts, the shopfronts and the restaurants share, since
   everything the tool does with one it does with the others and a copy is where "through the game's
   own assembler" quietly stops being true for one of them.
   `entities/model.ts` is the one exception to "the game's own assembler": a `.glb` from
   `public/models/` beside one of the game's people. See "Models from files" below.
+- `resources/js/game/labs/` — the labs: `labs.ts` (the three, each a category, with the entities read
+  off the registry and the taxonomy), `start.ts` (opens a lab at the view its address names),
+  `chrome.ts` (the view and source controls in the lab bar), `placement.ts` (the placement view),
+  `redirect.ts`, `dom.ts`, and one directory per lab holding its entry; `people/` also holds the crowd
+  view. The files at the top of `labs/` are shell, like the inspector's: they reach the registry and
+  the interface and never an entity, which `tests/js/labs.test.ts` checks. See "The labs" below.
 - `resources/js/game/modelcrowd/` — **a performance experiment, not a feature**: `?people=model` draws the crowd
   as clones of the rigged model, `?people=prim` keeps the primitives, and both show a cost readout.
   `regions.ts` finds a model's colour regions and repaints them per person; the model inspector
-  imports it too, to show and check them. Disposable on purpose: delete the directory,
-  `scripts/bench-people.mjs`, the lines in `game.ts` that name `people`/`modelCrowd` and the region
-  rows and toggles in `inspect/entities/model.ts`, and the game is unchanged. See "The
-  modeled-crowd experiment".
+  imports it too, to show and check them, and the people lab's crowd view draws its model source
+  with `crowd.ts`. Disposable on purpose: delete the directory, `scripts/bench-people.mjs`, the
+  lines in `game.ts` that name `people`/`modelCrowd`, the region tables and toggles in
+  `inspect/entities/model.ts` and the model branch of `labs/people/crowd.ts`, and the game is
+  unchanged. See "The modeled-crowd experiment".
 - `resources/js/game/compare/` — the render-direction comparator. The six rendering directions it shows side by
   side live as data in `resources/js/game/render/look.ts`; `?look=` plays a normal run under one of them and
   reaches every surface, not just the crowd. `main.ts` names this directory only to *open* it, so
@@ -217,6 +238,12 @@ The engine:
   back reaches one, every registered entity declares something the panel can render, the stage
   frames what it measures rather than what a person is, and an object placed by the path's frame
   lands where the staging says on the stage.
+- `tests/js/labs.test.ts` — the labs: that every family has a category and the labs partition the
+  registry, that a model is a source of the thing it draws rather than a second thing in a picker,
+  that every old `/play?inspect=` address lands in the right lab with its query intact, that a lab
+  stands only its own entities, that the lab shell reaches no entity, that an archetype mix
+  restating the archetypes' own weights spawns the identical crowd, and that every site the
+  placement view frames is one the world's own layer function built.
 - `tests/js/path.test.ts` — the path-coordinate convention, including the exactness today's straight,
   level, uniform-width path gives; that a bent centreline still measures along and across itself;
   and that a test-only curve which bends, widens and climbs puts edge elements and world heights
@@ -287,6 +314,23 @@ fails on one.
   `static-obstacle`, `vendor`, `stationed`. Small, closed and positive; a vocabulary that grows a
   term per entity is a type field wearing a disguise.
 - **placement** — `crowd-spawned` or `placed-with-requirements`.
+
+**Categories group the families, for the labs and for talking about the game**, and are declared in
+`entity.ts` beside the four axes (`CATEGORIES`, `CATEGORY_OF`):
+
+- **People** — the person family. "Crowd" means only the flowing, spawned population; stationed
+  staff, when they exist, are people but not crowd.
+- **Fixtures** — on-path, solid things the crowd and the player steer around: the kiosk and
+  furniture families.
+- **Buildings** — near-path, never obstacles, interactable through their spots: the building family
+  (shops and restaurants today; restrooms and ride entrances later).
+- **Scenery** — visual only, and not entities: the ground, the railings, the distant rides, the
+  skyline. **Effects** are transient visuals, and not entities either.
+
+A category is a grouping of families and nothing more. It decides which lab shows a thing, and
+behavior never asks it: a fixture is solid because it declares `static-obstacle`, not because it is
+a fixture. "Structure" is not a category name -- it is already the kit the carts and the buildings
+share (`world/structure.ts`).
 
 **The axes must not be welded, and the one that matters is type against the other two.** A shop
 assistant is the same person, with the same appearance and the same archetype, whether they are
@@ -1446,13 +1490,100 @@ cache. `worldToon` hands one `MeshToonMaterial` to every surface asking for a co
 so disposing the white one takes the material every cart, every railing and every shopfront of that
 colour is still drawing through -- the failure a shared cache always risks, and worth two locks.
 
+## The labs
+
+A login-protected area for inspecting and understanding every element of the game, one lab per
+category. **View-only**: nothing is edited or saved, and nothing a lab does reaches either
+determinism hash. Every view is deep-linkable: the selection, the seed, the source, the camera and
+the overlays all live in the address bar.
+
+| URL | route | what it is |
+|---|---|---|
+| `/lab` | `lab.index` | the index: each lab, its views, and the categories |
+| `/lab/people` | `lab.people` | the person family: individual, row and crowd views |
+| `/lab/fixtures` | `lab.fixtures` | carts, benches, lamps and bins: individual, row and placement views |
+| `/lab/buildings` | `lab.buildings` | shops and restaurants: individual, row and placement views |
+
+The routes are behind `auth` alone, not `verified`: the auth package's dev cast is seeded
+unverified, and a tool that saves nothing has no reason to turn it away. The pages are standalone
+like the game's (no Livewire, Flux or Tailwind), styled by `resources/css/lab.css`, with the lab bar
+in Blade and everything below it built by the lab's entry.
+
+**Which entities a lab shows is read off the taxonomy**: a lab is a category, and `labs/labs.ts`
+files every registered entity under its family's category. **Views**: `view=single` (the default)
+and `view=row` are the turntable (`inspect/index.ts`, mounted with the lab as its scope);
+`view=crowd` is the people lab's crowd; `view=placement` is the fixtures' and buildings' placement
+view. **Source**: `source=model` swaps an entity for the one whose `modelOf` names it, keeping every
+control the two declare alike, so the people lab's person stays on stage drawn from the file. The
+fixtures and buildings toggle is in place and stays on primitives, with its reason in the tooltip.
+
+**The shared information panel** (`inspect/info.ts`) is the left card in every view. It renders a
+`Readout` -- the at-a-glance rows, the swatches, and `sections` under shared headings, in this order:
+live state, identity, recipe, geometry, model, provenance, rendering cost -- with text nodes rather
+than markup, and remembers which sections were folded. Identity (category, family, type, properties,
+placement, and the archetype's `desc`) comes from `describe.ts` for everyone, so it cannot drift
+into two vocabularies.
+
+- **People, individual and row** — the person turntable: seed stepping, archetype, age, build and
+  mobility, walk, run (the steering's own `SPEED_CAP`) or idle, gait scrub and freeze, a held
+  angle, and `agent` (the spawn index) and `outfit` (a group's shared outfit), so any agent of any
+  seed stands on the turntable as the crowd built them. Collider and orientation overlays draw the
+  body the crowd steers (`Subject` mirrors `Agent`'s collider numbers; `inspect.test.ts` holds them
+  together). Under the model source the row is the model and the same recipe as primitives; the
+  card lists clips, color regions (false color, color, share, role), proposed accessory anchors by
+  bone (drawn as markers), triangles and bones, and the torso's measured half width against the
+  collider radius, and `crowd scale` fits the model as the model crowd does. A model's source and
+  license note is `MODEL_SOURCES` in `render/model-file.ts`; the license reads "not recorded" until
+  someone records it.
+- **People, crowd** (`labs/people/`) — a `Simulation` built, primed and stepped exactly as the game
+  does between runs (the player idle on the start pad), in its own instance, drawn with the game's
+  world, people and shipped look. View settings: seed, crowd size and an archetype mix (spawn
+  weights, `mix=` in `ARCH_KEYS` order). Time: play, pause, one step, ½×, ¼×, ⅒×; a paused crowd
+  writes `at`, the steps since priming, so a link reopens the same moment. Cameras: orthographic
+  top-down (`top=`), free orbit (`orbit=`), and follow (`cam=follow&sel=`). Overlays: archetype
+  colors, colliders (furniture's too), separation radii, heading and velocity, the spatial grid
+  tinted by occupancy, group links. Statistics: people per archetype against the mix, density, the
+  fullest grid cell, stopped and standing, person-to-person contacts (the lab's own count of
+  touching collision circles; the game scores only player bumps) and the frame timings. Clicking a
+  person gives their live state (position, speed, heading, gait, wander and stop timers, group, and
+  the steering forces from the steering functions themselves) with follow and open-in-individual.
+- **Fixtures and buildings, individual and row** — every type, seed stepping re-rolling the paint
+  through the game's own rollers; the card adds the recipe (the roll's fork of the constant-seeded
+  paint stream, the livery, each slot and its set), the footprint and collider (or its absence),
+  the spots with coordinates, provenance and cost.
+- **Placement** (`labs/placement.ts`) — one type in its place on the real promenade, painted as the
+  game paints it, with the stretch of edge it keeps clear (a building's railing gap, a cart's bench
+  rhythm), its spots, its collider or gray footprint, its orientation, a path ruler, and a table of
+  its neighbors. An entity says where it stands through `Inspectable.sites`.
+
+**The archetype mix is the one thing the labs add to the simulation**: `Simulation`'s optional
+`mix` changes only what the single spawn draw selects (`weightedType`). The game never passes one, a
+mix restating the archetypes' own weights spawns the identical crowd, and `tests/js/labs.test.ts`
+pins both.
+
+**Adding an entity type to a lab** is the inspector's two steps, and the lab follows from them:
+
+1. Write `resources/js/game/inspect/entities/<thing>.ts` exporting an `Inspectable` whose `Cast`
+   builds through the game's own assembler, and add it to `ENTITIES` in `registry.ts`. Its family
+   decides its lab through `CATEGORY_OF`; a new family needs a row there.
+2. Fill the card: return `sections` from `readout` -- `identitySection` from `describe.ts` with the
+   archetype's `desc`, then recipe, geometry, provenance and cost. Path-placed things can reuse
+   `structureSections` (`entities/structure.ts`).
+3. If it stands somewhere on the path, declare `sites` so the placement view can frame it; if it is
+   drawn from a model file, declare `modelOf` on the model entity so the source toggle finds it.
+
+Nothing in `labs/`, `index.ts`, `panel.ts` or `state.ts` changes. **A fixture or building model is
+designed but not built**: one model per type, with a `<file>.structure.json` for its spots,
+footprint and color regions, listed in `STRUCTURE_MODELS` (`render/model-file.ts`), which is empty;
+finish the loading when the first kiosk or building model exists.
+
 ## Entity inspection
 
-`?inspect=1` opens a turntable: one thing on a neutral stage, a camera that holds still, a slow
-spin, and controls for whatever varies about it. `?inspect=row` puts a whole family side by side.
-`&entity=` chooses what is on the stage — `person` (the default, so every URL written before this
-existed still works), `kiosk`, `furniture`, `shop`, `restaurant`, and `bench`/`lamp`/`bin` and the
-five cuisine names as aliases with a kind or a type pinned. `?entity=building` still means a shop:
+The labs' individual view opens a turntable: one thing on a neutral stage, a camera that holds
+still, a slow spin, and controls for whatever varies about it. `view=row` puts a whole family side
+by side. `&entity=` chooses what is on the stage among the lab's own entities — `person`, `kiosk`,
+`furniture`, `shop`, `restaurant`, and `bench`/`lamp`/`bin` and the five cuisine names as aliases
+with a kind or a type pinned; `&source=model` puts the person's model on it. `?entity=building` still means a shop:
 the family has two members now and an alias owes nobody more than that a URL written before it
 existed opens what it opened.
 
@@ -1530,14 +1661,14 @@ The families are the taxonomy's own, imported from `entity.ts` rather than decla
 **The building turntables are where all ten symbols were authored**, and the restaurants' row earned
 itself three times over: the symbols were less than half the size they needed against an 8.5 m
 frontage, the taco read as a packing crate until its flaps were rounded, and the noodle-versus-salad
-question is one only a side-by-side can answer. `?inspect=row&entity=restaurant` is that view; the
+question is one only a side-by-side can answer. `/lab/buildings?view=row&entity=restaurant` is that view; the
 hold-angle buttons matter as much as the row does, because a symbol has to survive being seen from
 along the path as well as across it, and those are different pictures. The shop turntable is where
 the shops' five symbols were authored, and it earned itself immediately: the toy
 shop's blocks read as a tower falling over, the clothes shop's cap read as a beanie because its
 peak pointed at the viewer, and every symbol was less than half the size it needed to be against a
 seven-metre frontage. None of
-that is visible from the walkway until it is too late to fix cheaply. `?inspect=row&entity=shop` is the view that answers "can you tell these five apart".
+that is visible from the walkway until it is too late to fix cheaply. `/lab/buildings?view=row` is the view that answers "can you tell these five apart".
 
 **Adding an entity is two steps.** Write `resources/js/game/inspect/entities/<thing>.ts` exporting an
 `Inspectable` whose `Cast` builds through the game's own assembler and reports its parts, then add
@@ -1565,7 +1696,8 @@ Two consequences worth knowing:
   Timmy a child and Dave narrow — so `makeRecipe` still takes every draw in its fixed order and
   only the selection from rolls already in hand changes. A person keeps their seeded colours and
   parts while an axis moves under them, which is the point.
-- The part gizmos read matrices back from a `PartPools` subclass that records what `put` writes and
+- The part gizmos -- the **bounding boxes** (`gizmos`, `G`) and the **part origins** (`origins`, `X`),
+  two switches since the labs -- read matrices back from a `PartPools` subclass that records what `put` writes and
   calls straight through to the real implementation, so nothing the inspector does can change what
   is drawn. A kiosk's and a bench's come from `standingMatrix` and `barMatrix` — the same two
   functions `kit.ts` draws them with.
@@ -1581,12 +1713,12 @@ cart, and `?debug=1` and the game answer it.
 
 ### Models from files
 
-`?inspect=1&entity=model` puts a `.glb` from `public/models/` on the stage, and
-`?inspect=row&entity=model` puts one of the game's adults beside it for scale. It is **the one
-exhibit not drawn by the game's assembler**, deliberately: it is a bench for an asset the game does
-not use, so there is no assembler to go through. What it keeps instead is that the game's half of
-the stage is still the game's -- the person beside it is `PERSON`'s own cast, delegated to, pinned
-adult so the reference is a fair one, with the seed choosing which.
+`/lab/people?source=model` puts a `.glb` from `public/models/` on the stage, drawn as the person the
+controls name and painted in their recipe, and `view=row` stands the same recipe beside it as
+primitives. It is **the one exhibit not drawn by the game's assembler**, deliberately: it is a bench
+for an asset the game does not use, so there is no assembler to go through. What it keeps instead
+is that the game's half of the stage is still the game's -- the person beside it is `PERSON`'s own
+cast, delegated to, with the same seed, spawn index and axes.
 
 - **Adding a file** is dropping it in `public/models/` and one line in `MODELS` in
   `render/model-file.ts`, under the short name `?model=` uses. Nothing in a browser can list
@@ -1772,10 +1904,11 @@ bare `PartPools`'s meshes back out of the scene it just put them in, to caption 
 Retiring the comparator is therefore a decision about the tool alone: delete the directory and the
 game keeps compiling, keeps testing green, and keeps playing under every `?look=`.
 
-`?inspect=1` opens the turntable and `?inspect=row` its side-by-side row; `&entity=` chooses what
-stands on it (`person` by default, plus `kiosk`, `furniture`, `bench`, `lamp`, `bin`, and `shop` —
-`building` is an alias for it, the family's name for its only member — and `model`, a `.glb` from
-`public/models/`). Both take
+The labs' turntable (`/lab/people`, `/lab/fixtures`, `/lab/buildings`, and `view=row` for its
+side-by-side row) takes `&entity=` for what stands on it within the lab (`kiosk`, `furniture`,
+`bench`, `lamp`, `bin`, `shop` -- `building` is an alias for it -- and `restaurant` and the
+cuisines), `&source=model` for the person's model, and `&sel=` for which exhibit of a row the card
+describes. Both views take
 `&seed=` and mirror the rest of their state back into the address bar — every control under its own
 id, every active overlay under its own, plus `paused`, `yaw`, `look`, `ink`, the view (`zoom`,
 `panx`, `pany`) and any shut cards (`min=ctl,read`) — so a reload after a code change brings back
