@@ -163,6 +163,19 @@ export interface Inspectable {
     stepping: 'seed' | string;
     /** How many stand side by side in row mode. */
     row: number;
+    /**
+     * Fetch whatever the declaration depends on, before the shell reads it. Omit it if nothing does.
+     *
+     * The shell reads `controls` once -- the panel builds its rows from it and the address bar is
+     * parsed against it -- so a declaration that depends on a file has to be complete before that
+     * happens, not after. A model's clip names are the case: they are the options of its `clip`
+     * control, and nobody knows them until the file has arrived. Optional, and awaited only for the
+     * entity on stage, so nothing that draws from code pays a frame for it.
+     *
+     * Must not reject: an entity whose file is missing still has to stand something on the stage
+     * and say why, which is a better answer than a blank page.
+     */
+    load?(): Promise<void>;
     mount(scene: THREE.Scene): Cast;
 }
 

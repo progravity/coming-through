@@ -12,7 +12,7 @@ const compare = q.get('compare');
 
 if (!off(inspect)) {
     const { startInspector } = await import('./inspect/index.ts');
-    startInspector(inspect as string);
+    await startInspector(inspect as string);
 } else if (!off(compare)) {
     const { startCompare } = await import('./compare/index.ts');
     startCompare(compare as string);

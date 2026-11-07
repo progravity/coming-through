@@ -18,7 +18,7 @@ import { PartGizmos, measure, newBounds } from './gizmos.ts';
 import { GIZMOS, INK, controlOf, findKey } from './inspectable.ts';
 import type { ControlValue, DrawnPart, Inspectable, Readout } from './inspectable.ts';
 import { Panel } from './panel.ts';
-import { DEFAULT_ENTITY, byId } from './registry.ts';
+import { DEFAULT_ENTITY, byId, resolve } from './registry.ts';
 import { REST, Stage, ZOOM_STEP, clampView, zoomAt } from './stage.ts';
 import type { Extent } from './stage.ts';
 import { readState, writeState } from './state.ts';
@@ -36,7 +36,10 @@ const wrap01 = (v: number): number => ((v % 1) + 1) % 1;
 const cycle = (options: readonly string[], current: string, step: number): string =>
     options[(options.indexOf(current) + step + options.length) % options.length];
 
-export function startInspector(mode: string): void {
+export async function startInspector(mode: string): Promise<void> {
+    // Before the state is read, because the state is read against the declaration: an entity whose
+    // controls depend on a file (a model's clip names) fills them in here, and nothing else waits.
+    await resolve(new URLSearchParams(location.search).get('entity')).entity.load?.();
     const state: InspectState = readState(mode, location.search);
     const entity = byId(state.entity) as Inspectable;
 

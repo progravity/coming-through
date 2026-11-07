@@ -9,13 +9,14 @@
  */
 import { FURNITURE } from './entities/furniture.ts';
 import { KIOSK } from './entities/kiosk.ts';
+import { MODEL } from './entities/model.ts';
 import { PERSON } from './entities/person.ts';
 import { RESTAURANT } from './entities/restaurant.ts';
 import { SHOP } from './entities/shop.ts';
 import { RESTAURANT_TYPES } from '../world/restaurants.ts';
 import type { Controls, Inspectable } from './inspectable.ts';
 
-export const ENTITIES: readonly Inspectable[] = [PERSON, KIOSK, FURNITURE, SHOP, RESTAURANT];
+export const ENTITIES: readonly Inspectable[] = [PERSON, KIOSK, FURNITURE, SHOP, RESTAURANT, MODEL];
 
 /** What `?inspect=1` means with no `entity` named. Every URL written before this existed. */
 export const DEFAULT_ENTITY = 'person';

@@ -57,6 +57,8 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
   `entities/structure.ts` is the cast the carts, the shopfronts and the restaurants share, since
   everything the tool does with one it does with the others and a copy is where "through the game's
   own assembler" quietly stops being true for one of them.
+  `entities/model.ts` is the one exception to "the game's own assembler": a `.glb` from
+  `public/models/` beside one of the game's people. See "Models from files" below.
 - `src/compare/` — the render-direction comparator. The six rendering directions it shows side by
   side live as data in `src/render/look.ts`; `?look=` plays a normal run under one of them and
   reaches every surface, not just the crowd. `main.ts` names this directory only to *open* it, so
@@ -142,6 +144,12 @@ check, and then runs everything under `test/`. `npm run lint` is the first two o
   second mesh, so the ink is exactly half of what a person costs, in draw calls and in instances
   alike. The looks themselves and their `?look=` names are guarded in `test/look.test.ts`, being
   data in `src/render/look.ts` rather than anything in that directory.
+- `test/model.test.ts` — the model bench, with a skinned figure built in code standing in for a
+  file: that a missing file still stands something the stage can frame and says why, that a skinned
+  figure is measured in its pose rather than its bind pose, that the rest pose comes back at its own
+  size on an armature scaled by 0.01 (where `Skeleton.pose()` measurably makes a 17 mm figure), that
+  the file's materials come back by identity and only what the bench made is disposed, and that the
+  row's second exhibit is the game's own person.
 
 ## The entity taxonomy
 
@@ -1419,6 +1427,11 @@ the collider overlay and the orientation overlay. Nothing in `index.ts`, `panel.
 changes — and the test in `test/inspectable.test.ts` that drives a hypothetical entity through the
 shell's own state, URL and keymap is what keeps that true.
 
+**An entity whose declaration depends on a file declares `load`**, and the shell awaits it before it
+reads the state -- because the panel and the address bar read `controls` once and never again. It
+is optional, awaited only for the entity on stage, and must not reject: a missing file still has to
+stand something on the stage and say why.
+
 Two consequences worth knowing:
 
 - A building offers **no collider overlay**, because it has none. `EdgeExhibit` draws the loop only
@@ -1446,6 +1459,33 @@ cannot disturb the promenade.
 **Not in scope, deliberately:** the nine authored `KIOSK_PLACEMENTS` are not individually
 browsable. Where the carts stand is a question about the promenade's layout rather than about a
 cart, and `?debug=1` and the game answer it.
+
+### Models from files
+
+`?inspect=1&entity=model` puts a `.glb` from `public/models/` on the stage, and
+`?inspect=row&entity=model` puts one of the game's adults beside it for scale. It is **the one
+exhibit not drawn by the game's assembler**, deliberately: it is a bench for an asset the game does
+not use, so there is no assembler to go through. What it keeps instead is that the game's half of
+the stage is still the game's -- the person beside it is `PERSON`'s own cast, delegated to, pinned
+adult so the reference is a fair one, with the seed choosing which.
+
+- **Adding a file** is dropping it in `public/models/` and one line in `MODELS` in
+  `entities/model.ts`, under the short name `?model=` uses. Nothing in a browser can list `public/`.
+  Anything there ships in `vite build`, used or not.
+- **Its clips are its controls.** `load` fetches every listed file and fills the `clip` control with
+  the clip names it found, ahead of `pose` (the file's rest pose). The clip plays through an
+  `AnimationMixer` advanced by `SIM_DT` in `step`, so pause and `freeze clip` work as the gait does.
+- **"Pose" restores each node's transform as the file left it, not `Skeleton.pose()`.** That
+  rebuilds a root bone's local matrix from its bind-time world one, which applies a scaled armature
+  twice -- and a Mixamo export's armature is scaled by 0.01.
+- **It is measured in its pose.** One part per mesh, the mesh's box under its own matrix; a skinned
+  mesh's box is retaken every frame, which three.js does by skinning on the CPU.
+- **Shading is the game's by default**: the look's body, or the toon ramp the people ship with,
+  carrying the file's texture across. `own materials` (`N`) shows the file as authored. There is no
+  ink shell on the model, and the readout's draw-call figure is per figure: this answers "does it
+  look right", not "can the promenade afford a crowd of it" -- three.js has no instanced skinning.
+- **Vite answers a missing file with index.html and a 200**, so `load` reads the content type, not
+  the status, to say "not found".
 
 ## Two hashes
 
@@ -1555,7 +1595,8 @@ game keeps compiling, keeps testing green, and keeps playing under every `?look=
 
 `?inspect=1` opens the turntable and `?inspect=row` its side-by-side row; `&entity=` chooses what
 stands on it (`person` by default, plus `kiosk`, `furniture`, `bench`, `lamp`, `bin`, and `shop` —
-`building` is an alias for it, the family's name for its only member). Both take
+`building` is an alias for it, the family's name for its only member — and `model`, a `.glb` from
+`public/models/`). Both take
 `&seed=` and mirror the rest of their state back into the address bar — every control under its own
 id, every active overlay under its own, plus `paused`, `yaw`, `look`, `ink`, the view (`zoom`,
 `panx`, `pany`) and any shut cards (`min=ctl,read`) — so a reload after a code change brings back
