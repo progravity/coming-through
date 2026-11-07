@@ -11,6 +11,11 @@ import { viewOf } from './labs.ts';
 export async function startLab(lab: Lab): Promise<void> {
     const view = viewOf(lab, location.search);
     document.body.dataset.view = view;
+    if (view === 'crowd') {
+        const { startCrowd } = await import('./people/crowd.ts');
+        await startCrowd(lab);
+        return;
+    }
     const { startTurntable } = await import('../inspect/index.ts');
     await startTurntable(lab, view === 'row' ? 'row' : 'single');
 }

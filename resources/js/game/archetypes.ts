@@ -149,9 +149,31 @@ export const ARCH: Record<ArchKey, Archetype> = {
 export const ARCH_KEYS = Object.keys(ARCH) as ArchKey[];
 const TOTAL_WEIGHT = ARCH_KEYS.reduce((s, k) => s + ARCH[k].weight, 0);
 
-/** Pick an archetype key at random, weighted by its `weight`. Draws once from `rng` (the spawn stream). */
-export function weightedType(rng: Rng): ArchKey {
-    let r = rng.next() * TOTAL_WEIGHT;
-    for (const k of ARCH_KEYS) { r -= ARCH[k].weight; if (r <= 0) return k; }
-    return 'tourist';
+/** Relative spawn weights by archetype, in place of each archetype's own `weight`. */
+export type ArchMix = Readonly<Record<ArchKey, number>>;
+
+/**
+ * Pick an archetype key at random, weighted by its `weight`. Draws once from `rng` (the spawn stream).
+ *
+ * `mix` replaces the weights, which is how the people lab runs a crowd of one archetype or none of
+ * another. It changes what the one draw *selects* and never how many draws are taken, so a mixed
+ * crowd is still a pure function of its seed and its mix. Without one, the arithmetic below is the
+ * game's own, untouched: the game never passes a mix, and both determinism hashes are read without.
+ */
+export function weightedType(rng: Rng, mix?: ArchMix): ArchKey {
+    if (mix === undefined) {
+        let r = rng.next() * TOTAL_WEIGHT;
+        for (const k of ARCH_KEYS) { r -= ARCH[k].weight; if (r <= 0) return k; }
+        return 'tourist';
+    }
+    let total = 0;
+    for (const k of ARCH_KEYS) total += Math.max(0, mix[k]);
+    let r = rng.next() * total;
+    for (const k of ARCH_KEYS) {
+        const w = Math.max(0, mix[k]);
+        if (w === 0) continue;
+        r -= w;
+        if (r <= 0) return k;
+    }
+    return ARCH_KEYS.find(k => mix[k] > 0) ?? 'tourist';
 }

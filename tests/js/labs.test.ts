@@ -8,7 +8,10 @@
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';
+import { ARCH, ARCH_KEYS } from '../../resources/js/game/archetypes.ts';
+import type { ArchKey } from '../../resources/js/game/archetypes.ts';
 import { CATEGORIES, CATEGORY_OF } from '../../resources/js/game/entity.ts';
+import { Simulation } from '../../resources/js/game/sim/simulation.ts';
 import type { Family } from '../../resources/js/game/entity.ts';
 import { ENTITIES, modelOf } from '../../resources/js/game/inspect/registry.ts';
 import { queryOf, readState, resolveIn } from '../../resources/js/game/inspect/state.ts';
@@ -118,4 +121,23 @@ test('the lab shell knows nothing about any particular entity', () => {
         checked++;
     }
     assert.ok(checked >= 4, `only scanned ${checked} files of labs/`);
+});
+
+test("a crowd mix that restates the archetypes' own weights spawns the same crowd", () => {
+    // The mix changes what the spawn draw selects and nothing else, so restating the defaults is
+    // the game's crowd exactly -- the lab's crowd view can be trusted to be the game's.
+    const own = Object.fromEntries(ARCH_KEYS.map(k => [k, ARCH[k].weight])) as Record<ArchKey, number>;
+    for (const seed of [1, 20260903]) {
+        const plain = new Simulation(seed), mixed = new Simulation(seed, { mix: own });
+        plain.crowd.fill(80); mixed.crowd.fill(80);
+        assert.equal(mixed.identityHash(), plain.identityHash(), `seed ${seed} spawned a different crowd`);
+    }
+});
+
+test('a crowd mix of one archetype spawns nobody else', () => {
+    const only = Object.fromEntries(ARCH_KEYS.map(k => [k, k === 'kyle' ? 1 : 0])) as Record<ArchKey, number>;
+    const sim = new Simulation(5, { mix: only });
+    sim.prime(60);
+    assert.ok(sim.crowd.agents.length > 0);
+    assert.deepEqual([...new Set(sim.crowd.agents.map(a => a.type))], ['kyle']);
 });

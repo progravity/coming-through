@@ -1,3 +1,4 @@
+import type { ArchMix } from '../archetypes.ts';
 import type { Streams } from '../core/rng.ts';
 import { stepsFor } from '../core/time.ts';
 import { hasProperty } from '../entity.ts';
@@ -43,9 +44,12 @@ export class Crowd {
     readonly released: number[] = [];
 
     private readonly streams: Streams;
+    /** Spawn weights in place of the archetypes' own, for the people lab; the game never sets one. */
+    readonly mix: ArchMix | undefined;
 
-    constructor(streams: Streams) {
+    constructor(streams: Streams, mix?: ArchMix) {
         this.streams = streams;
+        this.mix = mix;
         this.grid.setFixed(this.obstacles, reachOf);
         // Slot 0 belongs to the player; the crowd fills upward from 1 (see PLAYER_SLOT).
         for (let i = MAX; i >= 1; i--) this.freeSlots.push(i);

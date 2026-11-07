@@ -26,7 +26,7 @@ export function spawn(crowd: Crowd, streams: Streams, opts: SpawnOptions = {}): 
     const event = crowd.nextSpawnEvent();
     const where = streams.spawn.fork(`spawn:${event}`);
     const how = streams.behavior.fork(`spawn:${event}`);
-    const type = weightedType(where), A = ARCH[type];
+    const type = weightedType(where, crowd.mix), A = ARCH[type];
     // Every placement draw is taken unconditionally, then selected between. Drawing inside the
     // branches would let `scatter` (which is not part of the seed) shift every later draw from
     // this fork, so the same spawn event would produce a different person depending on whether it

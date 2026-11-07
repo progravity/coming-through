@@ -106,6 +106,14 @@ a{color:var(--accent)}
 .tbl td:last-child{white-space:normal}
 .info .actions{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px}
 
+/* ---------- the crowd view's mix, and links dressed as buttons ---------- */
+.mix{display:grid;gap:3px;margin-top:6px}
+.mix-row{display:grid;grid-template-columns:14px 1fr 64px;align-items:center;gap:6px;font-size:12px;color:var(--soft)}
+.mix-row input[type=number]{width:100%;box-sizing:border-box}
+.btnlink{font-size:12px;color:#d7d3ca;background:rgba(255,255,255,.07);border-radius:7px;padding:4px 8px;text-decoration:none}
+.btnlink:hover{background:rgba(255,255,255,.14)}
+.lab-read .info + .actions{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+
 /* ---------- legends and readouts the views add ---------- */
 .legend{display:flex;flex-wrap:wrap;gap:3px 10px;font-size:11px;color:var(--soft)}
 .legend span{display:inline-flex;align-items:center}

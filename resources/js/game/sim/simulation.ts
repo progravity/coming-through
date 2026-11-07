@@ -3,6 +3,7 @@
  * run headlessly (see tests/js/determinism.test.ts) and, later, replayed from a seed plus an input log.
  */
 import { ARCH_KEYS } from '../archetypes.ts';
+import type { ArchMix } from '../archetypes.ts';
 import { Hasher } from '../core/hash.ts';
 import { makeStreams } from '../core/rng.ts';
 import type { Streams } from '../core/rng.ts';
@@ -57,10 +58,15 @@ export class Simulation {
      */
     onScrape: (() => void) | null = null;
 
-    constructor(seed: number) {
+    /**
+     * @param options.mix Spawn weights in place of the archetypes' own. The people lab's crowd view
+     *   is the only caller that passes one; a run of the game never does, so it changes nothing
+     *   either determinism hash reads. See `weightedType`.
+     */
+    constructor(seed: number, options: { mix?: ArchMix } = {}) {
         this.seed = seed >>> 0;
         this.streams = makeStreams(this.seed);
-        this.crowd = new Crowd(this.streams);
+        this.crowd = new Crowd(this.streams, options.mix);
     }
 
     /**
