@@ -37,6 +37,11 @@ export default defineConfig({
                 'resources/js/passkeys.js',
                 'resources/css/game.css',
                 'resources/js/game/main.ts',
+                // The labs: one stylesheet, and an entry per lab (resources/views/labs/*.blade.php).
+                'resources/css/lab.css',
+                'resources/js/game/labs/people/main.ts',
+                'resources/js/game/labs/fixtures/main.ts',
+                'resources/js/game/labs/buildings/main.ts',
             ],
             refresh: true,
             fonts: [

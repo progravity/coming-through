@@ -68,6 +68,14 @@ export type Control =
          */
         gate?: string;
         rebuilds?: boolean;
+    }
+    | {
+        /**
+         * A whole number in `min..max`: a spawn index, an outfit index. Rendered as a number box
+         * with a step either side, carried in the address bar as an integer, and bound to no key.
+         */
+        kind: 'number'; id: string; label: string; value: number; min: number; max: number;
+        rebuilds?: boolean;
     };
 
 export type ControlValue = string | number | boolean;
@@ -77,14 +85,56 @@ export type Controls = Record<string, ControlValue>;
 /** A debug layer an entity offers. `on` is for the one that starts switched on. */
 export interface OverlayDef { id: string; label: string; key?: string; on?: boolean }
 
+/**
+ * The shared information panel's vocabulary: what every lab says about the thing it is showing.
+ *
+ * Plain data, rendered by `info.ts` with text nodes rather than markup, so a file name that came
+ * from outside the repo cannot write HTML into the page and every lab's panel looks the same. The
+ * section ids are the shared headings, in the order a reader looks for them; an entity fills in the
+ * ones it has something to say under and leaves the rest out.
+ */
+export type SectionId = 'identity' | 'recipe' | 'geometry' | 'model' | 'state' | 'provenance' | 'cost';
+
+/** One line of a section. `v` is plain text; `color` adds a swatch, `tags` a row of chips. */
+export interface InfoRow {
+    k: string;
+    v?: string;
+    color?: number;
+    tags?: readonly string[];
+    /** Set in a monospace face: a file path, a hex value, a stream label. */
+    mono?: boolean;
+}
+
+/** A cell is text, or text with a swatch in front of it. */
+export type InfoCell = string | { text: string; color?: number; strong?: boolean };
+
+export interface InfoTable {
+    caption?: string;
+    columns: readonly string[];
+    rows: readonly (readonly InfoCell[])[];
+}
+
+export interface InfoSection {
+    id: SectionId;
+    /** Defaults to the id's own heading. */
+    title?: string;
+    rows?: readonly InfoRow[];
+    tables?: readonly InfoTable[];
+    /** A sentence under the rows, for what a table cannot say. */
+    note?: string;
+}
+
 /** The left-hand card: what is actually on the stage. */
 export interface Readout {
     title: string;
     sub: string;
+    /** The at-a-glance rows at the top of the card. Plain text. */
     rows: readonly (readonly [string, string])[];
     swatches?: readonly (readonly [string, number])[];
     /** One line for the row-mode cast list. */
     line?: string;
+    /** Everything else, under the shared headings. See `SectionId`. */
+    sections?: readonly InfoSection[];
 }
 
 /**
@@ -99,11 +149,18 @@ export interface Readout {
  */
 export interface DrawnPart { readonly matrix: THREE.Matrix4; readonly color: number }
 
-/** The overlays the shell owns and every entity gets for nothing. */
+/**
+ * The overlays the shell owns and every entity gets for nothing.
+ *
+ * `gizmos` is the bounding boxes, under the id the part gizmos always had, so `?gizmos=1` still
+ * opens them; the origin crosses that used to come with them are their own switch now.
+ */
 export const GIZMOS = 'gizmos';
+export const ORIGINS = 'origins';
 export const INK = 'ink';
 export const UNIVERSAL: readonly OverlayDef[] = [
-    { id: GIZMOS, label: 'part gizmos', key: 'g' },
+    { id: GIZMOS, label: 'bounding boxes', key: 'g' },
+    { id: ORIGINS, label: 'part origins', key: 'x' },
     { id: INK, label: 'ink', key: 'o', on: true },
 ];
 
@@ -148,9 +205,15 @@ export interface Cast {
 
 /** What one kind of entity is, and how to put some on a stage. */
 export interface Inspectable {
-    /** The address-bar name: `?inspect=1&entity=<id>`. */
+    /** The address-bar name: `?entity=<id>` within its lab. */
     id: string;
     family: Family;
+    /**
+     * The entity this one draws from a model file rather than from primitives, if it is a model
+     * source. The labs' source toggle is read off this: `person` and `model` are one thing in two
+     * sources, not two things, so the picker shows one and the toggle switches between them.
+     */
+    modelOf?: string;
     /** The entity's name in prose. The seed row's label is where it appears; the picker is by `id`. */
     title: string;
     controls: readonly Control[];
@@ -208,6 +271,11 @@ export function gateIds(e: Inspectable): Set<string> {
 }
 
 export type ScalarControl = Extract<Control, { kind: 'scalar' }>;
+export type NumberControl = Extract<Control, { kind: 'number' }>;
+
+/** A number control's value, whole and inside its range, whatever it was given. */
+export const clampNumber = (c: NumberControl, v: number): number =>
+    Number.isFinite(v) ? Math.min(c.max, Math.max(c.min, Math.round(v))) : c.value;
 
 /** What one key press means for this entity. */
 export type KeyHit =
@@ -229,7 +297,7 @@ export function findKey(e: Inspectable, key: string): KeyHit | undefined {
             if (c.keys === undefined) continue;
             if (key === c.keys[0]) return { kind: 'nudge', control: c, delta: -1 };
             if (key === c.keys[1]) return { kind: 'nudge', control: c, delta: 1 };
-        } else if (c.key !== undefined && c.key === k) return { kind: 'control', control: c };
+        } else if (c.kind !== 'number' && c.key !== undefined && c.key === k) return { kind: 'control', control: c };
     }
     for (const o of overlaysOf(e)) if (o.key !== undefined && o.key === k) return { kind: 'overlay', overlay: o };
     return undefined;

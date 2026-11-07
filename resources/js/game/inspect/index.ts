@@ -1,27 +1,33 @@
 /**
- * The inspection shell: a stage, a fixed camera, a turntable, and whatever the entity says it is.
+ * The turntable: a stage, a fixed camera, a slow spin, and whatever the entity says it is.
  *
- * Reached only through `?inspect=1` (one thing) or `?inspect=row` (several side by side), with
- * `&entity=` choosing what. It knows the registry and the interface and nothing else: there is no
- * archetype in this file, no cart, no bench. What is on the stage builds itself through the game's
- * own assembler and hands back parts, a readout and a line of status; everything else here -- the
- * spin, the pause, the seed, the bounding boxes, the address bar -- is the same for all of them.
+ * Mounted by a lab (`labs/start.ts`) as its individual view (`single`, one thing) or its row view
+ * (`row`, a family side by side), with `&entity=` choosing what among the lab's own entities and
+ * `&source=model` the model that stands in for one. It knows the registry and the interface and
+ * nothing else: there is no archetype in this file, no cart, no bench. What is on the stage builds
+ * itself through the game's own assembler and hands back parts, a readout and a line of status;
+ * everything else here -- the spin, the pause, the seed, the bounding boxes, the address bar -- is
+ * the same for all of them.
  *
  * Determinism: the shell reads no `spawn` or `behavior` draw, never builds a `Simulation`, and is
- * loaded by a dynamic import that a normal run never reaches.
+ * loaded only by a lab page, which a normal run never reaches.
  */
 import * as THREE from 'three';
 import { parseSeed } from '../core/rng.ts';
 import { MAX_CATCHUP_STEPS, SIM_DT } from '../core/time.ts';
+import { LabChrome } from '../labs/chrome.ts';
+import { primaries } from '../labs/labs.ts';
+import type { Lab, LabView } from '../labs/labs.ts';
 import { LOOK_NAMES, lookNamed } from '../render/look.ts';
+import { count as countOf, meshCost } from './describe.ts';
 import { PartGizmos, measure, newBounds } from './gizmos.ts';
-import { GIZMOS, INK, controlOf, findKey } from './inspectable.ts';
-import type { ControlValue, DrawnPart, Inspectable, Readout } from './inspectable.ts';
+import { GIZMOS, INK, ORIGINS, controlOf, findKey } from './inspectable.ts';
+import type { ControlValue, Controls, DrawnPart, Inspectable, Readout } from './inspectable.ts';
 import { Panel } from './panel.ts';
-import { DEFAULT_ENTITY, byId, resolve } from './registry.ts';
+import { byId, modelOf } from './registry.ts';
 import { REST, Stage, ZOOM_STEP, clampView, zoomAt } from './stage.ts';
 import type { Extent } from './stage.ts';
-import { readState, writeState } from './state.ts';
+import { queryOf, readState, resolveIn, writeState } from './state.ts';
 import type { InspectState, PanelId } from './state.ts';
 
 const TAU = Math.PI * 2;
@@ -36,15 +42,37 @@ const wrap01 = (v: number): number => ((v % 1) + 1) % 1;
 const cycle = (options: readonly string[], current: string, step: number): string =>
     options[(options.indexOf(current) + step + options.length) % options.length];
 
-export async function startInspector(mode: string): Promise<void> {
+/**
+ * What a control means in another entity: the same id, the same kind, and a value it accepts.
+ *
+ * The source toggle and the picker carry these across, so switching a person to their model keeps
+ * the archetype, the age and the seed -- the two are one thing drawn two ways, and losing the
+ * person on the way over would make the comparison the toggle exists for impossible.
+ */
+function carried(from: Controls, to: Inspectable): Controls {
+    const out: Controls = {};
+    for (const c of to.controls) {
+        const v = from[c.id];
+        if (v === undefined || v === c.value) continue;
+        if (c.kind === 'enum' && typeof v === 'string' && c.options.includes(v)) out[c.id] = v;
+        else if (c.kind === 'toggle' && typeof v === 'boolean') out[c.id] = v;
+        else if ((c.kind === 'scalar' || c.kind === 'number') && typeof v === 'number') out[c.id] = v;
+    }
+    return out;
+}
+
+export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<void> {
     // Before the state is read, because the state is read against the declaration: an entity whose
     // controls depend on a file (a model's clip names) fills them in here, and nothing else waits.
-    await resolve(new URLSearchParams(location.search).get('entity')).entity.load?.();
-    const state: InspectState = readState(mode, location.search);
+    await resolveIn(location.search, lab).entity.load?.();
+    const state: InspectState = readState(mode, location.search, lab);
     const entity = byId(state.entity) as Inspectable;
+    /** The entity the picker lights: the one a model stands in for, or this one. */
+    const primary = entity.modelOf ?? entity.id;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.domElement.classList.add('stage');
     document.body.appendChild(renderer.domElement);
 
     const stage = new Stage();
@@ -138,14 +166,15 @@ export async function startInspector(mode: string): Promise<void> {
         if (p.seed !== undefined && p.seed !== state.seed) must = true;
         // Merged rather than replaced: the cast keeps the object it was handed at rebuild.
         if (p.controls !== undefined) Object.assign(state.controls, p.controls);
-        if (p.mode !== undefined) state.mode = p.mode;
+        if (p.mode !== undefined) { state.mode = p.mode; if (p.mode === 'single') state.sel = 0; }
+        if (p.sel !== undefined) { state.sel = p.sel; needsReadout = true; }
         if (p.seed !== undefined) state.seed = p.seed;
         if (p.paused !== undefined) state.paused = p.paused;
         if (p.yaw !== undefined) state.yaw = wrapTau(p.yaw);
         if (p.view !== undefined) { state.view = clampView(p.view); stage.setView(state.view); }
         if (p.overlays !== undefined) {
             state.overlays = p.overlays;
-            gizmos.setVisible(state.overlays.has(GIZMOS));
+            gizmos.setVisible(state.overlays.has(GIZMOS), state.overlays.has(ORIGINS));
             cast.overlays(state.overlays);
         }
         // Reconciling the button belongs here rather than in `dressAll`, which a rebuild also calls:
@@ -154,6 +183,8 @@ export async function startInspector(mode: string): Promise<void> {
         if (p.look !== undefined) { state.look = p.look; syncInk(); dressAll(); }
         if (p.minimised !== undefined) state.minimised = p.minimised;
         panel.sync(state);
+        panel.pick(primary);
+        chrome.set(state.mode, entity.modelOf === undefined ? 'primitives' : 'model', blocked());
         // After `sync`, which is what put the class on the card: `reframe` measures what the cards
         // actually cover, so it has to run once the DOM already reflects the change. Not a rebuild
         // -- the cast is exactly the same, it just has more room to stand in.
@@ -161,7 +192,7 @@ export async function startInspector(mode: string): Promise<void> {
         if (must) { rebuild(); reframe(); }
         // Once per change, never per frame: a held arrow key or a slider drag reaches here many
         // times a second, and browsers rate-limit replaceState -- Safari throws past 100 in 30s.
-        writeState(state, entity);
+        writeState(state, entity, lab);
     }
 
     /**
@@ -193,17 +224,49 @@ export async function startInspector(mode: string): Promise<void> {
         setControl(c.id, cycle(c.options, String(state.controls[c.id]), delta));
     }
 
-    /** Switching entity reloads: a fresh page is the cheapest clean stage there is. */
+    /**
+     * Switching entity reloads: a fresh page is the cheapest clean stage there is.
+     *
+     * What carries is whatever means the same thing on the other side: the seed, the view, the
+     * zoom (dimensionless, so 4x on a person is 4x on a cart), and every control the two declare
+     * alike, which is what keeps the person on stage when the source toggle swaps in their model.
+     */
     function setEntity(id: string): void {
         if (id === state.entity) return;
-        const q = new URLSearchParams();
-        q.set('inspect', state.mode === 'row' ? 'row' : '1');
-        q.set('seed', String(state.seed));
-        if (id !== DEFAULT_ENTITY) q.set('entity', id);
-        // The view is dimensionless, so it carries: 4x on a person is 4x on a cart.
-        if (state.view.zoom !== REST.zoom) q.set('zoom', state.view.zoom.toFixed(2));
+        const to = byId(id);
+        if (to === undefined) return;
+        const next: InspectState = {
+            ...state, entity: id, sel: 0, controls: { ...carried(state.controls, to) },
+            overlays: new Set([...state.overlays].filter(o => o === INK || o === GIZMOS || o === ORIGINS)),
+        };
+        const q = queryOf(next, to, lab);
+        // Overlays the two do not share were dropped above; the ink keeps whatever it said.
         location.search = q.toString();
     }
+
+    /** Why the model source cannot be chosen for what is on stage, or null when it can. */
+    function blocked(): string | null {
+        if (entity.modelOf !== undefined) return null;
+        return modelOf(entity.id) !== undefined ? null : `${entity.title}: no model file yet. Primitives only for now.`;
+    }
+
+    /** A view this page does not draw is another page; the turntable's own two are a change in place. */
+    function setView(v: LabView): void {
+        if (v === 'single' || v === 'row') { patch({ mode: v }); return; }
+        const q = queryOf(state, entity, lab);
+        q.set('view', v);
+        q.delete('sel');
+        location.search = q.toString();
+    }
+
+    const chrome = new LabChrome({
+        lab, view: state.mode, source: entity.modelOf === undefined ? 'primitives' : 'model', modelBlocked: blocked(),
+        onView: setView,
+        onSource: src => {
+            if (src === 'model') { const m = modelOf(primary); if (m !== undefined) setEntity(m.id); }
+            else setEntity(primary);
+        },
+    });
 
     const panel = new Panel({
         patch: p => patch(p),
@@ -216,8 +279,9 @@ export async function startInspector(mode: string): Promise<void> {
         zoom: stepZoom,
         resetView: () => patch({ view: REST }),
         togglePanel,
-    });
+    }, primaries(lab), `${lab.title} lab`);
     panel.setEntity(entity);
+    panel.onSelect = i => patch({ sel: i });
 
     // ---------- input: drag or arrows to hold an angle, wheel and a modified drag to look closer ----------
     let dragging = -1, dragX = 0, dragY = 0, panning = false;
@@ -301,7 +365,7 @@ export async function startInspector(mode: string): Promise<void> {
     }
 
     addEventListener('keydown', e => {
-        if (e.target instanceof HTMLInputElement) return;
+        if (e.target instanceof HTMLInputElement || e.metaKey || e.ctrlKey || e.altKey) return;
         const turn = (e.shiftKey ? 15 : 2) * (Math.PI / 180);
         switch (e.key) {
             case 'ArrowLeft': patch({ paused: true, yaw: state.yaw - turn }); break;
@@ -330,7 +394,7 @@ export async function startInspector(mode: string): Promise<void> {
     addEventListener('resize', reframe);
 
     // ---------- start ----------
-    gizmos.setVisible(state.overlays.has(GIZMOS));
+    gizmos.setVisible(state.overlays.has(GIZMOS), state.overlays.has(ORIGINS));
     cast.overlays(state.overlays);
     // No dressing here: `rebuild` does it, along with re-asserting these overlays over the top. The
     // URL's `look` and its `ink` are two statements of equal standing and the button is the more
@@ -339,9 +403,12 @@ export async function startInspector(mode: string): Promise<void> {
     // hand-typed URL, where the button is the reading that survives.
     stage.setView(state.view);
     panel.sync(state);
+    panel.pick(primary);
     rebuild();
     reframe();
-    writeState(state, entity);
+    writeState(state, entity, lab);
+    /** The cast's own meshes, counted once a second rather than every frame. */
+    let stageCost = '', costAt = -Infinity;
 
     function frame(now: number): void {
         requestAnimationFrame(frame);
@@ -360,7 +427,7 @@ export async function startInspector(mode: string): Promise<void> {
         const n = count();
         cast.draw(clock, xs, state.yaw);
 
-        const showGizmos = state.overlays.has(GIZMOS);
+        const showGizmos = state.overlays.has(GIZMOS) || state.overlays.has(ORIGINS);
         scratch.length = 0;
         for (let i = 0; i < n; i++) {
             const parts = cast.parts(i);
@@ -376,14 +443,21 @@ export async function startInspector(mode: string): Promise<void> {
             if (state.mode === 'row') {
                 const rs: Readout[] = [];
                 for (let i = 0; i < n; i++) rs.push(cast.readout(i, tops[i]));
-                panel.describeRow(rs);
+                panel.describeRow(rs, Math.min(state.sel, n - 1));
             } else {
                 panel.describe(cast.readout(0, tops[0]));
             }
             needsReadout = false;
         }
-        panel.setStatus((state.yaw * 180) / Math.PI, state, cast.status?.() ?? '');
         renderer.render(stage.scene, stage.camera);
+        // The whole stage as the renderer saw it -- backdrop, ruler and overlays included -- beside
+        // the per-exhibit figures the card gives under "Rendering cost".
+        if (now - costAt > 1000) {
+            costAt = now;
+            const c = meshCost(stage.scene);
+            stageCost = `stage ${renderer.info.render.calls} calls · ${countOf(renderer.info.render.triangles)} tris · ${c.materials} materials`;
+        }
+        panel.setStatus((state.yaw * 180) / Math.PI, state, cast.status?.() ?? '', stageCost);
     }
     requestAnimationFrame(frame);
 }

@@ -1,0 +1,137 @@
+/*
+ * The labs: the bar across the top, the cards every view floats over its stage, the shared
+ * information panel, and the index page. Standalone like game.css: no Tailwind, no Flux.
+ *
+ * Two kinds of page wear it. `.lab-stage` is a full-bleed canvas with cards over it (every lab
+ * view); `.lab-page` is an ordinary scrolling page (the index).
+ */
+:root{
+    --bg:#20242c;--card:rgba(18,20,25,.86);--line:rgba(255,255,255,.09);--text:#eceae4;--dim:#8f8b83;--soft:#c3bfb7;
+    --accent:#e8c34a;--accent-ink:#241d00;--bar:44px;
+    font:13px/1.45 ui-sans-serif,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--text);
+}
+html,body{margin:0;background:var(--bg)}
+html:has(body.lab-stage){height:100%;overflow:hidden}
+body.lab-stage{height:100%;overflow:hidden;touch-action:none;-webkit-user-select:none;user-select:none}
+.lab-page{min-height:100%}
+canvas{display:block}
+.lab-stage canvas.stage{position:fixed;inset:0}
+code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.92em}
+a{color:var(--accent)}
+
+/* ---------- the bar ---------- */
+#lab-bar{position:fixed;top:0;left:0;right:0;height:var(--bar);z-index:20;display:flex;align-items:center;gap:14px;padding:0 14px;background:rgba(14,16,20,.92);border-bottom:1px solid var(--line);backdrop-filter:blur(6px);box-sizing:border-box;white-space:nowrap;overflow-x:auto}
+.lab-page #lab-bar{position:sticky}
+#lab-bar a{color:var(--soft);text-decoration:none;padding:4px 8px;border-radius:7px}
+#lab-bar a:hover{background:rgba(255,255,255,.08)}
+#lab-bar a[aria-current=page]{color:var(--accent);background:rgba(232,195,74,.12)}
+.lab-brand{font-weight:700;letter-spacing:.02em;color:var(--text)!important}
+.lab-nav{display:flex;gap:2px}
+#lab-tools{display:flex;align-items:center;gap:8px;margin-left:auto}
+#lab-tools .lbl{font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim)}
+.lab-play{border:1px solid var(--line)}
+.seg{display:inline-flex;gap:2px;background:rgba(255,255,255,.05);border-radius:8px;padding:2px}
+
+/* ---------- buttons and inputs, wherever they are ---------- */
+.lab-stage button,#lab-bar button{font:inherit;font-size:12px;color:#d7d3ca;background:rgba(255,255,255,.07);border:1px solid transparent;border-radius:7px;padding:4px 8px;cursor:pointer}
+.lab-stage button:hover,#lab-bar button:hover{background:rgba(255,255,255,.14)}
+.lab-stage button.on,#lab-bar button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.lab-stage button:disabled,#lab-bar button:disabled{opacity:.38;cursor:not-allowed;background:rgba(255,255,255,.04)}
+.lab-stage input[type=range]{flex:1;min-width:90px;accent-color:var(--accent)}
+.lab-stage input[type=text],.lab-stage input[type=number],.lab-stage select{font:inherit;font-size:12px;width:88px;color:var(--text);background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.15);border-radius:7px;padding:4px 7px}
+.lab-stage input[type=number]{width:64px}
+.lab-stage input:focus,.lab-stage select:focus{outline:none;border-color:var(--accent)}
+
+/* ---------- cards over the stage ---------- */
+.card{position:fixed;background:var(--card);backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:12px;pointer-events:auto;box-sizing:border-box}
+#inspector,.lab-ui{position:fixed;inset:0;pointer-events:none;z-index:10}
+#ctl,.lab-ctl{top:calc(var(--bar) + 12px);right:12px;width:262px;max-height:calc(100vh - var(--bar) - 24px);overflow:auto;padding:10px 12px 12px}
+#ctl .row,.lab-ctl .row{display:flex;align-items:center;gap:6px;margin-top:9px;flex-wrap:wrap}
+.lbl{display:block;width:100%;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);margin-top:10px}
+.row .lbl,.num .lbl{margin-top:0}
+#ctl h2,.lab-ctl h2{margin:0;font-size:14px;font-weight:600;letter-spacing:.01em}
+.nums{gap:10px!important}
+.num{display:flex;flex-direction:column;gap:3px}
+#read,.lab-read{top:calc(var(--bar) + 12px);left:12px;width:340px;max-height:calc(100vh - var(--bar) - 24px);overflow:auto;padding:10px 12px}
+#status,.lab-status{bottom:12px;left:50%;transform:translateX(-50%);padding:7px 14px;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:12px;color:var(--soft)}
+#status b,.lab-status b{color:var(--accent);font-weight:600}
+#keys,.lab-keys{bottom:12px;right:12px;padding:7px 11px;font-size:11px;color:#7e7a73;max-width:min(40vw,420px);text-align:right}
+
+/* A shut card keeps its heading and drops the rest, and stops reserving a fixed width, so the
+   stage can take the space back -- the views measure what is actually there. */
+.card.min{width:auto;max-height:none;overflow:visible}
+.card.min > *:not(h2):not(h3){display:none}
+#read.min{display:block}
+#read.min .info > *:not(h2),#read.min .cast > ol{display:none}
+#read.min > .cast:empty + .info{display:block}
+#ctl > h2,#read .cast > h3,#read .cast:empty + .info > h2,.lab-read > h2,.lab-ctl > h2{cursor:pointer;user-select:none}
+#ctl > h2::before,#read .cast > h3::before,#read .cast:empty + .info > h2::before,.lab-ctl > h2::before{content:'▾ ';color:var(--dim);font-weight:400}
+.card.min > h2::before,#read.min .cast > h3::before,#read.min .cast:empty + .info > h2::before{content:'▸ '!important}
+
+/* ---------- the row's cast list ---------- */
+.cast h3{margin:0 0 6px;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--dim);font-weight:500}
+.cast ol{margin:0 0 10px;padding:0;list-style:none;font-variant-numeric:tabular-nums}
+.cast li{display:flex;gap:6px;font-size:11.5px;padding:2px 6px;border-radius:6px;cursor:pointer}
+.cast li:hover{background:rgba(255,255,255,.07)}
+.cast li.on{background:rgba(232,195,74,.16)}
+.cast b{font-weight:500;min-width:84px}
+.cast span{color:var(--dim)}
+
+/* ---------- the shared information panel ---------- */
+.info h2{margin:0 0 8px;font-size:14px;font-weight:600}
+.info h2 em{font-style:normal;color:var(--dim);font-weight:400;font-size:11px}
+.info dl{display:grid;grid-template-columns:86px 1fr;gap:2px 10px;margin:0;font-variant-numeric:tabular-nums}
+.info dt{color:var(--dim);font-size:11px;padding-top:1px;overflow-wrap:anywhere}
+.info dd{margin:0;font-size:12px;overflow-wrap:anywhere}
+.info .glance{margin-bottom:6px}
+.info .off,.info .dim{color:#6c6862}
+.info .dim{color:var(--dim)}
+.sw{width:11px;height:11px;border-radius:3px;border:1px solid rgba(0,0,0,.45);display:inline-block;vertical-align:-1px;margin-right:5px;flex:none}
+.swatches{display:flex;flex-wrap:wrap;gap:2px 8px;margin:2px 0 6px}
+.swl{display:inline-flex;align-items:center;font-size:10.5px;color:#a8a49c}
+.tags{display:inline-flex;flex-wrap:wrap;gap:3px}
+.tag{font-size:10.5px;padding:0 6px;border-radius:9px;background:rgba(255,255,255,.09);color:#d7d3ca;line-height:17px}
+.sec{border-top:1px solid var(--line);margin-top:8px;padding-top:6px}
+.sec > summary{cursor:pointer;font-size:10.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--accent);font-weight:600;margin-bottom:5px;list-style:none}
+.sec > summary::-webkit-details-marker{display:none}
+.sec > summary::before{content:'▾ ';color:var(--dim)}
+.sec:not([open]) > summary::before{content:'▸ '}
+.info .note{margin:6px 0 0;font-size:11px;color:var(--dim)}
+.tbl{overflow-x:auto;margin-top:6px}
+.tbl table{border-collapse:collapse;width:100%;font-size:11.5px;font-variant-numeric:tabular-nums}
+.tbl caption{text-align:left;font-size:11px;color:var(--dim);padding-bottom:3px}
+.tbl th{text-align:left;font-weight:500;color:var(--dim);font-size:10.5px;padding:2px 6px 2px 0;border-bottom:1px solid var(--line)}
+.tbl td{padding:2px 6px 2px 0;border-bottom:1px solid rgba(255,255,255,.04);white-space:nowrap}
+.info .actions{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px}
+
+/* ---------- legends and readouts the views add ---------- */
+.legend{display:flex;flex-wrap:wrap;gap:3px 10px;font-size:11px;color:var(--soft)}
+.legend span{display:inline-flex;align-items:center}
+.hint{font-size:11px;color:var(--dim);margin:8px 0 0}
+
+@media (max-width:900px){
+    #read,.lab-read{display:none}
+    #keys,.lab-keys{display:none}
+    #lab-tools .lbl{display:none}
+}
+
+/* ---------- the index page ---------- */
+.lab-index{max-width:1060px;margin:0 auto;padding:28px 16px 48px;font-size:14px;line-height:1.55}
+.lab-index h1{font-size:26px;font-weight:600;margin:0 0 6px}
+.lab-index-head p{color:var(--soft);max-width:720px;margin:0}
+.lab-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:14px;margin:24px 0}
+.lab-card{background:rgba(255,255,255,.04);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.lab-card h2{margin:0 0 6px;font-size:18px}
+.lab-card h2 a{text-decoration:none}
+.lab-card > p{color:var(--soft);margin:0 0 10px;font-size:13px}
+.lab-card ul{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.lab-card li{display:grid;gap:1px;font-size:13px}
+.lab-card li a{font-weight:600;text-decoration:none}
+.lab-card li span{color:var(--dim);font-size:12px}
+.lab-terms{background:rgba(255,255,255,.03);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
+.lab-terms h2{margin:0 0 8px;font-size:16px}
+.lab-terms dl{display:grid;grid-template-columns:110px 1fr;gap:6px 14px;margin:0}
+.lab-terms dt{font-weight:600}
+.lab-terms dd{margin:0;color:var(--soft)}
+.lab-terms p{color:var(--dim);font-size:13px;margin:12px 0 0}
+@media (max-width:560px){.lab-terms dl{grid-template-columns:1fr}.lab-terms dd{margin-bottom:6px}}

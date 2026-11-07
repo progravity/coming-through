@@ -13,9 +13,9 @@
  */
 import { parseSeed } from '../core/rng.ts';
 import { LOOK_NAMES } from '../render/look.ts';
-import { defaultControls, defaultOverlays, gateIds, overlaysOf } from './inspectable.ts';
+import { clampNumber, defaultControls, defaultOverlays, gateIds, overlaysOf } from './inspectable.ts';
 import type { Controls, Inspectable } from './inspectable.ts';
-import { DEFAULT_ENTITY, resolve } from './registry.ts';
+import { DEFAULT_ENTITY, modelOf, resolve } from './registry.ts';
 import { REST, clampView } from './stage.ts';
 import type { View } from './stage.ts';
 
@@ -32,10 +32,33 @@ export type InspectMode = 'single' | 'row';
 export const PANELS = ['ctl', 'read'] as const;
 export type PanelId = (typeof PANELS)[number];
 
+/**
+ * Which entities a page may put on its stage: a lab's, or every one there is.
+ *
+ * The turntable is mounted inside a lab, and a lab browses one category. So an address naming an
+ * entity from another lab falls back to this lab's first one rather than standing a bench in the
+ * people lab -- and the address bar leaves out whichever entity is this lab's default.
+ */
+export interface Scope {
+    readonly entities: readonly Inspectable[];
+}
+
+export const EVERYTHING: Scope = { entities: [] };
+
+const inScope = (scope: Scope, e: Inspectable): boolean =>
+    scope.entities.length === 0 || scope.entities.includes(e);
+/** The entity this scope shows when the address names none, which the address bar never names. */
+const defaultOf = (scope: Scope): string => scope.entities[0]?.id ?? DEFAULT_ENTITY;
+
 export interface InspectState {
     /** Which `Inspectable` is on stage, by id. */
     entity: string;
     mode: InspectMode;
+    /**
+     * Which exhibit of a row the information card describes. Always 0 in single mode, where there
+     * is only one; in the address bar as `sel` so a row can be reloaded pointing at the same figure.
+     */
+    sel: number;
     seed: number;
     /**
      * The entity's controls, keyed by control id. **Mutated in place, never replaced** -- a cast
@@ -90,6 +113,7 @@ export function stateFor(e: Inspectable, mode: string, search: string, pinned: C
         if (raw === null) continue;
         if (c.kind === 'enum') { if (c.options.includes(raw)) controls[c.id] = raw; }
         else if (c.kind === 'toggle') controls[c.id] = raw === '1';
+        else if (c.kind === 'number') controls[c.id] = clampNumber(c, num(raw, c.value));
         else {
             controls[c.id] = wrap01(num(raw, c.value));
             // A gated scalar in the URL means "hold it here", so it turns its own gate on. This is
@@ -103,9 +127,11 @@ export function stateFor(e: Inspectable, mode: string, search: string, pinned: C
         if (raw === '1') overlays.add(o.id); else overlays.delete(o.id);
     }
     const seed = q.get('seed');
+    const row = mode === 'row';
     return {
         entity: e.id,
-        mode: mode === 'row' ? 'row' : 'single',
+        mode: row ? 'row' : 'single',
+        sel: row ? Math.max(0, Math.min(e.row - 1, Math.round(num(q.get('sel'), 0)))) : 0,
         seed: seed !== null && seed !== '' ? parseSeed(seed) : DEFAULT_SEED,
         controls,
         overlays,
@@ -126,22 +152,49 @@ export function stateFor(e: Inspectable, mode: string, search: string, pinned: C
     };
 }
 
+/**
+ * The entity an address asks for inside `scope`, with whatever an alias pins.
+ *
+ * `source=model` swaps a primitive entity for the model that stands in for it, when the scope has
+ * one: that is the labs' source toggle, read back. A name from outside the scope falls back to the
+ * scope's own default, so a stale or cross-lab address still opens something this page can show.
+ */
+export function resolveIn(search: string, scope: Scope = EVERYTHING): { entity: Inspectable; pinned: Controls } {
+    const q = new URLSearchParams(search);
+    let { entity, pinned } = resolve(q.get('entity'));
+    if (!inScope(scope, entity)) { entity = scope.entities[0] ?? entity; pinned = {}; }
+    if (q.get('source') === 'model' && entity.modelOf === undefined) {
+        const m = modelOf(entity.id);
+        if (m !== undefined && inScope(scope, m)) entity = m;
+    }
+    return { entity, pinned };
+}
+
 /** The state a URL asks for, entity and all. */
-export function readState(mode: string, search: string): InspectState {
-    const { entity, pinned } = resolve(new URLSearchParams(search).get('entity'));
+export function readState(mode: string, search: string, scope: Scope = EVERYTHING): InspectState {
+    const { entity, pinned } = resolveIn(search, scope);
     return stateFor(entity, mode, search, pinned);
 }
 
-/** The address bar for `s`, leaving anything still at its default out of it. */
-export function queryOf(s: InspectState, e: Inspectable): URLSearchParams {
+/**
+ * The address bar for `s`, leaving anything still at its default out of it.
+ *
+ * A model source is written as the entity it stands in for plus `source=model`, which is how the
+ * labs' toggle reads it back; the scope's default entity is never named.
+ */
+export function queryOf(s: InspectState, e: Inspectable, scope: Scope = EVERYTHING): URLSearchParams {
     const q = new URLSearchParams();
-    q.set('inspect', s.mode === 'row' ? 'row' : '1');
+    if (s.mode === 'row') q.set('view', 'row');
     q.set('seed', String(s.seed));
-    if (s.entity !== DEFAULT_ENTITY) q.set('entity', s.entity);
+    const named = e.modelOf ?? s.entity;
+    if (named !== defaultOf(scope)) q.set('entity', named);
+    if (e.modelOf !== undefined) q.set('source', 'model');
+    if (s.mode === 'row' && s.sel > 0) q.set('sel', String(s.sel));
     const gates = gateIds(e);
     for (const c of e.controls) {
         const v = s.controls[c.id];
         if (c.kind === 'enum') { if (v !== c.value) q.set(c.id, String(v)); }
+        else if (c.kind === 'number') { if (v !== c.value) q.set(c.id, String(v)); }
         // A gate is never written under its own name: the scalar it gates carries it.
         else if (c.kind === 'toggle') { if (v !== c.value && !gates.has(c.id)) q.set(c.id, v === true ? '1' : '0'); }
         else if (c.gate !== undefined ? s.controls[c.gate] === true : v !== c.value) {
@@ -168,6 +221,6 @@ export function queryOf(s: InspectState, e: Inspectable): URLSearchParams {
     return q;
 }
 
-export function writeState(s: InspectState, e: Inspectable): void {
-    history.replaceState(null, '', `${location.pathname}?${queryOf(s, e)}`);
+export function writeState(s: InspectState, e: Inspectable, scope: Scope = EVERYTHING): void {
+    history.replaceState(null, '', `${location.pathname}?${queryOf(s, e, scope)}`);
 }

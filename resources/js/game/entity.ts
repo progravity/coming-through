@@ -29,10 +29,36 @@
 /**
  * Which structural kind of thing this is.
  *
- * `building` has no members yet and is where the shopfronts go when they stop being scenery;
- * `world/structure.ts` is already the pattern they will be built by.
+ * `building` holds the shopfronts and the restaurants, both built by `world/structure.ts`.
  */
 export type Family = 'person' | 'kiosk' | 'building' | 'furniture';
+
+/**
+ * Where an entity sits and how it plays: the grouping the labs are organized by.
+ *
+ * - **people** -- the person family. "Crowd" means only the flowing, spawned population; stationed
+ *   staff, when they exist, are people but not crowd.
+ * - **fixtures** -- on-path, solid things the crowd and player steer around: the kiosk and
+ *   furniture families.
+ * - **buildings** -- near-path, never obstacles, interactable through their spots: the building
+ *   family (shops and restaurants today; restrooms and ride entrances later).
+ *
+ * Scenery (the ground, the railings, the skyline) and effects (transient visuals) are not entities
+ * at all, so they are not categories either; they are named in CLAUDE.md beside these.
+ *
+ * A category is a **grouping of families** and nothing more. It decides which lab a thing is shown
+ * in; it is never asked by behavior. A fixture is solid because it declares `static-obstacle`, not
+ * because it is a fixture, and a building is no obstacle because it declines the property, not
+ * because it is a building. "Structure" is deliberately not a category name: it is already the name
+ * of the kit the carts and the buildings share (`world/structure.ts`).
+ */
+export const CATEGORIES = ['people', 'fixtures', 'buildings'] as const;
+export type Category = (typeof CATEGORIES)[number];
+
+/** Which category each family belongs to. A table of families, not of types or properties. */
+export const CATEGORY_OF: Readonly<Record<Family, Category>> = {
+    person: 'people', kiosk: 'fixtures', furniture: 'fixtures', building: 'buildings',
+};
 
 /**
  * The whole property vocabulary.

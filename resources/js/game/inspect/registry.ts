@@ -18,7 +18,7 @@ import type { Controls, Inspectable } from './inspectable.ts';
 
 export const ENTITIES: readonly Inspectable[] = [PERSON, KIOSK, FURNITURE, SHOP, RESTAURANT, MODEL];
 
-/** What `?inspect=1` means with no `entity` named. Every URL written before this existed. */
+/** What an address with no `entity` named means outside a lab. Every URL written before this existed. */
 export const DEFAULT_ENTITY = 'person';
 
 /**
@@ -44,6 +44,9 @@ export const ALIASES: Readonly<Record<string, { entity: string; controls: Contro
 };
 
 export const byId = (id: string): Inspectable | undefined => ENTITIES.find(e => e.id === id);
+
+/** The entity that draws `id` from a model file instead of primitives, if there is one. */
+export const modelOf = (id: string): Inspectable | undefined => ENTITIES.find(e => e.modelOf === id);
 
 /** The entity a URL name asks for, with whatever an alias pins, falling back to the default. */
 export function resolve(name: string | null): { entity: Inspectable; pinned: Controls } {

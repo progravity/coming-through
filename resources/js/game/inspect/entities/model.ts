@@ -381,11 +381,11 @@ class ModelCast implements Cast {
     status(): string {
         const clip = this.action?.getClip();
         const regions = this.regionUniforms === null ? ''
-            : this.c.regions === true ? ' · <b>false colour</b>'
+            : this.c.regions === true ? ' · false color'
             : this.c.recolour === true && this.model?.regions?.roles?.usable === true ? " · the seed's colours" : ' · as authored';
-        if (clip === undefined) return `clip <b>${POSE}</b>${regions}`;
+        if (clip === undefined) return `clip ${POSE}${regions}`;
         const p = wrap01(Number(this.c.phase));
-        return `clip <b>${esc(clip.name)}</b> ${(p * 100).toFixed(0)}%${this.c.freeze === true ? ' frozen' : ''}${regions}`;
+        return `clip ${clip.name} ${(p * 100).toFixed(0)}%${this.c.freeze === true ? ' frozen' : ''}${regions}`;
     }
 }
 
@@ -422,6 +422,8 @@ function regionRows(rg: Regions | null): [string, string][] {
 export const MODEL: Inspectable = {
     id: 'model',
     family: 'person',
+    // The people lab's model source: the same person, drawn from a file.
+    modelOf: 'person',
     // The panel prints this over the seed box, and the seed only chooses who stands beside the
     // model -- the file is the same file whatever it says.
     title: 'Person beside it',

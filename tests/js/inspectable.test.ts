@@ -108,6 +108,7 @@ const FAKE: Inspectable = {
         { kind: 'enum', id: 'style', label: 'style', options: ['seed', 'arch', 'post'], value: 'seed', key: 'y', rebuilds: true },
         { kind: 'toggle', id: 'open', label: 'open', value: false, key: 'u' },
         { kind: 'scalar', id: 'swing', label: 'swing', value: 0.25, keys: ['-', '='], gate: 'open' },
+        { kind: 'number', id: 'panes', label: 'panes', value: 2, min: 1, max: 6 },
     ],
     overlays: [{ id: 'hinge', label: 'hinge', key: 'h' }],
     stepping: 'style',
@@ -140,8 +141,10 @@ test('the shell knows nothing about any particular entity', () => {
 });
 
 test('a hypothetical entity is inspectable without the shell changing', () => {
-    const s = stateFor(FAKE, 'single', '?style=post&open=1&hinge=1&seed=9');
+    const s = stateFor(FAKE, 'single', '?style=post&open=1&hinge=1&seed=9&panes=9.4');
     assert.equal(s.controls.style, 'post');
+    // A number is whole and inside its range, whatever the address said.
+    assert.equal(s.controls.panes, 6);
     assert.equal(s.controls.open, true);
     assert.equal(s.seed, 9);
     assert.ok(s.overlays.has('hinge'));

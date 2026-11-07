@@ -176,7 +176,7 @@ class PersonCast implements Cast {
 
     status(): string {
         const p = wrap01(Number(this.c.phase));
-        return `gait <b>${(p * 100).toFixed(0)}%</b>${this.c.freeze === true ? ' frozen' : ''}` +
+        return `gait ${(p * 100).toFixed(0)}%${this.c.freeze === true ? ' frozen' : ''}` +
             ` · ${this.c.walk === true ? 'walking' : 'idle'}`;
     }
 }

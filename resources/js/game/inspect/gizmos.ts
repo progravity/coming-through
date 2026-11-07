@@ -170,6 +170,9 @@ export class PartGizmos {
     private readonly axisMat: THREE.Material;
     private readonly boxes: THREE.LineSegments[] = [];
     private readonly axes: THREE.LineSegments[] = [];
+    /** The two halves switch separately: a box says how big a part is, a cross where its origin is. */
+    private showBoxes = true;
+    private showAxes = true;
 
     constructor(scene: THREE.Scene) {
         const helper = new THREE.AxesHelper(1);
@@ -181,7 +184,11 @@ export class PartGizmos {
         scene.add(this.group);
     }
 
-    setVisible(on: boolean): void { this.group.visible = on; }
+    /** Boxes, origin crosses, both or neither. With one argument, both together. */
+    setVisible(boxes: boolean, axes = boxes): void {
+        this.showBoxes = boxes; this.showAxes = axes;
+        this.group.visible = boxes || axes;
+    }
 
     /** Point one box and one cross at each recorded part; hide whatever is left over. */
     update(parts: readonly DrawnPart[], count: number): void {
@@ -189,10 +196,10 @@ export class PartGizmos {
         for (let i = 0; i < count; i++) {
             const m = parts[i].matrix;
             const box = this.boxes[i] ?? this.spawn(this.boxes, this.boxGeo, this.boxMat);
-            box.visible = true;
+            box.visible = this.showBoxes;
             box.matrix.copy(m);
             const cross = this.axes[i] ?? this.spawn(this.axes, this.axisGeo, this.axisMat);
-            cross.visible = true;
+            cross.visible = this.showAxes;
             // Position and rotation only: the cross marks where the origin is and which way the
             // part is turned, so it must not inherit the part's scale.
             m.decompose(_p, _q, _s);
