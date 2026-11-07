@@ -127,6 +127,15 @@ const AGE: Record<Age, AgeProfile> = {
     older: { height: 0.955, head: 1,   shoulder: 0.97, limb: 0.98, stride: 0.8,  cadence: 0.9,  stoop: 0.15, speed: 0.84, accel: 0.85, aid: 3.4 },
 };
 
+/**
+ * How much of a person's height their age takes away: the age profile's height factor on its own.
+ * Read-only, for the model renderer, which replaces it with a model's own age heights rather than
+ * shrinking an adult model into a child (`modelcrowd/body.ts`). Nothing here rolls.
+ */
+export const AGE_HEIGHT: Readonly<Record<Age, number>> = {
+    child: AGE.child.height, teen: AGE.teen.height, adult: AGE.adult.height, older: AGE.older.height,
+};
+
 interface MobilityProfile extends MotionProfile {
     seated: boolean;
     stride: number;

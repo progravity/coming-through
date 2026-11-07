@@ -21,7 +21,7 @@ import type { Lab, LabView } from '../labs/labs.ts';
 import { LOOK_NAMES, lookNamed } from '../render/look.ts';
 import { count as countOf, meshCost } from './describe.ts';
 import { PartGizmos, measure, newBounds } from './gizmos.ts';
-import { GIZMOS, INK, ORIGINS, controlOf, findKey } from './inspectable.ts';
+import { GIZMOS, INK, ORIGINS, controlOf, findKey, rowCount } from './inspectable.ts';
 import type { ControlValue, Controls, DrawnPart, Inspectable, Readout } from './inspectable.ts';
 import { Panel } from './panel.ts';
 import { byId, modelOf } from './registry.ts';
@@ -92,7 +92,7 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
     let needsReadout = true;
     let clock = 0, acc = 0, last = performance.now();
 
-    const count = (): number => (state.mode === 'row' ? entity.row : 1);
+    const count = (): number => (state.mode === 'row' ? rowCount(entity, state.controls) : 1);
 
     /**
      * Build the cast, measure it, and frame what was measured.
@@ -189,7 +189,11 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
         // actually cover, so it has to run once the DOM already reflects the change. Not a rebuild
         // -- the cast is exactly the same, it just has more room to stand in.
         if (p.minimised !== undefined) reframe();
-        if (must) { rebuild(); reframe(); }
+        if (must) {
+            // A row whose length follows a control may have grown shorter than the selection.
+            state.sel = Math.min(state.sel, count() - 1);
+            rebuild(); reframe();
+        }
         // Once per change, never per frame: a held arrow key or a slider drag reaches here many
         // times a second, and browsers rate-limit replaceState -- Safari throws past 100 in 30s.
         writeState(state, entity, lab);

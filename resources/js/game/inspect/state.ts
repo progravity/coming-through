@@ -13,7 +13,7 @@
  */
 import { parseSeed } from '../core/rng.ts';
 import { LOOK_NAMES } from '../render/look.ts';
-import { clampNumber, defaultControls, defaultOverlays, gateIds, overlaysOf } from './inspectable.ts';
+import { clampNumber, defaultControls, defaultOverlays, gateIds, overlaysOf, rowCount } from './inspectable.ts';
 import type { Controls, Inspectable } from './inspectable.ts';
 import { DEFAULT_ENTITY, modelOf, resolve } from './registry.ts';
 import { REST, clampView } from './stage.ts';
@@ -131,7 +131,7 @@ export function stateFor(e: Inspectable, mode: string, search: string, pinned: C
     return {
         entity: e.id,
         mode: row ? 'row' : 'single',
-        sel: row ? Math.max(0, Math.min(e.row - 1, Math.round(num(q.get('sel'), 0)))) : 0,
+        sel: row ? Math.max(0, Math.min(rowCount(e, controls) - 1, Math.round(num(q.get('sel'), 0)))) : 0,
         seed: seed !== null && seed !== '' ? parseSeed(seed) : DEFAULT_SEED,
         controls,
         overlays,

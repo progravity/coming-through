@@ -259,6 +259,11 @@ export interface Inspectable {
     /** How many stand side by side in row mode. */
     row: number;
     /**
+     * How many stand in the row given the controls, when that depends on them: the model source's
+     * row is two, five, four or one per chosen model, by what it is comparing. Omitted, it is `row`.
+     */
+    rowFor?(c: Controls): number;
+    /**
      * Fetch whatever the declaration depends on, before the shell reads it. Omit it if nothing does.
      *
      * The shell reads `controls` once -- the panel builds its rows from it and the address bar is
@@ -278,6 +283,9 @@ export interface Inspectable {
      */
     sites?(c: Controls): readonly Site[];
 }
+
+/** How many stand in `e`'s row under these controls. */
+export const rowCount = (e: Inspectable, c: Controls): number => Math.max(1, e.rowFor?.(c) ?? e.row);
 
 export function defaultControls(e: Inspectable): Controls {
     const c: Controls = {};

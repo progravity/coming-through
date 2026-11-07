@@ -10,6 +10,7 @@
  */
 import type * as THREE from 'three';
 import { MODELS, fetchModel } from '../render/model-file.ts';
+import { fetchBodyFile } from './body.ts';
 import { ModelCrowd } from './crowd.ts';
 import { prepareRegions } from './regions.ts';
 import type { Knobs } from './crowd.ts';
@@ -44,6 +45,8 @@ export interface PeopleStats {
     clips: string;
     /** What the colour regions came to: how many groups, and whether the crowd is painted from them. */
     colours: string;
+    /** The model's body type, from its body file; every clone's age and build come from its recipe. */
+    body: string;
     /** Last frame. */
     animated: number;
     bodyDraws: number;
@@ -79,7 +82,7 @@ export async function startPeople(mode: PeopleMode, scene: THREE.Scene, params: 
     };
     const stats: PeopleStats = {
         renderer: 'primitives', model: null, error: null, ink: false, throttle: knobs.throttle, far: knobs.far, every: knobs.every,
-        trisPerModel: 0, bones: 0, clips: '', colours: '', animated: 0, bodyDraws: 0, inkDraws: 0, calls: 0, triangles: 0, people: 0,
+        trisPerModel: 0, bones: 0, clips: '', colours: '', body: '', animated: 0, bodyDraws: 0, inkDraws: 0, calls: 0, triangles: 0, people: 0,
         fps: 0, frameMs: 0, simMs: 0, poseMs: 0, renderMs: 0,
     };
     let models: ModelCrowd | null = null;
@@ -91,10 +94,11 @@ export async function startPeople(mode: PeopleMode, scene: THREE.Scene, params: 
             const got = await fetchModel(file);
             // Painted only when the regions are known and confidently separated; otherwise as authored, saying why.
             const regions = await prepareRegions(file, got.scene);
-            models = new ModelCrowd(scene, got, knobs, regions.roles?.usable === true ? regions.paint : null);
+            const body = await fetchBodyFile(file);
+            models = new ModelCrowd(scene, got, knobs, regions.roles?.usable === true ? regions.paint : null, body);
             Object.assign(stats, {
                 renderer: 'model', model: name, trisPerModel: models.trisPerModel, bones: models.bones, clips: models.clips,
-                colours: regions.summary,
+                colours: regions.summary, body: `${body.type} model; age and build from each recipe`,
             });
         } catch (e) {
             stats.error = e instanceof Error ? e.message : String(e);
@@ -192,6 +196,7 @@ class Panel {
         if (s.renderer === 'model') {
             lines.push(`animated ${s.animated} · drawn ${s.bodyDraws} bodies + ${s.inkDraws} ink`);
             lines.push(`colours: ${s.colours}`);
+            lines.push(`bodies: ${s.body}`);
         }
         this.text.textContent = lines.join('\n');
     }

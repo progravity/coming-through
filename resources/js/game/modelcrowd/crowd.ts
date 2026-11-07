@@ -29,6 +29,8 @@ import type { Agent } from '../sim/agent.ts';
 import { lerpPose, newPose } from '../sim/pose.ts';
 import { MAX } from '../world/layout.ts';
 import { PATH } from '../world/path.ts';
+import { BodyRig, LIMITS, bakeMask, drawnHeight, patchFullness, shapeRecipe } from './body.ts';
+import type { BodyFile, FullnessUniforms, Limits } from './body.ts';
 import { recipeColours } from './regions.ts';
 import type { RegionPaint, RegionUniforms } from './regions.ts';
 
@@ -61,8 +63,10 @@ interface Slot {
     readonly material: THREE.MeshToonMaterial;
     /** This clone's repaint, when the model's regions can be painted. */
     readonly regions: RegionUniforms | null;
-    readonly spine: THREE.Object3D | null;
-    readonly neck: THREE.Object3D | null;
+    /** Age and build: the bones' bind matrices and joints, and the fullness on the body and its ink. */
+    readonly shape: BodyRig;
+    readonly full: FullnessUniforms;
+    readonly inkFull: FullnessUniforms;
     /** Whose recipe this clone is dressed for, so a reused slot is re-dressed once and not every frame. */
     recipe: Recipe | null;
     running: boolean;
@@ -102,7 +106,8 @@ function inPlace(clip: THREE.AnimationClip, rig: THREE.Object3D): THREE.Animatio
 
 /**
  * The ink: the same skinned surface pushed out along its skinned normal and drawn back faces only.
- * One material for every figure, since nothing about a line varies by person.
+ * One per figure since bodies came in: the line has to follow each person's fullness, and a shared
+ * material cannot. Every one compiles to the same program, so the cost is a uniform, not a shader.
  */
 function inkMaterial(): THREE.MeshBasicMaterial {
     const m = new THREE.MeshBasicMaterial({ color: INK_LINE, side: THREE.BackSide });
@@ -131,11 +136,17 @@ export class ModelCrowd {
     private frame = 0;
 
     private readonly paint: RegionPaint | null;
+    /** How far this model may be pushed, from its body file or the global table. */
+    readonly limits: Limits;
 
-    /** `paint` repaints each clone's regions in its recipe's colours; null draws the texture as authored. */
-    constructor(scene: THREE.Scene, file: ModelFile, knobs: Knobs, paint: RegionPaint | null) {
+    /**
+     * `paint` repaints each clone's regions in its recipe's colours; null draws the texture as
+     * authored. `body` is the model's body file, whose limits every clone is shaped inside.
+     */
+    constructor(scene: THREE.Scene, file: ModelFile, knobs: Knobs, paint: RegionPaint | null, body: BodyFile | null = null) {
         this.knobs = knobs;
         this.paint = paint;
+        this.limits = body?.limits ?? LIMITS;
         let source: THREE.SkinnedMesh | null = null;
         file.scene.traverse(o => { if (source === null && (o as THREE.SkinnedMesh).isSkinnedMesh) source = o as THREE.SkinnedMesh; });
         if (source === null) throw new Error('the file has no skinned mesh');
@@ -161,8 +172,9 @@ export class ModelCrowd {
         sphere.radius *= 1.25;
         src.boundingSphere = sphere;
 
+        // The fullness mask, baked once into the geometry every clone shares.
+        bakeMask(src);
         const gradient = makeToonGradient();
-        const ink = inkMaterial();
         const map = (src.material as THREE.MeshStandardMaterial).map ?? null;
         for (let slot = 0; slot <= MAX; slot++) {
             const rig = cloneSkinned(file.scene);
@@ -176,7 +188,11 @@ export class ModelCrowd {
             const material = new THREE.MeshToonMaterial({ map, gradientMap: gradient });
             // Every clone is its own draw call already, so its own colours cost no extra ones.
             const regions = paint?.patch(material) ?? null;
+            // After the repaint, which it wraps: fullness is a vertex change, the repaint a fragment one.
+            const full = patchFullness(material);
             mesh.material = material;
+            const ink = inkMaterial();
+            const inkFull = patchFullness(ink);
             const shell = new THREE.SkinnedMesh(geo, ink);
             shell.bindMode = THREE.DetachedBindMode;
             shell.bind(mesh.skeleton, IDENTITY);
@@ -196,7 +212,7 @@ export class ModelCrowd {
 
             const s: Slot = {
                 group, body: mesh, ink: shell, rig, mixer, walk: walkAction, run: runAction, material, regions,
-                spine: findNode(rig, /spine$/i), neck: findNode(rig, /neck$/i),
+                shape: new BodyRig(rig, [mesh]), full, inkFull,
                 recipe: null, running: false, fresh: true, dirty: true, used: false,
             };
             // The renderer uploads every visible skeleton every frame. A throttled person's bones
@@ -236,7 +252,8 @@ export class ModelCrowd {
             if (s.recipe !== a.recipe) this.dress(s, a.recipe);
             const g = s.group;
             g.visible = true;
-            g.position.set(view.x, PATH.surfaceY(view.x, view.z), view.z);
+            // Lifted by however much longer legs pushed the feet down, at the clone's own scale.
+            g.position.set(view.x, PATH.surfaceY(view.x, view.z) + s.shape.lift * g.scale.y, view.z);
             g.rotation.y = view.yaw;
             const dx = view.x - from.x, dz = view.z - from.z;
             if (k.throttle && !s.fresh && dx * dx + dz * dz > far2 && (frame + a.slot) % every !== 0) continue;
@@ -252,6 +269,8 @@ export class ModelCrowd {
             const action = run && s.run !== null ? s.run : s.walk;
             action.time = wrap01(view.phase / TAU) * action.getClip().duration;
             s.mixer.update(0);
+            // The body's joints and stoop, onto the pose the clip just wrote.
+            s.shape.pose();
             s.rig.updateMatrixWorld(true);
             s.dirty = true;
             animated++;
@@ -262,21 +281,18 @@ export class ModelCrowd {
         this.animated = animated;
     }
 
-    /** Fit a clone to whoever now occupies its slot: colours, height and build. Once per occupant. */
+    /**
+     * Fit a clone to whoever now occupies its slot: colors, height, and the body their age and
+     * build ask for (`modelcrowd/body.ts`). Once per occupant, never per frame.
+     */
     private dress(s: Slot, r: Recipe): void {
         s.recipe = r;
         s.fresh = true;
         if (this.paint !== null && s.regions !== null) this.paint.paint(s.regions, recipeColours(r));
-        s.group.scale.setScalar(standingHeight(r) / this.height);
-        // Build widens the torso and everything hung from it, then gives the head its width back.
-        s.spine?.scale.set(r.w, 1, r.w);
-        s.neck?.scale.set(1 / r.w, 1, 1 / r.w);
+        const { body } = shapeRecipe(r, this.limits);
+        s.shape.apply(body);
+        // Fullness is a fraction of height; the skinned vertices come out in the model's own units.
+        s.full.bodyFull.value = s.inkFull.bodyFull.value = body.fullness * this.height;
+        s.group.scale.setScalar(drawnHeight(standingHeight(r), r, body) / this.height);
     }
-}
-
-/** The first node whose name matches, matched by its ending because Mixamo prefixes every bone. */
-function findNode(root: THREE.Object3D, re: RegExp): THREE.Object3D | null {
-    let found: THREE.Object3D | null = null;
-    root.traverse(o => { if (found === null && re.test(o.name)) found = o; });
-    return found;
 }

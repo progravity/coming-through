@@ -29,6 +29,7 @@ import { InfoPanel } from '../../inspect/info.ts';
 import type { InfoRow, InfoSection, Readout } from '../../inspect/inspectable.ts';
 import { ModelCrowd } from '../../modelcrowd/crowd.ts';
 import type { Knobs } from '../../modelcrowd/crowd.ts';
+import { fetchBodyFile } from '../../modelcrowd/body.ts';
 import { prepareRegions } from '../../modelcrowd/regions.ts';
 import { lookNamed } from '../../render/look.ts';
 import { MODELS, fetchModel } from '../../render/model-file.ts';
@@ -107,8 +108,9 @@ export async function startCrowd(lab: Lab): Promise<void> {
             const got = await fetchModel(file);
             const regions = await prepareRegions(file, got.scene);
             const knobs: Knobs = { ink: false, throttle: false, far: 15, every: 3 };
-            models = new ModelCrowd(world.scene, got, knobs, regions.roles?.usable === true ? regions.paint : null);
-            modelNote = `${state.model} · ${count(models.trisPerModel)} triangles and ${models.bones} bones each · ${regions.summary}`;
+            const body = await fetchBodyFile(file);
+            models = new ModelCrowd(world.scene, got, knobs, regions.roles?.usable === true ? regions.paint : null, body);
+            modelNote = `${state.model} · ${count(models.trisPerModel)} triangles and ${models.bones} bones each · ${regions.summary} · a ${body.type} body, age and build from each recipe`;
         } catch (e) {
             modelNote = `the model did not load, so the crowd is primitives: ${e instanceof Error ? e.message : String(e)}`;
         }

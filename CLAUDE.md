@@ -30,7 +30,7 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   incoming connections for `php` and `node` the first time. Two dev servers for one checkout fight
   over `public/hot`, which is why the other one has to stop.
 - **Tests:** `npm test` type-checks the engine and its tests, runs the Math.random check, and then
-  runs everything under `tests/js/` with `node --test` (236 tests). `npm run lint` is the first two
+  runs everything under `tests/js/` with `node --test` (249 tests). `npm run lint` is the first two
   on their own. `composer test` is the Laravel side: Pint, PHPStan and Pest (`tests/Feature/`,
   `tests/Unit/`), against SQLite in memory. Both are plain commands and both must pass.
 - **Node is pinned to 26.13.0** in `.nvmrc` (and `^26.13.0` in `package.json` `engines`). Herd's
@@ -182,12 +182,12 @@ The engine:
   the interface and never an entity, which `tests/js/labs.test.ts` checks. See "The labs" below.
 - `resources/js/game/modelcrowd/` — **a performance experiment, not a feature**: `?people=model` draws the crowd
   as clones of the rigged model, `?people=prim` keeps the primitives, and both show a cost readout.
-  `regions.ts` finds a model's colour regions and repaints them per person; the model inspector
-  imports it too, to show and check them, and the people lab's crowd view draws its model source
-  with `crowd.ts`. Disposable on purpose: delete the directory, `scripts/bench-people.mjs`, the
-  lines in `game.ts` that name `people`/`modelCrowd`, the region tables and toggles in
-  `inspect/entities/model.ts` and the model branch of `labs/people/crowd.ts`, and the game is
-  unchanged. See "The modeled-crowd experiment".
+  `regions.ts` finds a model's colour regions and repaints them per person, and `body.ts` shapes
+  each clone by its recipe's age and build (see "Model bodies"); the people lab's model source
+  imports both, and its crowd view draws its model source with `crowd.ts`. Disposable on purpose:
+  delete the directory, `scripts/bench-people.mjs`, the lines in `game.ts` that name
+  `people`/`modelCrowd`, the people lab's model source (`inspect/entities/model.ts`) and the model
+  branch of `labs/people/crowd.ts`, and the game is unchanged. See "The modeled-crowd experiment".
 - `resources/js/game/compare/` — the render-direction comparator. The six rendering directions it shows side by
   side live as data in `resources/js/game/render/look.ts`; `?look=` plays a normal run under one of them and
   reaches every surface, not just the crowd. `main.ts` names this directory only to *open* it, so
@@ -291,6 +291,13 @@ The engine:
   size on an armature scaled by 0.01 (where `Skeleton.pose()` measurably makes a 17 mm figure), that
   the file's materials come back by identity and only what the bench made is disposed, and that the
   row's second exhibit is the game's own person.
+- `tests/js/body.test.ts` — model bodies, on a Mixamo-named rig built in code: that the Build presets
+  are the crowd's own width roll cut into fifths with neighbors visibly apart, that the limits hold
+  and say what they held, that a child is drawn as a teen at the teen height, that widening the chest
+  moves nothing hung from it, that the shoulders carry the arms and limbs thicken across the bone,
+  that longer legs lift the figure by exactly what they add, that a stoop never compounds, that a
+  body never writes another figure's bind matrices, that fullness leaves the hands, feet and head
+  alone and swells a seam as one surface, and that its shader runs after the material's own.
 - `tests/js/regions.test.ts` — a model's colour regions, on atlases built in code: that the groups are
   the patches and never the gutter, that every used texel is labelled, edges included, that two
   colours as close as the casual man's skin and khaki are pulled apart by the bandwidth search, that a
@@ -1529,10 +1536,15 @@ into two vocabularies.
   angle, and `agent` (the spawn index) and `outfit` (a group's shared outfit), so any agent of any
   seed stands on the turntable as the crowd built them. Collider and orientation overlays draw the
   body the crowd steers (`Subject` mirrors `Agent`'s collider numbers; `inspect.test.ts` holds them
-  together). Under the model source the row is the model and the same recipe as primitives; the
-  card lists clips, color regions (false color, color, share, role), proposed accessory anchors by
-  bone (drawn as markers), triangles and bones, and the torso's measured half width against the
-  collider radius, and `crowd scale` fits the model as the model crowd does. A model's source and
+  together). Under the model source the model wears the recipe's age and build (see "Model
+  bodies"), and `compare=` chooses what the row stands side by side: `source` (the default: the
+  model and the same recipe as primitives), `build` (the five Build presets exactly), `age` (the four
+  Age presets) or `models` (every model chosen by its `cmp-<name>` switch, at the same recipe,
+  presets, pose and camera). The card lists the body drawn against the presets' ask and the limits,
+  clips, color regions (false color, color, share, role), proposed accessory anchors by bone (drawn
+  as markers), triangles and bones, a table of every model's triangles, bones, file size, textures,
+  estimated texture memory and load time, and the torso's half width as drawn (girth and fullness)
+  against the collider radius; `crowd scale` fits the model as the model crowd does. A model's source and
   license note is `MODEL_SOURCES` in `render/model-file.ts`; the license reads "not recorded" until
   someone records it.
 - **People, crowd** (`labs/people/`) — a `Simulation` built, primed and stepped exactly as the game
@@ -1759,9 +1771,9 @@ instrument:
 - **The clip is driven by the gait phase**, one turn of `phase` per clip cycle, with the hips'
   sideways and forward travel pinned and every constant translation track dropped. Above 2.2 m/s a
   body runs (back to walking below 1.9); anyone with a mobility aid walks.
-- **Variation is the recipe's own colours and two bone scales**: skin, top (the jacket when one is
-  worn), trousers, hair and shoes repainted from the recipe's rolls, the standing height as the
-  clone's scale, the build on the spine (and given back at the neck).
+- **Variation is the recipe's own colors and its body**: skin, top (the jacket when one is worn),
+  trousers, hair and shoes repainted from the recipe's rolls, and the recipe's age and build shaped
+  into the clone by `modelcrowd/body.ts` -- see "Model bodies" below.
 - **Colour regions are found, not authored** (`regions.ts`). The mesh's UV triangles are rasterised
   to find the texels it uses, those are grouped by colour with a mean shift in Oklab, and a mask
   texture labels every used texel with its group. Cells at a colour edge or an island's border are
@@ -1790,7 +1802,85 @@ instrument:
 - **`render ms` is submit time.** `renderer.render` returns before the GPU has drawn anything, so
   the GPU's share shows only in the frame time and fps. `scripts/bench-people.mjs` sweeps both
   renderers over crowd sizes and knobs (`--gpu` for a real GPU); `?stress=1&crowd=N` holds a stress
-  run at N people.
+  run at N people. The `--gpu` window is easily throttled by macOS when it is not in front, which
+  shows as a frame time of hundreds of milliseconds; for frame times, read `game.stress`'s running
+  totals twice in a visible tab and divide.
+
+### Model bodies
+
+`modelcrowd/body.ts` turns a recipe's **age** and **build** into a body for a rigged model, for the
+`?people=model` crowd and the people lab alike. **Renderer only**: it reads the recipe and writes
+bones, bind matrices and two uniforms. Nothing rolls, nothing reaches the simulation, the collider
+is unchanged, and neither hash can move. Three mechanisms, chosen so nothing costs more per frame:
+
+- **Girth is a change of bind matrix, not of bone.** Scaling a bone scales everything hung from it
+  -- widen the chest and the arms and the head widen with it -- so each bone's own scale is folded
+  into its inverse bind matrix instead (`boneMatrix = boneWorld × scale × boneInverse`): set once
+  per body, and nothing downstream of the bone moves. A clone's skeleton shares its source's inverse
+  array, so `BodyRig` unshares it first.
+- **Spacing is a change of joint position**, rewritten after each animation update by
+  `BodyRig.pose()` (a dozen copies, nothing allocated): the clavicles and arms out by the shoulders,
+  the legs apart by the width, the knees and feet down by the leg length, with the figure lifted by
+  exactly what longer legs added. The stoop is composed onto the clip's own turn of the spine and
+  neck, and is never composed twice onto a bone no clip animates.
+- **Fullness is a vertex displacement** along the skinned normal, in the material's own shader,
+  wrapped around whatever `onBeforeCompile` it had (the region repaint, the ink's push), so the
+  outline still stands proud of a fuller body. It is weighted per vertex by `bodyMask`, baked once
+  from the skin weights: Hips 1, Spine 1, Spine1 1, Spine2 0.85, the clavicles 0.35, the upper arms
+  0.5, the thighs 0.45 (more steps at the knee), and **nothing** for the forearms, hands, shins, feet,
+  neck or head. A second channel pushes the belly further at the front (`BELLY` 0.9, on the spine and
+  hips). The direction is `bodyNormal`, the normal averaged over coincident vertices, so texture
+  seams swell as one surface rather than opening into cracks. One uniform per figure; the crowd's
+  ink became a material per figure for it, all sharing one program.
+
+**The presets**, every number in `BUILD_PRESETS`, `AGE_PRESETS` and `LIMITS`:
+
+| Build | recipe width | width | shoulders | limbs | fullness |
+|---|---|---|---|---|---|
+| Slim | 0.84 | 0.88 | 0.94 | 0.90 | none |
+| Trim | 0.93 | 0.94 | 0.97 | 0.95 | none |
+| Average | 1.02 | 1.00 | 1.00 | 1.00 | 0.5% of height (slight) |
+| Solid | 1.11 | 1.07 | 1.04 | 1.06 | 1.2% (light) |
+| Broad | 1.20 | 1.14 | 1.08 | 1.12 | 2.2% (moderate: about 4 cm on the torso of a 1.75 m figure) |
+
+| Age | height | width | shoulders | head | legs | stoop |
+|---|---|---|---|---|---|---|
+| Child | as Teen | | | | | |
+| Teen | 0.94 | 0.95 | 0.95 | 1.06 | 1.04 | 0 |
+| Adult | 1 | 1 | 1 | 1 | 1 | 0 |
+| Older | 0.97 | 1 | 0.95 | 1 | 1 | 0.16 rad (about 9°: a quarter in Spine1, a third in Spine2, the rest in the neck) |
+
+- **Build comes from the recipe's own width.** The five "recipe width" anchors are the quintiles of
+  `makeRecipe`'s width roll for an archetype of width 1 (0.84 + 0.36 × roll), so the crowd's own
+  spread is cut into fifths and really reaches Broad; a width between two anchors blends them, and
+  `tests/js/body.test.ts` holds the anchors to the roll. Dave (width 0.85) reaches from Slim to
+  Average. The lab's Build buttons set the archetype's width as before, and the model follows the
+  recipe that results; the lab's Build row shows each preset exactly.
+- **Age replaces the recipe's age height** rather than stacking on it: a model is drawn at
+  `standingHeight / AGE_HEIGHT[age] × preset height`, so the recipe's own height roll still applies.
+  `AGE_HEIGHT` is a read-only export from `recipe.ts`; nothing there rolls differently.
+- **A child is drawn as a teen.** A shrunk adult reads as a small adult, not a child; the lab says
+  "this needs a child model" wherever a child is shown.
+- **Limits** keep every combination sane and are a safety net, not a style: no shipped preset
+  combination touches them, which the tests pin. Width 0.82 to 1.16, shoulders 0.88 to 1.10, limbs
+  0.86 to 1.14, fullness 0 to 2.6%, height 0.88 to 1.05, head 0.96 to 1.08, legs 0.97 to 1.05, stoop 0
+  to 0.22 rad. A value pushed past one is clamped, and the lab marks it "held back" with what was
+  asked.
+
+**Each model's body file**, `<model>.body.json` beside its `.regions.json`:
+
+- `bodyType` -- `average`, `heavy` or `child`: the figure as authored, before any preset. The lab
+  shows it. Heavier-set models will cover the fullest end of the crowd later; nothing chooses models
+  by type yet.
+- `limits` -- optional, `{ "<key>": [min, max] }` for any of `height`, `width`, `shoulders`,
+  `limbs`, `fullness`, `head`, `legs`, `stoop`, overriding the global limits for this model only
+  (some models stretch better than others). The lab marks which limits came from the file.
+- `about` -- prose for whoever opens the file. A missing file is an average body inside the global
+  limits, and says so.
+
+Measured in a visible tab at a full 120 Hz frame (the frame time sits on the vsync cap either way),
+`?stress=1&people=model`: at 80 people pose 0.82 → 0.71 ms and render 1.65 → 1.52 ms; at 190, pose
+2.20 → 1.60 ms and render 3.94 → 3.15 ms -- run-to-run noise, which is to say no measurable cost.
 
 ## Two hashes
 
