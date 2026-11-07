@@ -3,6 +3,7 @@
 //
 // Usage: npm run dev -- --port 5198 & node scripts/bench-people.mjs http://localhost:5198 [capSeconds]
 //        node scripts/bench-people.mjs http://localhost:5198 30 --gpu --sizes=60,190 --only=model
+//        node scripts/bench-people.mjs http://localhost:5198 45 --model=casual-man-low   (a name in MODELS)
 //
 // Each run waits for a few settling frames, then averages over the frames that follow, read off the
 // running totals game.ts keeps in `game.stress` -- so shader compiles at the start are never in the
@@ -24,6 +25,7 @@ const opt = name => args.find(a => a.startsWith(`--${name}=`))?.split('=')[1];
 const [base = 'http://localhost:5173', secs = '60'] = args.filter(a => !a.startsWith('--'));
 const sizes = (opt('sizes') ?? '40,60,80,120,190').split(',').map(Number);
 const only = opt('only');
+const model = opt('model');
 
 const runs = [];
 for (const crowd of sizes) {
@@ -63,7 +65,8 @@ const rows = [];
 for (const run of runs) {
     // The shipped look has no ink anywhere; `current` is the shipped look with it, on the world and the people alike.
     const url = base.replace(/\/$/, '') + `/?stress=1&tier=high&people=${run.people}&crowd=${run.crowd}`
-        + (run.ink ? '&look=current' : '') + (run.throttle ? '&throttle=1' : '');
+        + (run.ink ? '&look=current' : '') + (run.throttle ? '&throttle=1' : '')
+        + (model !== undefined && run.people === 'model' ? `&model=${encodeURIComponent(model)}` : '');
     const { result: { targetId } } = await send('Target.createTarget', { url: 'about:blank' });
     const { result: { sessionId } } = await send('Target.attachToTarget', { targetId, flatten: true });
     await send('Runtime.enable', {}, sessionId);
@@ -99,7 +102,8 @@ for (const run of runs) {
 for (const e of errors) console.error('page error:', e);
 
 const col = (s, w) => String(s).padStart(w);
-console.log(`\n  ${gpu ? 'real GPU (headed Chrome)' : 'headless SwiftShader: frame column is software rasterisation'}\n`);
+console.log(`\n  ${gpu ? 'real GPU (headed Chrome)' : 'headless SwiftShader: frame column is software rasterisation'}`
+    + `${model !== undefined ? ` · model ${model}` : ''}\n`);
 console.log('  ' + ['renderer'.padEnd(9), col('crowd', 5), col('ink', 4), col('thr', 4), col('fps', 6), col('frame', 8),
     col('sim', 6), col('pose', 6), col('render', 7), col('calls', 6), col('tris', 7), col('anim', 5), col('n', 4)].join(' '));
 for (const r of rows) {

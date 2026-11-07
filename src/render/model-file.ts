@@ -10,6 +10,8 @@ import type * as THREE from 'three';
 /** Every file that can be shown, by the name `?model=` uses, as a path under `public/models/`. */
 export const MODELS: Readonly<Record<string, string>> = {
     'casual-man': 'Meshy_AI_casual_man_30s_rigged_20261106_animated_mixamo_All_animation.glb',
+    // The same figure remeshed: 2,591 triangles against 15,571, the same rig and the same clips.
+    'casual-man-low': 'Meshy_AI_casual_man_30s_remesh_rigged_20261107_animated_mixamo_All_animation.glb',
 };
 
 /** Relative to the page rather than to the host, so it holds wherever the build is served from. */

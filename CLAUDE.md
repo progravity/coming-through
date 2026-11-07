@@ -1529,7 +1529,10 @@ instrument:
   left out of the grouping and labelled from their neighbours, so a blend of two colours cannot
   become a third group. The kernel starts at 0.04 and narrows by a quarter while any group 2-means
   into two clearly separate colours; the casual man stops at 0.017 with seven groups, which is what
-  pulls his skin and khaki shorts (0.063 apart) out of one group.
+  pulls his skin and khaki shorts (0.063 apart) out of one group. His remesh (`casual-man-low`, 2,591
+  triangles against 15,571) lands on the same colours less the eyes, so its role file is the same
+  six lines. The mask is half the texture's resolution, which leaves a skin-coloured hairline on a
+  couple of the remesh's shirt seams where islands touch with no gutter -- visible only zoomed in.
 - **What each group is lives in `<model>.regions.json` beside the `.glb`**: colours mapped to `skin`,
   `top`, `trousers`, `hair`, `shoes` or `keep`, matched by Oklab distance under 0.06 rather than by
   order, so a file survives the detector reordering and carries over to a regeneration in the same

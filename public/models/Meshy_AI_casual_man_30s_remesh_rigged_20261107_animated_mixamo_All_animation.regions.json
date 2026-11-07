@@ -1,0 +1,11 @@
+{
+  "about": "Which colour group of this model's texture is which part, matched by colour (Oklab distance under 0.06). Roles: skin, top (shirt or jacket), trousers, hair, shoes, keep (left as authored). Check at ?inspect=1&entity=model&model=casual-man-low with R for false colour; region numbers there follow the detector's order, not this list's. The same garments as casual-man, so the same colours; the remesh has no separate eye colour.",
+  "regions": [
+    { "colour": "#cc855a", "role": "skin" },
+    { "colour": "#2d539d", "role": "top" },
+    { "colour": "#d3cdc8", "role": "shoes" },
+    { "colour": "#311901", "role": "hair" },
+    { "colour": "#86817b", "role": "shoes" },
+    { "colour": "#a58a67", "role": "trousers" }
+  ]
+}
