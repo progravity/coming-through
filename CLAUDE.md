@@ -1779,7 +1779,7 @@ anyone whose recipe carries a **mobility aid or a stroller** (`drawsAsPrimitive`
 
 The mobility fallback exists because what you see has to match what you collide with: a
 wheelchair, a scooter, a cane or a stroller widens a person's collider for the equipment, and a
-model drawn without the equipment would be someone you bump into half a metre before you reach
+model drawn without the equipment would be someone you bump into half a meter before you reach
 them. Until models carry it, those people are primitives. It is flagged, not hidden: the cost
 readout (`?people=` or a stress run) and the crowd view's statistics count them ("as primitives"),
 and the lab says so on any such person it shows -- the model source's card and a crowd selection

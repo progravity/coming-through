@@ -209,7 +209,7 @@ export const NOT_ON_MODELS = 'not yet supported on models';
  *
  * A mobility aid -- a wheelchair, a scooter, a cane -- and a stroller are equipment the models do
  * not carry yet, and their colliders are sized for the equipment: a model drawn without it would
- * be a person you bump into half a metre before you reach them. So until models carry it, these
+ * be a person you bump into half a meter before you reach them. So until models carry it, these
  * people are drawn as primitives even under the model renderer, and what you see matches what you
  * collide with. The crowd's readout counts them; the lab notes it when one is selected.
  */
