@@ -26,23 +26,49 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   over `public/hot`, which is why the other one has to stop.
 - **Tests:** `npm test` type-checks the engine and its tests, runs the Math.random check, and then
   runs everything under `tests/js/` with `node --test` (219 tests). `npm run lint` is the first two
-  on their own. Run them with Node 26 (`/opt/homebrew/bin` first on `PATH`): Herd's Node 22 does
-  not take a directory as `node --test`'s argument. `composer test` is the Laravel side: Pint,
-  PHPStan and Pest (`tests/Feature/`, `tests/Unit/`), against SQLite in memory. Run it with Herd's
-  PHP, not with `/opt/homebrew/bin` first: Homebrew's PHP has a 128 MB `memory_limit` and PHPStan's
-  workers crash on it. Both suites must pass.
+  on their own. `composer test` is the Laravel side: Pint, PHPStan and Pest (`tests/Feature/`,
+  `tests/Unit/`), against SQLite in memory. Both are plain commands and both must pass.
+- **Node is pinned to 26.13.0** in `.nvmrc` (and `^26.13.0` in `package.json` `engines`). Herd's
+  shell hook reads `.nvmrc` on every `cd` and runs `nvm use`, installing that version into Herd's
+  nvm the first time, so a terminal in this directory has the right Node and plain `npm test`
+  works. `herd isolated-node` lists the site as pinned to 26.13.0. Anything that does not run that
+  hook (a non-interactive script, an IDE run configuration) gets nvm's default, Node 22, and
+  `npm test` then fails with `Cannot find module '.../tests/js'`, because Node 22's `node --test`
+  does not take a directory. Run `nvm use` there, or point the tool at Node 26.13.0. CI reads the
+  same `.nvmrc`.
+- **PHPStan's memory limit is in the composer script** (`types:check`: `--memory-limit=1G`), so
+  `composer test` passes on any PHP 8.5, including Homebrew's with its 128 MB default. A cold run
+  needs about 256 MB today.
+- **CI** (`.github/workflows/tests.yml`) runs on every push to any branch and on pull requests, as
+  two jobs. `ci` is the starter kit's: `composer setup` then `composer ci:check`, against a MySQL 8.4
+  service, because `composer setup` migrates the MySQL database `.env.example` names. `game` runs
+  `npm ci` and `npm test`. Both take Node from `.nvmrc`. Composer reads credentials from the
+  `COMPOSER_AUTH` repository secret, as auth JSON (`{"github-oauth": {"github.com": "<token>"}}`),
+  and ignores it while it is empty.
 - **Build:** `npm run build` runs `npm run lint` and then `vp build` into `public/build/`.
 - **Database:** MySQL from Herd, database `coming_through_local` as root with no password, as
   Dimidium uses `dimidium_local`. `php artisan migrate:refresh --seed` rebuilds it with the auth
   package's dev cast.
+- **Dev users are local only.** The auth package's dev cast (owner@dev.test and the rest) and the
+  starter kit's test@example.com all share the password `password` unless
+  `JAMESGIFFORD_AUTH_DEV_USERS_PASSWORD` is set, so they seed only where `APP_ENV` is `local` and
+  `CI` is unset. The rule is the `environments` list in `config/jamesgifford/auth-dev.php`, which
+  the package's seeder, its `seed-dev-data` command and `auth:setup --with-dev-data` all read, and
+  `DatabaseSeeder` asks the same seeder before creating the test user. Production is refused by the
+  package regardless. `tests/Feature/DevUsersTest.php` pins all of it.
 
 ## Hard constraints
 
-- **Laravel 13 on PHP 8.5.** `composer.json` requires `php: ^8.5`. The base is the Livewire starter
-  kit exactly as the installer produced it; build on it rather than editing it into something else.
+- **Laravel 13 on PHP 8.5, Node 26.13.0.** `composer.json` requires `php: ^8.5` and `.nvmrc`
+  pins Node. The base is the Livewire starter kit exactly as the installer produced it; build on it
+  rather than editing it into something else.
 - **`jamesgifford/auth` is installed as Dimidium installs it**, from its GitHub repository as a
-  Composer VCS repository, with the token in Composer's global `auth.json` and never in the repo.
-  `jamesgifford/hold` is deliberately not installed.
+  Composer VCS repository, with the token in Composer's global `auth.json` locally, the
+  `COMPOSER_AUTH` secret in CI, and never in the repo. `jamesgifford/hold` is deliberately not
+  installed.
+- **Dev users never leave local.** Nothing that seeds a known password may run outside
+  `APP_ENV=local`, or under CI. Keep the `environments` rule in `config/jamesgifford/auth-dev.php`
+  as the one place that decides it.
 - **The game page is standalone**: no Livewire, Flux, Tailwind or UI framework on
   `resources/views/game.blade.php` or its layout. The game's UI is plain TypeScript and DOM.
 - **American spelling for everything new** (color, not colour) in code, comments, UI text and docs.
