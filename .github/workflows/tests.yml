@@ -1,9 +1,9 @@
 name: tests
 
+# Every push to any branch, so the game's determinism, purity and Math.random guards run before
+# anything reaches main, and every pull request.
 on:
   push:
-    branches:
-      - main
   pull_request:
 
 permissions:
@@ -12,6 +12,28 @@ permissions:
 jobs:
   ci:
     runs-on: ubuntu-latest
+
+    # `composer setup` migrates the database .env.example names: MySQL on 127.0.0.1 as root with no
+    # password, the same as local development under Herd (MySQL 8.4).
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ALLOW_EMPTY_PASSWORD: 'yes'
+          MYSQL_DATABASE: coming_through
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      # jamesgifford/auth installs from GitHub as a Composer VCS repository. The secret holds
+      # Composer auth JSON: {"github-oauth": {"github.com": "<token>"}}. Composer ignores it while
+      # it is empty.
+      COMPOSER_AUTH: ${{ secrets.COMPOSER_AUTH }}
 
     steps:
       - name: Checkout code
@@ -29,10 +51,33 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: '22'
+          node-version-file: '.nvmrc'
 
       - name: Setup Application
         run: composer setup
 
       - name: Run CI Checks
         run: composer ci:check
+
+  # The game's own suite: type check, the Math.random check, and node --test over tests/js/, which
+  # holds the determinism hashes and the purity tests. Needs Node only, on the version local
+  # development pins in .nvmrc.
+  game:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run game tests
+        run: npm test
