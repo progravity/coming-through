@@ -20,7 +20,7 @@ import { AGES, BUILDS, EQUIPMENT, makeRecipe } from '../recipe.ts';
 import type { Choices, Recipe, RecipeOptions } from '../recipe.ts';
 import type { Poseable } from '../sim/agent.ts';
 import { SPEED_CAP } from '../sim/steering.ts';
-import { HAIR_KEYS, SKIN_TONE_KEYS } from '../wardrobe.ts';
+import { HAIR_KEYS, SCHEME_KEYS, SKIN_TONE_KEYS } from '../wardrobe.ts';
 
 const TAU = Math.PI * 2;
 
@@ -30,12 +30,14 @@ export const AGE_OPTIONS: readonly string[] = ['seed', ...AGES];
 export const BUILD_OPTIONS: readonly string[] = ['seed', ...BUILDS];
 export const SKIN_OPTIONS: readonly string[] = ['seed', ...SKIN_TONE_KEYS];
 export const HAIR_OPTIONS: readonly string[] = ['seed', ...HAIR_KEYS];
+/** Every scheme, the uniforms among them: the lab may put anyone in a uniform, the crowd never rolls one. */
+export const SCHEME_OPTIONS: readonly string[] = ['seed', ...SCHEME_KEYS];
 export const EQUIPMENT_OPTIONS: readonly string[] = ['seed', ...EQUIPMENT];
 
 /** A choice forced by the lab, or `seed` for whatever the seed rolls. */
 export type Overrides = { [K in keyof Choices]: Choices[K] | 'seed' };
 export const ROLLED: Overrides = {
-    behavior: 'seed', age: 'seed', build: 'seed', skinTone: 'seed', hairTone: 'seed', equipment: 'seed',
+    behavior: 'seed', age: 'seed', build: 'seed', skinTone: 'seed', hairTone: 'seed', scheme: 'seed', equipment: 'seed',
 };
 
 /** The forced choices alone, as `makeRecipe` takes them. */
@@ -69,8 +71,8 @@ export class Subject implements Poseable {
     x = 0; z = 0; yaw = 0; phase = 0; mv = 0; lean = 0;
 
     /**
-     * @param opts What the spawner hands some people beyond their own rolls: a group's shared
-     *   clothing. Passing the same is what makes a Group Walker on the turntable the one in the crowd.
+     * @param o The choices the lab forces. A group follower's shared scheme is one: the spawner
+     *   forces it, so passing it here is what makes a Group Walker on the turntable the one in the crowd.
      */
     constructor(seed: number, index: number, o: Partial<Overrides> = {}, opts: RecipeOptions = {}) {
         // makeStreams builds all four streams but only `recipe` and `cosmetic` are ever read here.

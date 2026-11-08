@@ -42,7 +42,7 @@ import {
     drawnHeight, fetchBodyFile, modelFallback, patchFullness, shape, skinSpace,
 } from '../../modelcrowd/body.ts';
 import type { Body, BodyFile, FullnessUniforms, Limits, Shaped } from '../../modelcrowd/body.ts';
-import { falseHex, prepareRegions, recipeColours } from '../../modelcrowd/regions.ts';
+import { falseHex, personColours, prepareRegions } from '../../modelcrowd/regions.ts';
 import type { RegionUniforms, Regions } from '../../modelcrowd/regions.ts';
 import { count, n2 } from '../describe.ts';
 import { RULER, defaultControls } from '../inspectable.ts';
@@ -552,7 +552,7 @@ class ModelCast implements Cast {
         const lead = this.figures[0]?.action ?? null;
         // One phase for the whole row, read off the first figure, so a comparison is at one moment.
         if (lead !== null && c.freeze !== true) { const d = lead.getClip().duration; c.phase = d > 0 ? wrap01(lead.time / d) : 0; }
-        const colors = c.recolour === true && this.who !== null ? recipeColours(this.who.recipe) : null;
+        const who = this.who;
         this.figures.forEach((f, i) => {
             if (f.action !== null && f.mixer !== null) {
                 const d = f.action.getClip().duration;
@@ -560,7 +560,11 @@ class ModelCast implements Cast {
             }
             f.rig?.pose();
             const paint = f.model?.regions?.paint ?? null, u = f.regionUniforms;
-            if (paint !== null && u !== null) { paint.paint(u, colors); paint.showFalse(u, c.regions === true); }
+            if (paint !== null && u !== null) {
+                // Each model wears the person's scheme arranged on its own roles, salted by itself.
+                paint.paint(u, c.recolour === true && who !== null ? personColours(who.recipe, paint.clothing, paint.salt) : null);
+                paint.showFalse(u, c.regions === true);
+            }
             const x = xs[i] ?? 0;
             f.anchor.position.set(x, (f.rig?.lift ?? 0) * f.scale, 0);
             f.anchor.rotation.set(0, yaw, 0);
@@ -853,7 +857,7 @@ export const MODEL: Inspectable = {
         // Listed and greyed rather than hidden: the panel is also the list of what models still lack.
         { ...equipment, disabled: `strollers, wheelchairs, scooters and canes: ${NOT_ON_MODELS}; the game draws their users as primitives` },
         { kind: 'toggle', id: 'accessories', label: 'accessories', value: false, disabled: `hats, glasses, bags and carried things: ${NOT_ON_MODELS}` },
-        PERSON_CONTROLS.agent, PERSON_CONTROLS.outfit,
+        PERSON_CONTROLS.agent,
     ],
     overlays: MODEL_OVERLAYS,
     legacy: personLegacy,

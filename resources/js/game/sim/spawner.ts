@@ -62,13 +62,13 @@ export function spawn(crowd: Crowd, streams: Streams, opts: SpawnOptions = {}): 
         const leader = make(index, n, { group: gid });
         crowd.add(leader);
         // The family walks with the leader's profile, and -- when the leader's roll says so -- in
-        // the leader's clothing, each of them arranged their own way.
-        const outfit = leader.recipe.sharesScheme ? leader.recipe.outfit : undefined;
+        // the leader's clothing scheme, each of them arranged their own way.
+        const scheme = leader.recipe.sharesScheme ? leader.recipe.scheme : undefined;
         for (let i = 1; i < size; i++) {
             const off = (i % 2 ? 1 : -1) * Math.ceil(i / 2) * spacing;
             crowd.add(make(crowd.nextAgentIndex(), clamp(n + off, -edge + 0.6, edge - 0.6), {
-                leader, offset: off, group: gid, speed: leader.speed, choices: { behavior: type },
-                ...(outfit === undefined ? {} : { outfit }),
+                leader, offset: off, group: gid, speed: leader.speed,
+                choices: scheme === undefined ? { behavior: type } : { behavior: type, scheme },
             }));
         }
     } else if (A.parentType) {

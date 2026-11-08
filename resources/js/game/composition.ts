@@ -16,7 +16,7 @@
  */
 import type { BehaviorKey } from './behaviors.ts';
 import type { Age, Build, Equipment } from './recipe.ts';
-import type { HairKey, SkinToneKey } from './wardrobe.ts';
+import type { HairKey, PooledKey, SkinToneKey } from './wardrobe.ts';
 
 export const COMPOSITION = {
     /** Tourist 6, Dave 2, Mary 2, Kyle 2, Linda 2, the Johnsons 1, Timmy 2: the archetypes' weights. */
@@ -27,6 +27,11 @@ export const COMPOSITION = {
     build: { slim: 1, trim: 1, average: 1, solid: 1, broad: 1 } as Readonly<Record<Build, number>>,
     skinTone: { lightest: 1, light: 1, 'medium-light': 1, medium: 1, 'medium-deep': 1, deep: 1, deepest: 1 } as Readonly<Record<SkinToneKey, number>>,
     hair: { black: 3, 'dark-brown': 3, brown: 2.5, 'light-brown': 1.5, blond: 1.2, red: 0.5 } as Readonly<Record<HairKey, number>>,
+    /**
+     * The pooled clothing schemes. Uniforms are not here and are never rolled: they are assigned
+     * deliberately (staff at vendors, later), so the crowd cannot come out in one by chance.
+     */
+    scheme: { 'bright-tropical': 1, pastels: 1, neutrals: 2, 'earth-tones': 1.5, 'bold-primaries': 1, sporty: 1.5, 'denim-white': 1.5, 'park-merch': 0.6 } as Readonly<Record<PooledKey, number>>,
     /**
      * Mobility aids, for everyone, independent of age and behavior. Weighted so about one person in
      * fifteen uses one -- 6.5% of the crowd, which is what the old archetypes' age-scaled chances

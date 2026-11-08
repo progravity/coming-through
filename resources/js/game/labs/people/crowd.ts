@@ -311,15 +311,15 @@ export async function startCrowd(lab: Lab): Promise<void> {
     }
     /**
      * The selected person on the turntable: the same seed and spawn index, their behavior (forced
-     * on a group follower or a parent, so it has to be said), and a group's shared outfit.
+     * on a group follower or a parent, so it has to be said), and a group's shared scheme.
      */
     function individualUrl(a: Agent): string {
         const q = new URLSearchParams();
         q.set('seed', String(sim.seed));
         q.set('agent', String(a.index));
         q.set('behavior', a.type);
-        // A family is dressed from one outfit the spawner chose; the turntable has to be handed it.
-        if (a.group !== 0) q.set('outfit', String(a.recipe.outfit));
+        // A family may wear the leader's scheme, which the spawner forced; the turntable is handed it.
+        if (a.group !== 0) q.set('scheme', a.recipe.scheme);
         return `${lab.path}?${q}`;
     }
 

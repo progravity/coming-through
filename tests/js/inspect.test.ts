@@ -63,12 +63,12 @@ test('the behavior the spawner reads ahead is the behavior the person rolls', ()
     assert.equal(seen.size, BEHAVIOR_KEYS.length, 'some behavior never came up in a thousand people');
 });
 
-test('a group member on the turntable wears the outfit the spawner handed the group', () => {
-    // A family's shared clothing is a spawn decision, so the lab passes it back in to show the same person.
-    for (const outfit of [0, 3, 7]) {
-        const agent = new Agent(makeStreams(5), 12, 0, 0, 1, 1, { choices: { behavior: 'group-walker' }, outfit });
-        const subject = new Subject(5, 12, { behavior: 'group-walker' }, { outfit });
-        assert.deepEqual(subject.recipe, agent.recipe, `outfit ${outfit} dressed a different Group Walker`);
+test('a group member on the turntable wears the scheme the spawner handed the group', () => {
+    // A family's shared scheme is a spawn decision, so the lab passes it back in to show the same person.
+    for (const scheme of ['pastels', 'sporty', 'park-merch'] as const) {
+        const agent = new Agent(makeStreams(5), 12, 0, 0, 1, 1, { choices: { behavior: 'group-walker', scheme } });
+        const subject = new Subject(5, 12, { behavior: 'group-walker', scheme });
+        assert.deepEqual(subject.recipe, agent.recipe, `${scheme} dressed a different Group Walker`);
     }
 });
 

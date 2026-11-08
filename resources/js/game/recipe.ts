@@ -23,11 +23,10 @@ import { BEHAVIORS, BEHAVIOR_KEYS, needsOf } from './behaviors.ts';
 import type { BehaviorKey, BehaviorMix, ModelClass } from './behaviors.ts';
 import { COMPOSITION, pick } from './composition.ts';
 import type { Rng } from './core/rng.ts';
-import { FRAME, OUTFITS, SHOE, fromFamiliesUnlike, fromFamily, fromList } from './palette.ts';
-import type { Pick as FamilyPick } from './palette.ts';
+import { FRAME, fromFamily, fromList } from './palette.ts';
 import type { Range } from './util.ts';
-import { HAIR_KEYS, SKIN_TONE_KEYS, hairColor, skinColor } from './wardrobe.ts';
-import type { HairKey, SkinToneKey } from './wardrobe.ts';
+import { HAIR_KEYS, POOLED_KEYS, PRIMITIVE_SALT, SKIN_TONE_KEYS, dress, hairColor, skinColor } from './wardrobe.ts';
+import type { ClothingRole, HairKey, SchemeKey, SkinToneKey } from './wardrobe.ts';
 
 /** Small adjustments relative to the model: a little younger, the model's own age, or older. */
 export type Age = 'young' | 'normal' | 'old';
@@ -65,6 +64,8 @@ export interface Choices {
     build: Build;
     skinTone: SkinToneKey;
     hairTone: HairKey;
+    /** The clothing scheme: pooled for the crowd, a uniform only when assigned (`wardrobe.ts`). */
+    scheme: SchemeKey;
     equipment: Equipment;
 }
 
@@ -113,10 +114,12 @@ export interface Recipe extends Choices {
      */
     limb: number;
     // ---- color ----
-    /** Index into `OUTFITS`: the coordinated combination every garment below was drawn from. */
-    outfit: number;
-    /** The one accent color this person's hat, bag and accessory are allowed to reach for. */
-    accent: number;
+    /**
+     * The roll a pooled scheme's arrangement starts from. The arrangement itself is the renderer's
+     * to work out per model (`dress` in `wardrobe.ts`), since it depends on which roles the model
+     * has; the colors below are the arrangement for the primitive figure.
+     */
+    arrange: number;
     skin: number;
     shirt: number;
     pants: number;
@@ -224,8 +227,6 @@ const PARTS = { hat: 0.35, glasses: 0.18, beard: 0.2, ponytail: 0.22, jacket: 0.
 export interface RecipeOptions extends Partial<Choices> {
     /** Behavior weights in place of the composition's: the people lab's crowd mix. */
     mix?: BehaviorMix;
-    /** Fixed outfit index, so a group follower wears the leader's. */
-    outfit?: number;
     /** Fixed shirt color. Only the player uses this. */
     shirt?: number;
 }
@@ -239,9 +240,6 @@ const behaviorWeights = (mix: BehaviorMix | undefined): Readonly<Record<Behavior
  * to know whether a family or a parent comes with them. `rng` must be a fresh fork.
  */
 export const behaviorAhead = (rng: Rng, mix?: BehaviorMix): BehaviorKey => pick(behaviorWeights(mix), BEHAVIOR_KEYS, rng.next());
-
-/** A sub-roll of one roll, for the interim clothing below: a later digit of the same draw. */
-const digit = (roll: number, k: number): number => (roll * k) % 1;
 
 /**
  * Roll one person. `rng` must be this person's own fork of the `recipe` stream so the roll order
@@ -271,6 +269,8 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
     const build = opts.build ?? pick(COMPOSITION.build, BUILDS, build0);
     const skinTone = opts.skinTone ?? pick(COMPOSITION.skinTone, SKIN_TONE_KEYS, skin0);
     const hairTone = opts.hairTone ?? pick(COMPOSITION.hair, HAIR_KEYS, hair0);
+    // The crowd is rolled from the pooled schemes only: a uniform is assigned, never rolled.
+    const scheme = opts.scheme ?? pick(COMPOSITION.scheme, POOLED_KEYS, scheme0);
     // Someone pushing a stroller has their hands full: it and a mobility aid never combine. And a
     // mobility scooter is an adult's: a child who rolls one walks (the lab can still force it).
     const modelClass = needsOf(behavior);
@@ -289,18 +289,6 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
     // an adult lands near five and a half heads tall against the skeleton in person.ts.
     const headR = ((0.179 - 0.025 * height0) * fig.head * (1 + 0.06 * (w - 1))) + 0.004 * headR0;
 
-    // ---- colors (interim: one outfit for the whole crowd to choose from) ----
-    const fit = opts.outfit ?? Math.min(OUTFITS.length - 1, Math.floor(scheme0 * OUTFITS.length));
-    const O = OUTFITS[fit];
-    const top = fromFamily(O.top, arrange0), bottom = fromFamily(O.bottom, digit(arrange0, 2));
-    const shoeRoll = digit(arrange0, 4), accRoll = digit(arrange0, 8), outerRoll = digit(arrange0, 16), bagRoll = digit(arrange0, 32);
-    const accent = fromFamily(O.accent, accRoll);
-    const jacket = jacket0 < PARTS.jacket;
-    const jacketColor = fromFamily(O.outer, outerRoll);
-    const shirt = opts.shirt ?? top;
-    const worn = jacket ? [bottom, shirt, jacketColor] : [bottom, shirt];
-    const ACCENT: FamilyPick = [O.accent, accRoll], TROUSERS: FamilyPick = [O.bottom, digit(arrange0, 2)], SHOES: FamilyPick = [SHOE, bagRoll];
-
     // ---- the primitives' parts ----
     const acc: Accessory = equipment === 'stroller' ? 'stroller' : fromList(CARRIED[child ? 'child' : 'grown'], carry0);
     const hat: HatType = hat0 < PARTS.hat ? fromList(HAT_TYPES[child ? 'child' : 'grown'], hatType0) : 'none';
@@ -308,9 +296,23 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
     const beardP = PARTS.beard * (child ? 0 : age === 'young' ? 0.15 : 1);
     const glassesP = PARTS.glasses * (child ? 0.5 : age === 'old' ? 1.6 : 1);
     const mobility: Mobility = equipment === 'stroller' ? 'none' : equipment;
+    const jacket = jacket0 < PARTS.jacket;
+    const bag = bag0 < PARTS.bag && equipment !== 'stroller';
+
+    // ---- colors: skin and hair, then the scheme arranged on the primitive figure's roles ----
+    const skin = skinColor(skinTone, skinVar0);
+    const hairCol = hairColor(hairTone, hairVar0, age === 'old' ? gray0 : null);
+    // The primitives wear every role, but a hat or a bag only when they have one: an empty role
+    // is not a constraint on the others.
+    const carries = bag || acc === 'backpack' || acc === 'balloon';
+    const roles: ClothingRole[] = ['tops', 'bottoms', 'footwear'];
+    if (hat !== 'none') roles.push('headwear');
+    if (carries) roles.push('accessory');
+    const worn = dress(scheme, arrange0, skin, hairCol, roles, PRIMITIVE_SALT).colors;
+    const top = worn.tops ?? 0xffffff, bottom = worn.bottoms ?? top, accessory = worn.accessory ?? bottom;
 
     return {
-        behavior, age, build, skinTone, hairTone, equipment,
+        behavior, age, build, skinTone, hairTone, scheme, equipment,
         modelClass,
         sharesScheme: share0 < COMPOSITION.groupSharesScheme,
 
@@ -321,26 +323,27 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
         stoop: fig.stoop + (equipment === 'cane' ? 0.06 : 0),
         limb: fig.limb,
 
-        outfit: fit, accent,
-        skin: skinColor(skinTone, skinVar0),
-        shirt,
+        arrange: arrange0,
+        skin,
+        shirt: opts.shirt ?? top,
         pants: bottom,
-        shoe: fromFamily(SHOE, shoeRoll),
+        shoe: worn.footwear ?? bottom,
 
-        hat, hatColor: digit(arrange0, 64) < 0.6 ? accent : top,
-        hair, hairColor: hairColor(hairTone, hairVar0, age === 'old' ? gray0 : null),
+        hat, hatColor: worn.headwear ?? top,
+        hair, hairColor: hairCol,
         // A ponytail hangs out from under a cap or a beanie, so it survives a hat; a bald head or a
         // party hat gets none.
         ponytail: ponytail0 < PARTS.ponytail && hat !== 'cone' && (hair !== 'none' || hat !== 'none'),
         // The same roll picks whether there is a beard and how full it is: still one draw.
         beard: beard0 < beardP ? (beard0 < beardP * 0.45 ? 'full' : 'stubble') : 'none',
         glasses: glasses0 < glassesP,
+        // A jacket is the top: the one tops color, worn over the chest rather than as a second garment.
         jacket,
-        jacketColor,
+        jacketColor: top,
         shorts: shorts0 < PARTS.shorts * (child ? 1.7 : 1),
-        bag: bag0 < PARTS.bag && equipment !== 'stroller',
-        bagColor: fromFamiliesUnlike(bagRoll < 0.5 ? [ACCENT, TROUSERS, SHOES] : [TROUSERS, ACCENT, SHOES], worn),
-        acc, accColor: accent,
+        bag,
+        bagColor: accessory,
+        acc, accColor: accessory,
 
         mobility,
         seated: ep.seated,

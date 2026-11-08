@@ -12,7 +12,10 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { assignRoles, parseRoles, recipeColours, segment } from '../../resources/js/game/modelcrowd/regions.ts';
+import { RegionPaint, assignRoles, parseRoles, personColours, segment } from '../../resources/js/game/modelcrowd/regions.ts';
+import { makeRecipe } from '../../resources/js/game/recipe.ts';
+import { makeStreams } from '../../resources/js/game/core/rng.ts';
+import { dress, saltOf } from '../../resources/js/game/wardrobe.ts';
 import type { Pixels, RoleFile, Segmentation } from '../../resources/js/game/modelcrowd/regions.ts';
 
 const SIZE = 96, PATCH = 40, GAP = 6;
@@ -95,8 +98,8 @@ test('a role file is matched by colour, not by order, and says what it does not 
     const seg = segment(px, uv, index);
     const { roles: file, error } = parseRoles(JSON.stringify({
         regions: [
-            { colour: '#d3cdc8', role: 'shoes' },
-            { colour: '#a58a67', role: 'trousers' },
+            { colour: '#d3cdc8', role: 'footwear' },
+            { colour: '#a58a67', role: 'bottoms' },
             { colour: '#cb8559', role: 'skin' },
             { colour: '#00ff00', role: 'hair' },
         ],
@@ -113,8 +116,8 @@ test('a role file is matched by colour, not by order, and says what it does not 
         return roles.byGroup[g.index];
     };
     assert.equal(roleOf(SKIN), 'skin');
-    assert.equal(roleOf(KHAKI), 'trousers');
-    assert.equal(roleOf(WHITE), 'shoes');
+    assert.equal(roleOf(KHAKI), 'bottoms');
+    assert.equal(roleOf(WHITE), 'footwear');
     // Blue is in the texture and not the file: left as authored, and said so.
     assert.equal(roleOf(BLUE), 'keep');
     assert.ok(roles.warnings.some(w => /not in the role file/.test(w)));
@@ -133,9 +136,9 @@ test('a blend is harmless inside one role and a refusal across two', () => {
     const { px, uv, index } = atlas([SKIN, KHAKI, BLUE, WHITE]);
     const seg = { ...segment(px, uv, index), blends: [{ a: 0, b: 1, share: 0.05 }] };
     const g = seg.groups;
-    const same = assignRoles(seg, { regions: [{ colour: g[0].hex, role: 'top' }, { colour: g[1].hex, role: 'top' }] }, null);
+    const same = assignRoles(seg, { regions: [{ colour: g[0].hex, role: 'tops' }, { colour: g[1].hex, role: 'tops' }] }, null);
     assert.equal(same.usable, true, same.problems.join('; '));
-    const apart = assignRoles(seg, { regions: [{ colour: g[0].hex, role: 'skin' }, { colour: g[1].hex, role: 'trousers' }] }, null);
+    const apart = assignRoles(seg, { regions: [{ colour: g[0].hex, role: 'skin' }, { colour: g[1].hex, role: 'bottoms' }] }, null);
     assert.equal(apart.usable, false);
     assert.match(apart.problems[0], /blend/);
 });
@@ -147,8 +150,31 @@ test('with no role file nothing is painted, and the reason is the missing file',
     assert.deepEqual(roles.problems, ['no role file at public/models/x.regions.json']);
 });
 
-test("each role takes the recipe's own colour roll, the jacket over the shirt when one is worn", () => {
-    const base = { skin: 1, shirt: 2, pants: 3, hairColor: 4, shoe: 5, jacketColor: 6 };
-    assert.deepEqual(recipeColours({ ...base, jacket: false } as never), { skin: 1, top: 2, trousers: 3, hair: 4, shoes: 5 });
-    assert.equal(recipeColours({ ...base, jacket: true } as never).top, 6);
+test('a role file names the standard roles, and an old role name says what it became', () => {
+    for (const [old, now] of [['top', 'tops'], ['trousers', 'bottoms'], ['shoes', 'footwear']]) {
+        const { roles, error } = parseRoles(`{"regions":[{"colour":"#123456","role":"${old}"}]}`, 'x.regions.json');
+        assert.equal(roles, null);
+        assert.match(error ?? '', new RegExp(`"${old}", which is now "${now}"`));
+    }
+    const ok = parseRoles('{"regions":[{"colour":"#123456","role":"headwear"},{"colour":"#654321","role":"accessory"}]}', 'x').roles;
+    assert.deepEqual(ok?.regions.map(r => r.role), ['headwear', 'accessory']);
+});
+
+test('a model is painted in the person\'s skin and hair, and their scheme arranged on the roles it has', () => {
+    const { px, uv, index } = atlas([SKIN, KHAKI, BLUE, WHITE]);
+    const seg = segment(px, uv, index);
+    const g = seg.groups;
+    const roles = assignRoles(seg, { regions: [
+        { colour: g[0].hex, role: 'skin' }, { colour: g[1].hex, role: 'bottoms' }, { colour: g[2].hex, role: 'tops' }, { colour: g[3].hex, role: 'footwear' },
+    ] }, null);
+    const paint = new RegionPaint(seg, roles, 'x.glb');
+    // Only what the model has: no headwear and no accessory, so the scheme skips them.
+    assert.deepEqual([...paint.clothing].sort(), ['bottoms', 'footwear', 'tops']);
+    assert.equal(paint.salt, saltOf('x.glb'));
+    const r = makeRecipe(makeStreams(4).recipe.fork('agent:0'), { scheme: 'bold-primaries' });
+    const c = personColours(r, paint.clothing, paint.salt);
+    assert.equal(c.skin, r.skin);
+    assert.equal(c.hair, r.hairColor);
+    const d = dress('bold-primaries', r.arrange, r.skin, r.hairColor, paint.clothing, paint.salt).colors;
+    assert.deepEqual([c.tops, c.bottoms, c.footwear], [d.tops, d.bottoms, d.footwear]);
 });

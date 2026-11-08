@@ -122,8 +122,8 @@ The engine:
 - `resources/js/game/entity.ts` — the entity taxonomy: the four axes every entity declares itself on, and the
   whole property vocabulary. Imports nothing, so `sim/`, `world/`, `behaviors.ts` and `inspect/`
   can all read it without any of them dragging a dependency in behind them.
-- `resources/js/game/palette.ts` — every colour in the game, as one 24-entry palette plus named families, and the
-  ground tones blended out of it.
+- `resources/js/game/palette.ts` — the world's colours, as one 24-entry palette plus named families, and the
+  ground tones blended out of it. A person's colours are `wardrobe.ts`'s.
 - `resources/js/game/behaviors.ts` — the behavior profiles: speed, steering, stops and grouping, and nothing about looks.
 - `resources/js/game/composition.ts` — what the crowd is made of: the default weight of every choice a person is rolled from.
 - `resources/js/game/wardrobe.ts` — `COLORS`, the one table of skin tones, hair colors and clothing schemes.
@@ -304,7 +304,15 @@ The engine:
   the patches and never the gutter, that every used texel is labelled, edges included, that two
   colours as close as the casual man's skin and khaki are pulled apart by the bandwidth search, that a
   bandwidth too wide to do so is reported and refused rather than painted, that a role file matches
-  by colour and not by order, and that a blend only refuses painting across two roles.
+  by colour and not by order, that a blend only refuses painting across two roles, that an old role
+  name is refused with its new one, and that a model is painted in its person's scheme arranged on
+  the roles it has.
+- `tests/js/wardrobe.test.ts` — the color system: every pooled scheme meets the rules on every
+  model's role file and the role sets to come, at every skin tone and hair color, young and old, in
+  few tries; the crowd as rolled meets them on the models and the primitives; a pooled scheme
+  arranges differently by model and by person, from its pool alone; a uniform is the same clothing
+  on everyone and never rolled; skin tones are named by lightness alone and stay human; Old grays
+  the hair and nothing else.
 
 ## The entity taxonomy
 
@@ -1026,7 +1034,7 @@ An archetype may also curate its slots **jointly** rather than independently, by
 **liveries** in `livery`. Four independent rolls are right for a cart, which has three surfaces; a
 shopfront has nine, and rolled independently they do not read as a decorated building but as nine
 things that happen to be adjacent -- a clash *between* slots, which no amount of curating each slot
-separately can fix. A `Livery` (in `palette.ts`, beside `Outfit`, which is the same idea for people)
+separately can fix. A `Livery` (in `palette.ts`; a person's clothing scheme in `wardrobe.ts` is the same idea for people)
 is a primary, a secondary and an accent chosen together; `base`, `trim` and `accent` take their sets
 from it and `topper` is left alone, because `topper` is the product and must stay in the archetype's
 own curated set. **It costs no extra draw**: the first roll picks the livery, and since a livery's
@@ -1409,15 +1417,69 @@ or a child's balloon -- are rolled after the choices, for the primitive fallback
 none of them yet. Nobody carries a phone or a camera any more: they were Kyle's and Linda's, and
 profiles carry only behavior.
 
-Colour comes from a curated `Outfit` rather than per-garment rolls, and reusing one of its colours
-twice is the point: that repetition is what makes a person read as designed. The exception is the
-things that hang *off* a person rather than clothe them. A bag in the trousers' colour stops being
-a bag and becomes a patch of the hip, and one matching the coat its strap crosses loses the strap
-with it, so `fromFamiliesUnlike` lets those roles refuse what the wearer already has on. "The same
-colour" there means within a perceptual distance, not equal -- two entries of one family are often
-one shade in two lightnesses, and swapping onto the neighbour satisfies the letter of the rule and
-changes nothing anyone can see. Clothing does not get this treatment: a hat matching a shirt is
-coordination, not a clash.
+### Colors: skin, hair, and clothing schemes
+
+Every color a person is made of is data in **one table, `COLORS` in `wardrobe.ts`**: the skin
+ramp and its seven tones, the six hair colors and the gray that Old shifts them toward, and the
+clothing schemes. Retuning the crowd's look is editing that table.
+
+**Skin tones are labeled by lightness only** -- Lightest, Light, Medium-Light, Medium, Medium-Deep,
+Deep, Deepest -- and **never with a racial, ethnic or regional label, anywhere**: code, data, UI or
+docs. The tones are evenly spaced points along the one ramp of real skin colors the game has always
+used (eight anchors from a pale peach to a deep brown, with a little hue drift), and a person's
+variation moves them along it by up to 0.045 either side, never off it -- so nothing can come out
+gray, green or otherwise not a person. `tests/js/wardrobe.test.ts` holds the names, the order and
+the warmth.
+
+**Hair** is black, dark brown, brown, light brown, blond or red, each a small range a roll lands
+in. Old shifts any of them 55-90% of the way toward a gray (one roll decides both, so the most
+grayed is the whitest); it is the only color age changes.
+
+**Clothing is filled by role.** Every model's role file divides its texture into the same standard
+roles: the clothing roles **`headwear`, `tops`, `bottoms`, `footwear` and `accessory`** (anything
+baked into a model, a bag or a backpack), plus `skin`, `hair` and `keep` (details left as authored,
+like eyes). A one-piece garment is `tops` with no `bottoms`; most models will have no `headwear`.
+Headwear means a hat baked into a model *and* a hat attached by code later: both wear the person's
+headwear color. The two casual-man files were migrated from the first role names (`top` ->
+`tops`, `trousers` -> `bottoms`, `shoes` -> `footwear`, both shoe colors to `footwear`); a role file
+still using an old name is refused with the new one named. Both models have `tops`, `bottoms` and
+`footwear` and nothing else.
+
+**A scheme is one of two kinds**, and the format holds both from the start so staff uniforms never
+need it reworked:
+
+- **Pooled** -- a pool of colors plus rules, never a fixed color per role: Bright Tropical, Pastels,
+  Neutrals, Earth Tones, Bold Primaries, Sporty, Denim & White, Park Merch. A person's roles are
+  filled from the pool by an arrangement that depends on the person (`Recipe.arrange`, a roll) and
+  on the model (a salt from its file name), so the same person is arranged differently on each
+  model and two people differently on one: with Bright Tropical, seed 1's first person (Deepest
+  skin) is a deep-sea top, hot-pink bottoms and white shoes on `casual-man` and a coral top,
+  sunshine bottoms and lime shoes on `casual-man-low`. The accessory and the headwear come from the
+  pool too. A scheme may narrow a role to part of its pool (`only`): Sporty's footwear is
+  trainer-colored, Park Merch's caps are the park's green, navy or gold.
+- **Uniform** -- a fixed color per role. Skin and hair still vary per person, and the rules comparing
+  clothing with skin and hair are **waived**, so a uniform is never altered for anyone. Uniforms are
+  **never rolled for the crowd** (`COMPOSITION.scheme` names only pooled schemes); they are assigned
+  deliberately -- staff at vendors later, possibly per world or venue. There is one, **Park Staff**:
+  a park-green polo and cap, navy bottoms, black shoes and a gold accessory. The lab's Clothing
+  scheme control offers it, labeled as a uniform. The format allows any number.
+
+**The rules every pooled result meets** (`RULES`, as `apart()` distances from `palette.ts`): tops and
+bottoms clearly contrast (150); footwear differs from the bottoms (100) or is a neutral; the
+accessory differs from the top (110); headwear clearly differs from the person's hair (130); and no
+clothing color is close to the person's skin (100), or it would read as bare skin. `dress()` fills
+the roles one at a time, each trying the pool from its own starting color, keeping a color only if
+everything so far still meets the rules and stepping back when a role runs out -- deterministic,
+complete (every arrangement is reachable), and quick: the hardest case the tests find, Pastels on
+the lightest skin with all five roles, takes about twenty tries. The test checks every pooled scheme
+against every model's role file and the role sets models will have later, at every skin tone and
+hair color, young and old, and that a uniform comes out identical on everyone.
+
+The **primitives** are dressed by the same `dress()`, at recipe time, on the roles they wear (a hat
+and a bag only when worn), salted as `primitives`; a primitive jacket is the top, in the tops color.
+A model is dressed by the renderer on its own roles (`personColours` in `modelcrowd/regions.ts`),
+because only the renderer knows which roles a model has. The old `Outfit` table, the shoe and hair
+sets and the skin ramp have left `palette.ts`, which now holds only the world's colors.
 
 Equipment is people, not obstacles. Each piece carries a `MotionProfile` the simulation applies on
 top of the behavior -- speed, turn rate, acceleration, collision radius and collision offset -- so its
@@ -1869,9 +1931,10 @@ neither hash can move, and nothing under `resources/js/game/sim/` imports it. Fi
 - **The clip is driven by the gait phase**, one turn of `phase` per clip cycle, with the hips'
   sideways and forward travel pinned and every constant translation track dropped. Above 2.2 m/s a
   body runs (back to walking below 1.9); anyone with a mobility aid walks.
-- **Variation is the recipe's own colors and its body**: skin, top (the jacket when one is worn),
-  trousers, hair and shoes repainted from the recipe's rolls, and the recipe's age and build shaped
-  into the clone by `modelcrowd/body.ts` -- see "Model bodies" below.
+- **Variation is the person's own colors and body**: skin and hair from the recipe, the clothing
+  scheme arranged on the clothing roles this model has (`personColours`, salted by the model -- see
+  "Colors" above), and the recipe's age and build shaped into the clone by `modelcrowd/body.ts` --
+  see "Model bodies" below.
 - **Colour regions are found, not authored** (`regions.ts`). The mesh's UV triangles are rasterised
   to find the texels it uses, those are grouped by colour with a mean shift in Oklab, and a mask
   texture labels every used texel with its group. Cells at a colour edge or an island's border are
@@ -1882,8 +1945,9 @@ neither hash can move, and nothing under `resources/js/game/sim/` imports it. Fi
   triangles against 15,571) lands on the same colours less the eyes, so its role file is the same
   six lines. The mask is half the texture's resolution, which leaves a skin-coloured hairline on a
   couple of the remesh's shirt seams where islands touch with no gutter -- visible only zoomed in.
-- **What each group is lives in `<model>.regions.json` beside the `.glb`**: colours mapped to `skin`,
-  `top`, `trousers`, `hair`, `shoes` or `keep`, matched by Oklab distance under 0.06 rather than by
+- **What each group is lives in `<model>.regions.json` beside the `.glb`**: colours mapped to the
+  standard roles -- `headwear`, `tops`, `bottoms`, `footwear`, `accessory`, `skin`, `hair` or `keep` --
+  matched by Oklab distance under 0.06 rather than by
   order, so a file survives the detector reordering and carries over to a regeneration in the same
   garments. An optional `bandwidth` fixes the kernel for one model. A model with no file, or a group
   the file does not name, prints a starting point to the console.

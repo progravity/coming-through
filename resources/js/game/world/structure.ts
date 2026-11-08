@@ -156,7 +156,7 @@ export interface StructureArchetype {
      * own set forward until it finds one the first has not taken.
      *
      * That walk is selection, not a draw: every roll is still taken up front, unconditionally, in
-     * `SLOTS` order. It is the same move `fromFamiliesUnlike` makes for a person's bag.
+     * `SLOTS` order. It is the same move a clothing scheme makes when an arrangement breaks a rule.
      */
     distinct?: readonly Slot[];
 }

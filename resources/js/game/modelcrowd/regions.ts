@@ -9,7 +9,8 @@
  * their neighbours afterwards, so a blend of two colours cannot become a third group.
  *
  * **What each group *is* lives in a data file beside the model**, `<model>.regions.json` in
- * `public/models/`, which maps colours to roles (skin, top, trousers, hair, shoes, keep). Entries
+ * `public/models/`, which maps colours to the standard roles every model shares: the clothing roles
+ * (headwear, tops, bottoms, footwear, accessory -- see `wardrobe.ts`), skin, hair, and keep. Entries
  * are matched by colour rather than by position in a list, so a file keeps working when the
  * detector's ordering changes and largely carries over to a regeneration in the same garments. A
  * misassigned region is fixed by editing that file; a pair of regions merged into one group by
@@ -25,11 +26,15 @@
 import * as THREE from 'three';
 import type { Recipe } from '../recipe.ts';
 import { MODEL_DIR } from '../render/model-file.ts';
+import { CLOTHING_ROLES, dress, saltOf } from '../wardrobe.ts';
+import type { ClothingRole, Dressed } from '../wardrobe.ts';
 
-export const ROLES = ['skin', 'top', 'trousers', 'hair', 'shoes', 'keep'] as const;
+export const ROLES = ['skin', 'hair', 'headwear', 'tops', 'bottoms', 'footwear', 'accessory', 'keep'] as const;
 export type Role = (typeof ROLES)[number];
-/** The roles a recipe has a colour for; `keep` is left as the file painted it. */
+/** The roles a person has a colour for; `keep` is left as the file painted it. */
 export type PaintRole = Exclude<Role, 'keep'>;
+/** The names the first role files used, and what each became. A file still using one is told. */
+const RENAMED: Readonly<Record<string, Role>> = { top: 'tops', trousers: 'bottoms', shoes: 'footwear' };
 
 /** How many groups the shader can tell apart. A texture with more distinct colours than this is refused. */
 export const REGION_MAX = 12;
@@ -525,6 +530,9 @@ export function parseRoles(text: string, path: string): { roles: RoleFile | null
         if (typeof entry.colour !== 'string' || labOfHex(entry.colour) === null) {
             return { roles: null, error: `${path}: entry ${i + 1} needs "colour" as "#rrggbb"` };
         }
+        if (typeof entry.role === 'string' && RENAMED[entry.role] !== undefined) {
+            return { roles: null, error: `${path}: entry ${i + 1} has role "${entry.role}", which is now "${RENAMED[entry.role]}"` };
+        }
         if (typeof entry.role !== 'string' || !(ROLES as readonly string[]).includes(entry.role)) {
             return { roles: null, error: `${path}: entry ${i + 1} has role "${String(entry.role)}"; use one of ${ROLES.join(', ')}` };
         }
@@ -605,9 +613,23 @@ export function readPixels(tex: THREE.Texture): Pixels | null {
 
 // ---------------------------------------------------------------- painting
 
-/** The colour each role takes from a recipe: the same rolls the primitive people are dressed in. */
-export function recipeColours(r: Recipe): Record<PaintRole, number> {
-    return { skin: r.skin, top: r.jacket ? r.jacketColor : r.shirt, trousers: r.pants, hair: r.hairColor, shoes: r.shoe };
+/**
+ * What one person wears on one model: their skin and hair, and their clothing scheme arranged on the
+ * clothing roles this model has -- salted by the model, so the same person is arranged differently
+ * on another. A role the model lacks is left out of the arrangement, so it constrains nothing.
+ */
+export function dressOn(r: Recipe, roles: readonly ClothingRole[], salt: number): Dressed {
+    return dress(r.scheme, r.arrange, r.skin, r.hairColor, roles, salt);
+}
+
+/** The colour each role is painted, for one person on one model. */
+export function personColours(r: Recipe, roles: readonly ClothingRole[], salt: number): Record<PaintRole, number> {
+    const c = dressOn(r, roles, salt).colors;
+    const fill = c.tops ?? r.shirt;
+    return {
+        skin: r.skin, hair: r.hairColor,
+        headwear: c.headwear ?? fill, tops: fill, bottoms: c.bottoms ?? fill, footwear: c.footwear ?? fill, accessory: c.accessory ?? fill,
+    };
 }
 
 /** False colours for the inspector, one per group, chosen to be told apart at a glance. */
@@ -650,10 +672,16 @@ const MAP_FRAGMENT = `#ifdef USE_MAP
 export class RegionPaint {
     readonly seg: Segmentation;
     readonly roles: Roles;
+    /** The clothing roles this model has, which is what a scheme is arranged on. */
+    readonly clothing: readonly ClothingRole[];
+    /** The model's own salt for an arrangement, from its file name: the same in the lab and the game. */
+    readonly salt: number;
     private readonly shared: Record<string, { value: unknown }>;
 
-    constructor(seg: Segmentation, roles: Roles) {
+    constructor(seg: Segmentation, roles: Roles, file = '') {
         this.seg = seg; this.roles = roles;
+        this.clothing = CLOTHING_ROLES.filter(r => roles.byGroup.includes(r));
+        this.salt = saltOf(file);
         const mask = new THREE.DataTexture(seg.mask, seg.width, seg.height, THREE.RedFormat, THREE.UnsignedByteType);
         mask.magFilter = mask.minFilter = THREE.NearestFilter;
         mask.generateMipmaps = false;
@@ -749,7 +777,7 @@ export async function prepareRegions(file: string, root: THREE.Object3D): Promis
     const seg = segment(px, uv, mesh.geometry.index?.array ?? null, roleFile?.bandwidth);
     const ms = performance.now() - t0;
     const roles = assignRoles(seg, roleFile, error);
-    const paint = seg.failure === null ? new RegionPaint(seg, roles) : null;
+    const paint = seg.failure === null ? new RegionPaint(seg, roles, file) : null;
     const found = seg.failure !== null ? seg.failure : `${seg.groups.length} colour groups`;
     const summary = roles.usable ? `${found}, painted from the recipe` : `${found}; not painted: ${roles.problems[0]}`;
     if (seg.failure === null && (!roles.usable || roles.warnings.length > 0)) {

@@ -33,7 +33,7 @@ import { PATH } from '../world/path.ts';
 import { BodyRig, LIMITS, bakeMask, drawnHeight, drawsAsPrimitive, patchFullness, shapeRecipe } from './body.ts';
 import type { BodyFile, FullnessUniforms, Limits } from './body.ts';
 import type { ModelClass } from '../behaviors.ts';
-import { recipeColours } from './regions.ts';
+import { personColours } from './regions.ts';
 import type { RegionPaint, RegionUniforms } from './regions.ts';
 
 const TAU = Math.PI * 2;
@@ -305,7 +305,7 @@ export class ModelCrowd {
     private dress(s: Slot, r: Recipe): void {
         s.recipe = r;
         s.fresh = true;
-        if (this.paint !== null && s.regions !== null) this.paint.paint(s.regions, recipeColours(r));
+        if (this.paint !== null && s.regions !== null) this.paint.paint(s.regions, personColours(r, this.paint.clothing, this.paint.salt));
         const { body } = shapeRecipe(r, this.limits);
         s.shape.apply(body);
         // Fullness is a fraction of height; the skinned vertices come out in the model's own units.

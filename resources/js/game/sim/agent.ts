@@ -31,8 +31,6 @@ export interface AgentOptions {
     choices?: Partial<Choices>;
     /** Behavior weights in place of the composition's, for the people lab's crowd mix. */
     mix?: BehaviorMix;
-    /** Index into OUTFITS, so a group can be dressed from one coordinated combination. */
-    outfit?: number;
     leader?: Agent;
     offset?: number;
     parent?: Agent;
@@ -96,7 +94,7 @@ export class Agent implements GridItem, Poseable {
         const recipeRng = streams.recipe.fork(label), cosmetic = streams.cosmetic.fork(label);
         this.rng = streams.behavior.fork(label);
         // Who this is comes first: the recipe rolls every choice, the behavior profile among them.
-        const recipe = makeRecipe(recipeRng, { ...opts.choices, mix: opts.mix, outfit: opts.outfit });
+        const recipe = makeRecipe(recipeRng, { ...opts.choices, mix: opts.mix });
         const A: Behavior = BEHAVIORS[recipe.behavior];
         this.index = index;
         this.type = recipe.behavior; this.A = A;
