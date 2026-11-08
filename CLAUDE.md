@@ -1707,7 +1707,10 @@ into two vocabularies.
   furniture -- on the real walkway, from 30 m short of the middle to 30 m past it, among a few
   Typical walkers (`walkers=`, six by default: half ahead going the same way, half coming the other)
   so weaving and avoidance are visible. A Group Walker brings their family, a Darter their Typical
-  parent, as the spawner would; the scene restarts when they reach the far end. Overlays: **speed**
+  parent, as the spawner would; the scene restarts when they reach the far end. **Everyone is drawn
+  from the model**, as on the stage (`ModelCrowd.everyone`): someone the game would draw as
+  primitives -- equipment, or a Darter -- walks as the model without the equipment, at the speed and
+  with the collider the equipment gives them, and the card says what the game does. Overlays: **speed**
   (a label over the head), **trail** (the route walked, colored from blue where slow against their
   own pace to orange at it), **stops** (a ring wherever they stopped dead, sized by how long), and
   **avoidance** (arrows for the separation, furniture and railing forces from the steering functions

@@ -138,6 +138,12 @@ export class ModelCrowd {
     fallbackEquipment = 0;
     /** The class of person this model can be, from its body file: an adult unless it says otherwise. */
     readonly drawable: ModelClass;
+    /**
+     * Draw everyone from the model, the fallback's people included -- without their equipment, and an
+     * adult model for a Darter. The people lab's path mode does, since the lab shows people only as
+     * models; the game never does, because there what you see has to match what you collide with.
+     */
+    everyone = false;
     /** People drawn in the last frame, and ink shells drawn, counted by the renderer as it drew them. */
     bodyDraws = 0;
     inkDraws = 0;
@@ -261,7 +267,11 @@ export class ModelCrowd {
             const s = this.slots[a.slot];
             if (s === undefined) continue;
             // Equipment the model cannot carry: left to the primitives, whose collider it matches.
-            if (drawsAsPrimitive(a.recipe, this.drawable)) { fallback++; if (a.recipe.equipment !== 'none') equipment++; continue; }
+            if (drawsAsPrimitive(a.recipe, this.drawable)) {
+                fallback++;
+                if (a.recipe.equipment !== 'none') equipment++;
+                if (!this.everyone) continue;
+            }
             s.used = true;
             lerpPose(view, a.prev, a, alpha);
             if (s.recipe !== a.recipe) this.dress(s, a.recipe);

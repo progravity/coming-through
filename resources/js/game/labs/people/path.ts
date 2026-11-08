@@ -11,6 +11,11 @@
  * when they reach the far end. A Group Walker brings their family, a Darter their Typical parent,
  * exactly as the spawner would.
  *
+ * **Everyone is drawn from the model**, as on the stage: the lab shows people only as models. The
+ * people the game would draw as primitives -- equipment users, and Darters until there is a child
+ * model -- walk here as the model without their equipment, at the speed and with the collider their
+ * equipment gives them, and the card says what the game does instead.
+ *
  * Read-only throughout, like the crowd view: it builds its own `Crowd` from the seed's streams and
  * shares nothing with any other page. It touches no hash: the game never builds this scene.
  */
@@ -27,7 +32,7 @@ import { queryOf, readState } from '../../inspect/state.ts';
 import { Subject, forced } from '../../inspect/subject.ts';
 import { ModelCrowd } from '../../modelcrowd/crowd.ts';
 import type { Knobs } from '../../modelcrowd/crowd.ts';
-import { drawsAsPrimitive, fetchBodyFile, modelFallback } from '../../modelcrowd/body.ts';
+import { fetchBodyFile, modelFallback } from '../../modelcrowd/body.ts';
 import { prepareRegions } from '../../modelcrowd/regions.ts';
 import { lookNamed } from '../../render/look.ts';
 import { MODELS, fetchModel } from '../../render/model-file.ts';
@@ -169,6 +174,7 @@ export async function startPath(lab: Lab): Promise<void> {
         const regions = await prepareRegions(file, got.scene);
         const knobs: Knobs = { ink: false, throttle: false, far: 15, every: 3 };
         models = new ModelCrowd(world.scene, got, knobs, regions.roles?.usable === true ? regions.paint : null, await fetchBodyFile(file));
+        models.everyone = true;
         modelNote = `${modelName}, as the game draws people`;
     } catch (e) {
         modelNote = `the model did not load, so everyone is primitives: ${e instanceof Error ? e.message : String(e)}`;
@@ -349,7 +355,7 @@ export async function startPath(lab: Lab): Promise<void> {
             { k: 'stops', v: p.stopUntil > p.t ? `stopped, ${n2(p.stopUntil - p.t, 1)} s more · ${stops} so far` : Number.isFinite(p.nextStop) ? `${stops} so far · next in ${n2(Math.max(0, p.nextStop - p.t), 1)} s` : 'never stops' },
             { k: 'weaving', v: p.leader !== null || p.parent !== null ? 'follows their group or parent' : `heading for lane n ${n2(p.wanderN)} · next pick in ${n2(Math.max(0, p.nextWander - p.t), 1)} s` },
             { k: 'neighbors', v: `${forces.near} within their ${n2(p.sepR)} m separation radius` },
-            ...(fallback === null ? [] : [{ k: 'drawn as', v: fallback }]),
+            ...(fallback === null ? [] : [{ k: 'in the game', v: models === null ? fallback : `${fallback}; here they are the model${p.recipe.equipment !== 'none' ? `, without the ${p.recipe.equipment}, moving as its user does` : ''}` }]),
         ];
         const state: InfoSection = {
             id: 'state', rows,
@@ -408,10 +414,12 @@ export async function startPath(lab: Lab): Promise<void> {
         while (poses.length < agents.length) poses.push(newPose());
         for (let i = 0; i < agents.length; i++) lerpPose(poses[i], agents[i].prev, agents[i], alpha);
         if (models !== null) models.draw(agents, alpha, player, pools.inkOn);
-        for (let i = 0; i < agents.length; i++) {
-            if (models !== null && !drawsAsPrimitive(agents[i].recipe, models.drawable)) continue;
-            const p = poses[i];
-            drawPerson(pools, agents[i].slot, agents[i], p, t, PATH.surfaceY(p.x, p.z));
+        // Primitives only if the model did not load at all.
+        if (models === null) {
+            for (let i = 0; i < agents.length; i++) {
+                const p = poses[i];
+                drawPerson(pools, agents[i].slot, agents[i], p, t, PATH.surfaceY(p.x, p.z));
+            }
         }
         pools.commit();
 
