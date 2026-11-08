@@ -33,6 +33,30 @@ function segmented<T extends string>(options: readonly T[], onPick: (v: T) => vo
     return { el, set: v => { for (const [k, b] of buttons) b.classList.toggle('on', k === v); } };
 }
 
+/**
+ * A choice with more options than fit on a row -- a dozen clothing schemes, eight behaviors -- as
+ * a dropdown, with the same `set` the segmented row has, so the panel treats the two alike.
+ */
+function dropdown<T extends string>(name: string, options: readonly T[], onPick: (v: T) => void, titles?: (v: T) => string): Segmented<T> {
+    const el = document.createElement('div');
+    el.className = 'row';
+    const sel = document.createElement('select');
+    sel.setAttribute('aria-label', name);
+    sel.style.width = 'auto';
+    for (const o of options) {
+        const opt = document.createElement('option');
+        opt.value = o;
+        opt.textContent = titles?.(o) ?? o;
+        sel.appendChild(opt);
+    }
+    sel.onchange = () => onPick(sel.value as T);
+    el.appendChild(sel);
+    return { el, set: v => { sel.value = v; } };
+}
+
+/** The most options a choice shows as a row of buttons; more, and it is a dropdown. */
+const ROW_MAX = 6;
+
 function label(text: string): HTMLElement {
     const s = document.createElement('span');
     s.className = 'lbl';
@@ -199,7 +223,10 @@ export class Panel {
                 continue;
             }
             if (c.kind === 'enum') {
-                const seg = segmented(c.options, v => this.h.setControl(c.id, v));
+                const title = (v: string): string => c.titles?.[v] ?? v;
+                const seg = c.options.length > ROW_MAX
+                    ? dropdown(c.label, c.options, v => this.h.setControl(c.id, v), title)
+                    : segmented(c.options, v => this.h.setControl(c.id, v), title);
                 this.enums.set(c.id, seg);
                 this.dyn.append(label(c.label), seg.el);
             } else if (c.kind === 'toggle') {

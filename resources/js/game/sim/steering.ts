@@ -29,7 +29,7 @@ export function separation(self: Agent, A: Behavior, grid: SpatialGrid<Agent, Ob
     out.dx += sx * A.sepW; out.dz += sz * A.sepW;
 }
 
-/** Push away from the player, scaled by how much this archetype cares. */
+/** Push away from the player, scaled by how much this behavior profile cares. */
 export function avoidPlayer(self: Agent, A: Behavior, player: Player, out: Steer): void {
     const cx = self.cx, cz = self.cz;
     const ex = cx - player.x, ez = cz - player.z, R = self.sepR + player.r, d2 = ex * ex + ez * ez;
@@ -48,7 +48,7 @@ export function avoidPlayer(self: Agent, A: Behavior, player: Player, out: Steer
  * grid's guaranteed find radius, or a bench would push harder or softer depending on where the
  * cell boundaries fell under it. `tests/js/obstacles.test.ts` pins that.
  *
- * The weight is a constant rather than the archetype's `sepW`. A bench has no opinion about who is
+ * The weight is a constant rather than the profile's `sepW`. A bench has no opinion about who is
  * walking into it and does not step aside for anyone, so there is no personality to express here;
  * Kyle still ignores people and still walks round a bin.
  */

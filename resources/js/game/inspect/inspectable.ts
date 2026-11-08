@@ -48,6 +48,8 @@ export type Control = (
         kind: 'enum'; id: string; label: string;
         options: readonly string[]; value: string;
         key?: string; rebuilds?: boolean;
+        /** What each option is called on screen, where its key is not a name: `slow-walker` is Slow Walker. */
+        titles?: Readonly<Record<string, string>>;
     }
     | { kind: 'toggle'; id: string; label: string; value: boolean; key?: string; rebuilds?: boolean }
     | {
@@ -99,7 +101,7 @@ export interface OverlayDef { id: string; label: string; key?: string; on?: bool
  * section ids are the shared headings, in the order a reader looks for them; an entity fills in the
  * ones it has something to say under and leaves the rest out.
  */
-export type SectionId = 'identity' | 'choices' | 'behavior' | 'recipe' | 'geometry' | 'model' | 'state' | 'provenance' | 'cost';
+export type SectionId = 'identity' | 'choices' | 'behavior' | 'clothing' | 'recipe' | 'geometry' | 'model' | 'state' | 'provenance' | 'cost';
 
 /** One line of a section. `v` is plain text; `color` adds a swatch, `tags` a row of chips. */
 export interface InfoRow {

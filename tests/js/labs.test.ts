@@ -18,7 +18,7 @@ import { KIOSK_ARCHETYPES, KIOSK_SPANS, KIOSK_TYPES, kiosks } from '../../resour
 import { RESTAURANT_ARCHETYPES } from '../../resources/js/game/world/restaurants.ts';
 import { SHOP_ARCHETYPES } from '../../resources/js/game/world/shops.ts';
 import type { Family } from '../../resources/js/game/entity.ts';
-import type { Site } from '../../resources/js/game/inspect/inspectable.ts';
+import type { Control, Site } from '../../resources/js/game/inspect/inspectable.ts';
 import { personBehavior, personChoices, primitiveHeight } from '../../resources/js/game/inspect/entities/person.ts';
 import { overlaysOf } from '../../resources/js/game/inspect/inspectable.ts';
 import { ENTITIES, modelOf } from '../../resources/js/game/inspect/registry.ts';
@@ -257,4 +257,34 @@ test('a person shows each choice apart, the behavior with its settings, and a he
     const nums = [...h.matchAll(/(\d+\.\d+)/g)].map(x => Number(x[1]));
     assert.ok(Math.abs(nums[1] * nums[2] * nums[3] - nums[0]) < 0.02, h);
     assert.match(h, /Old$/);
+});
+
+test("the Individual view offers every choice, in order, each with the seed's own roll first", () => {
+    const m = ENTITIES.find(e => e.id === 'model');
+    assert.ok(m !== undefined);
+    const choices = ['model', 'age', 'build', 'skin', 'hair', 'scheme', 'behavior', 'equipment'];
+    const ids = m.controls.map(c => c.id).filter(id => choices.includes(id));
+    assert.deepEqual(ids, choices);
+    for (const id of choices) {
+        const ctl: Control | undefined = m.controls.find(x => x.id === id);
+        assert.ok(ctl?.kind === 'enum', `${id} is not a choice`);
+        assert.equal(ctl.options[0], 'seed', `${id} has no Seed option first`);
+        assert.equal(ctl.value, 'seed', `${id} does not start on the seed's roll`);
+    }
+    // Equipment is listed and greyed: not yet on models.
+    assert.match(m.controls.find(c => c.id === 'equipment')?.disabled ?? '', /not yet supported on models/);
+    // The uniform is offered, and says it is one; the pooled schemes are named as they are.
+    const scheme = m.controls.find(c => c.id === 'scheme');
+    assert.ok(scheme?.kind === 'enum');
+    assert.ok(scheme.options.includes('park-staff'));
+    assert.equal(scheme.titles?.['park-staff'], 'Park Staff (uniform)');
+    assert.equal(scheme.titles?.['denim-white'], 'Denim & White');
+    // And a choice in the address reaches the person: Seed is the seed's roll, anything else forced.
+    const s = readState('single', '?seed=5&behavior=darter&age=old&scheme=park-staff', LABS.people);
+    assert.equal(s.controls.behavior, 'darter');
+    assert.equal(s.controls.age, 'old');
+    assert.equal(s.controls.scheme, 'park-staff');
+    // The people lab is the one with path mode.
+    assert.equal(LABS.people.pathMode, true);
+    assert.notEqual(LABS.fixtures.pathMode, true);
 });

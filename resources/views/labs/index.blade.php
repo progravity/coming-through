@@ -7,9 +7,10 @@
             'name' => 'People',
             'what' => 'The person family: everyone who walks the promenade. "Crowd" means only the flowing, spawned population; stationed staff, when they exist, are people but not crowd.',
             'views' => [
-                ['Individual', [], 'One person on a turntable, drawn from the rigged model as the game draws people, walking: seed stepping, archetype, age and build, the model\'s clips, color regions, anchors and torso width.'],
+                ['Individual', [], 'One person on a turntable, drawn from the rigged model as the game draws people, walking. A control for every choice a person is made of (model, age, build, skin tone, hair, clothing scheme, behavior, equipment), each with Seed for what the seed rolls, and a card saying what each contributes.'],
+                ['Path', ['mode' => 'path'], 'The same person walking a stretch of the real promenade with their behavior, among Typical walkers: speed, a trail of their route, stops and avoidance, with a following camera, pause, step and slow motion.'],
                 ['Build row', ['view' => 'row'], 'The five Build presets side by side on one model and recipe: width, shoulders, limb girth and body fullness.'],
-                ['Age row', ['view' => 'row', 'compare' => 'age'], 'The Age presets side by side on one model.'],
+                ['Age row', ['view' => 'row', 'compare' => 'age'], 'Young, Normal and Old side by side on one model: small adjustments, never a change of model.'],
                 ['Model comparison', ['view' => 'row', 'compare' => 'models'], 'Every model at the same recipe, presets and pose, with triangles, bones, file size, textures, texture memory and load time.'],
                 ['Crowd', ['view' => 'crowd'], 'A seeded crowd running the real simulation in its own instance, with time controls, cameras, overlays, live statistics and a click-to-select readout.'],
             ],

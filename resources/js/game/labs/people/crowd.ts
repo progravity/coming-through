@@ -8,8 +8,8 @@
  * between runs -- the player idle on the start pad, nobody scoring -- so what walks here is what
  * walks there for that seed and crowd size. It draws the world with `buildWorld` and the people
  * with the model crowd -- the way the game draws people -- falling back to `drawPerson` exactly where
- * the game does, under the look the game ships in. The one thing it adds to the simulation is an optional archetype mix,
- * which changes only what the spawn draw selects; without one the crowd is the game's exactly.
+ * the game does, under the look the game ships in. The one thing it adds to the simulation is an optional behavior mix,
+ * which changes only what each person's behavior roll selects; without one the crowd is the game's exactly.
  *
  * Its own instance means it shares nothing with any other page: the simulation, the world and the
  * renderer are built here and live only as long as this page does.
@@ -351,10 +351,10 @@ export async function startCrowd(lab: Lab): Promise<void> {
                 ['peak cell', `${s.peak} in one ${cell}×${cell} m cell · ${s.crowded} cells hold 3 or more`],
                 ['stopped', `${s.stopped} holding a stop · ${s.standing} standing still`],
                 ['contacts', `${s.contactsNow} pairs touching · ${n2(s.contactsPerSecond, 1)} new a second · ${s.contactsTotal} since the view began`],
-                ...(models === null ? [] : [['as primitives', `${models.fallback} with a mobility aid or a stroller, not yet supported on models`] as const]),
+                ...(models === null ? [] : [['as primitives', `${models.fallback}: ${models.fallbackEquipment} with equipment, not yet supported on models; ${models.fallback - models.fallbackEquipment} Darters, who need a child model`] as const]),
             ],
             sections: [
-                { id: 'state', title: 'Archetypes', tables: [table] },
+                { id: 'state', title: 'Behaviors', tables: [table] },
                 {
                     id: 'cost', title: 'Performance',
                     rows: [

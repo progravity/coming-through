@@ -38,7 +38,7 @@ import type { RegionPaint, RegionUniforms } from './regions.ts';
 
 const TAU = Math.PI * 2;
 /** Run above this speed in m/s, and walk again only below the second, so nobody flickers between clips. */
-const RUN_ON = 2.2, RUN_OFF = 1.9;
+export const RUN_ON = 2.2, RUN_OFF = 1.9;
 const IDENTITY = new THREE.Matrix4();
 
 const wrap01 = (v: number): number => ((v % 1) + 1) % 1;

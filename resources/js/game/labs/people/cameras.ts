@@ -103,6 +103,12 @@ export class CrowdCameras {
         this.persp.lookAt(this.look);
     }
 
+    /** Hold the top-down view over (x, z) at its current span: a top-down shot that follows someone. */
+    center(x: number, z: number, span = this.view.span): void {
+        this.view = { x, z, span };
+        this.applyTop();
+    }
+
     /** Leave follow for orbit around wherever the followed person was. */
     orbitFrom(target: THREE.Vector3 | null): void {
         if (target !== null) this.orbit.target.copy(target);

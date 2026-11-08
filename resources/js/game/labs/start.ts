@@ -16,6 +16,12 @@ export async function startLab(lab: Lab): Promise<void> {
         await startCrowd(lab);
         return;
     }
+    if (view === 'single' && lab.pathMode === true && new URLSearchParams(location.search).get('mode') === 'path') {
+        document.body.dataset.view = 'path';
+        const { startPath } = await import('./people/path.ts');
+        await startPath(lab);
+        return;
+    }
     if (view === 'placement') {
         const { startPlacement } = await import('./placement.ts');
         await startPlacement(lab);

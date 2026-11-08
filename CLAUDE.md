@@ -30,7 +30,7 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   incoming connections for `php` and `node` the first time. Two dev servers for one checkout fight
   over `public/hot`, which is why the other one has to stop.
 - **Tests:** `npm test` type-checks the engine and its tests, runs the Math.random check, and then
-  runs everything under `tests/js/` with `node --test` (253 tests). `npm run lint` is the first two
+  runs everything under `tests/js/` with `node --test` (266 tests). `npm run lint` is the first two
   on their own. `composer test` is the Laravel side: Pint, PHPStan and Pest (`tests/Feature/`,
   `tests/Unit/`), against SQLite in memory. Both are plain commands and both must pass.
 - **Node is pinned to 26.13.0** in `.nvmrc` (and `^26.13.0` in `package.json` `engines`). Herd's
@@ -243,9 +243,10 @@ The engine:
 - `tests/js/labs.test.ts` — the labs: that every family has a category and the labs partition the
   registry, that a model is a source of the thing it draws rather than a second thing in a picker,
   that every old `/play?inspect=` address lands in the right lab with its query intact, that a lab
-  stands only its own entities, that the lab shell reaches no entity, that an archetype mix
-  restating the archetypes' own weights spawns the identical crowd, and that every site the
-  placement view frames is one the world's own layer function built.
+  stands only its own entities, that the lab shell reaches no entity, that a behavior mix
+  restating the composition's own weights spawns the identical crowd, that every site the
+  placement view frames is one the world's own layer function built, and that the Individual view
+  offers every choice in order with the seed's roll first.
 - `tests/js/path.test.ts` — the path-coordinate convention, including the exactness today's straight,
   level, uniform-width path gives; that a bent centreline still measures along and across itself;
   and that a test-only curve which bends, widens and climbs puts edge elements and world heights
@@ -1657,45 +1658,72 @@ placement, and the archetype's `desc`) comes from `describe.ts` for everyone, so
 into two vocabularies.
 
 - **People, individual and row** — the person turntable, **drawn from the model only**, walking
-  (the walk clip is the default, as it is the game's normal gait): seed
-  stepping, archetype, age, build and mobility, walk, run (the steering's own `SPEED_CAP`) or idle, gait scrub and freeze, a held
-  angle, and `agent` (the spawn index) and `outfit` (a group's shared outfit), so any agent of any
-  seed stands on the turntable as the crowd built them. Collider and orientation overlays draw the
-  body the crowd steers (`Subject` mirrors `Agent`'s collider numbers; `inspect.test.ts` holds them
-  together). The model wears the recipe's age and build (see "Model
-  bodies"), and `compare=` chooses what the row stands side by side: `build` (the default: the five
-  Build presets exactly), `age` (the Age presets) or `models` (every model chosen by its `cmp-<name>` switch, at the same recipe,
-  presets, pose and camera). The card lists the body drawn against the presets' ask and the limits,
-  clips, color regions (false color, color, share, role), proposed accessory anchors by bone (drawn
-  as markers), triangles and bones, a table of every model's triangles, bones, file size, textures,
-  estimated texture memory and load time, and the torso's half width as drawn (girth and fullness)
-  against the collider radius; `crowd scale` fits the model as the model crowd does. Under the
-  model source the panel shows only what applies: mobility and accessories are listed under "not
-  yet available", disabled, with the reason (`Control.disabled` -- the panel doubles as the list of
-  what models lack, and an address cannot switch them on), and the primitives' part gizmos and part
-  origins are not offered (`Inspectable.universal`). Every person's card carries an **Archetype**
-  section in two groups -- behavior (spawn share, speed, acceleration, weaving, separation, player
-  avoidance, stops, groups, collider) and appearance (color family, age mix, height range, width,
-  accessories, hats, mobility-aid chances, the other parts, gait) -- read off `ARCH` as authored.
-  **Height** reads as its parts: `1.62 m = 1.87 skeleton × 0.91 height roll × 0.955 Older` for the
-  primitives, `1.70 m = 1.75 base × 0.97 Older × 1.00 recipe height` for a model. The **height
-  ruler** (`ruler`, `E`, on by default, a shell overlay every lab has) stands beside each exhibit,
-  ticked every 10 cm and labeled with its measured height, which is how the Age and Build rows read
-  each figure's height. A model's source and
-  license note is `MODEL_SOURCES` in `render/model-file.ts`; the license reads "not recorded" until
-  someone records it.
+  (the walk clip is the default, as it is the game's normal gait). **A control for every choice a
+  person is made of**, in the order a person is described: Model, Age, Build, Skin tone, Hair,
+  Clothing scheme, Behavior and Equipment, each with **Seed** first -- what the seed rolls for agent
+  N, exactly as the crowd rolls them (Model's Seed is the game's model for the class the person
+  needs). Choices with more options than fit on a row are dropdowns, and every option shows its
+  name (`Control.titles`); the clothing scheme lists Park Staff as "(uniform)". Equipment is listed
+  and greyed, "not yet supported on models", with the reason; so are accessories. Then seed
+  stepping, `agent` (the spawn index), the clip, freeze and phase, a held angle, so any agent of
+  any seed stands on the turntable as the crowd built them; a group follower's address carries the
+  family's shared scheme. Collider and orientation overlays draw the body the crowd steers
+  (`Subject` mirrors `Agent`'s collider numbers; `inspect.test.ts` holds them together).
+
+  **The card says what each choice contributes**: under **Choices**, each one with how it was
+  chosen (rolled by the seed, or in the lab), its share of the default crowd, and what it does to
+  this figure -- the model's age class, body type and triangles; the Age preset's height, width,
+  shoulders, head, legs and stoop (and Old graying the hair); the Build preset's width, shoulders,
+  limbs, fullness, face and neck; the skin tone's place on the ramp and the color it landed on; the
+  hair color; the clothing scheme's kind (pooled or uniform) and the color each clothing role got
+  on this model; the behavior in a line, and whether the game walks or runs them at their speed;
+  the equipment and that the game draws them as primitives. **Behavior** spells out the profile's
+  settings: speed, acceleration, weaving, separation, avoiding the player, stops, grouping,
+  collider and gait. **Clothing on <model>** lists every clothing role with its color (or that the
+  model has none), the scheme and its pool, which arrangement was taken, and the rules it meets (a
+  uniform's are waived). Then the body against the presets and limits, the rolls, geometry, the
+  model's clips, color regions, anchors and costs, provenance. A Darter shows on the adult model
+  with a note that it needs a child model, and the game's fallback is on any card it applies to.
+
+  `compare=` chooses what the row stands side by side: `build` (the default: the five Build
+  presets exactly), `age` (Young, Normal, Old) or `models` (every model chosen by its `cmp-<name>`
+  switch, at the same recipe, presets, pose and camera, with what each costs); `crowd scale` fits
+  the model as the model crowd does. The primitives' part gizmos and part origins are not offered
+  (`Inspectable.universal`). **Height** reads as its parts, `1.70 m = 1.75 base × 0.97 Old × 1.00
+  recipe height`, and the **height ruler** (`ruler`, `E`, on by default, a shell overlay every lab
+  has) stands beside each exhibit, ticked every 10 cm and labeled with its measured height. A
+  model's source and license note is `MODEL_SOURCES` in `render/model-file.ts`; the license reads
+  "not recorded" until someone records it.
+- **People, path mode** (`labs/people/path.ts`, `mode=path`; the lab bar's Stage | Path toggle in
+  the Individual view) — the same person, chosen by the same address, **walking a stretch of the
+  real promenade with their behavior**: built as an `Agent` through the spawner's constructor and
+  stepped by the crowd's own `Crowd.step` -- separation, player avoidance, the railings, the
+  furniture -- on the real walkway, from 30 m short of the middle to 30 m past it, among a few
+  Typical walkers (`walkers=`, six by default: half ahead going the same way, half coming the other)
+  so weaving and avoidance are visible. A Group Walker brings their family, a Darter their Typical
+  parent, as the spawner would; the scene restarts when they reach the far end. Overlays: **speed**
+  (a label over the head), **trail** (the route walked, colored from blue where slow against their
+  own pace to orange at it), **stops** (a ring wherever they stopped dead, sized by how long), and
+  **avoidance** (arrows for the separation, furniture and railing forces from the steering functions
+  themselves, and a line to every neighbor inside their separation radius). The camera follows them
+  (or holds a top-down shot over them, `cam=top`), with pause, step and ½×, ¼×, ⅒×. Deep-linkable:
+  the person's controls, `mode=path`, `speed`, `paused` with `at` (steps since the start), `walkers`,
+  `cam` and the overlays all live in the address. The card is the person's live state (speed
+  against their pace, place on the path, distance, stops, weaving, neighbors, the steering forces),
+  identity, choices and behavior. It builds its own `Crowd` and touches neither hash.
 - **People, crowd** (`labs/people/`) — a `Simulation` built, primed and stepped exactly as the game
   does between runs (the player idle on the start pad), in its own instance, drawn with the game's
-  world, people and shipped look. View settings: seed, crowd size and an archetype mix (spawn
-  weights, `mix=` in `ARCH_KEYS` order). Time: play, pause, one step, ½×, ¼×, ⅒×; a paused crowd
-  writes `at`, the steps since priming, so a link reopens the same moment. Cameras: orthographic
-  top-down (`top=`), free orbit (`orbit=`), and follow (`cam=follow&sel=`). Overlays: archetype
-  colors, colliders (furniture's too), separation radii, heading and velocity, the spatial grid
-  tinted by occupancy, group links. Statistics: people per archetype against the mix, density, the
-  fullest grid cell, stopped and standing, person-to-person contacts (the lab's own count of
-  touching collision circles; the game scores only player bumps) and the frame timings. Clicking a
-  person gives their live state (position, speed, heading, gait, wander and stop timers, group, and
-  the steering forces from the steering functions themselves) with follow and open-in-individual.
+  world, people (models, with the game's fallback) and shipped look. View settings: seed, crowd
+  size and a behavior mix (weights, `mix=` in `BEHAVIOR_KEYS` order). Time: play, pause, one step,
+  ½×, ¼×, ⅒×; a paused crowd writes `at`, the steps since priming, so a link reopens the same moment.
+  Cameras: orthographic top-down (`top=`), free orbit (`orbit=`), and follow (`cam=follow&sel=`).
+  Overlays: behavior colors, colliders (furniture's too), separation radii, heading and velocity,
+  the spatial grid tinted by occupancy, group links. Statistics: people per behavior against the
+  mix, density, the fullest grid cell, stopped and standing, person-to-person contacts (the lab's own
+  count of touching collision circles; the game scores only player bumps), how many are drawn as
+  primitives and why, and the frame timings. Clicking a person gives their live state (position,
+  speed, heading, gait, wander and stop timers, group, and the steering forces from the steering
+  functions themselves) with follow and open-in-individual.
 - **Fixtures and buildings, individual and row** — every type, seed stepping re-rolling the paint
   through the game's own rollers; the card adds the recipe (the roll's fork of the constant-seeded
   paint stream, the livery, each slot and its set), the footprint and collider (or its absence),
@@ -1705,10 +1733,11 @@ into two vocabularies.
   rhythm), its spots, its collider or gray footprint, its orientation, a path ruler, and a table of
   its neighbors. An entity says where it stands through `Inspectable.sites`.
 
-**The archetype mix is the one thing the labs add to the simulation**: `Simulation`'s optional
-`mix` changes only what the single spawn draw selects (`weightedType`). The game never passes one, a
-mix restating the archetypes' own weights spawns the identical crowd, and `tests/js/labs.test.ts`
-pins both.
+**The behavior mix is the one thing the labs add to the simulation**: `Simulation`'s optional
+`mix` changes only what each person's behavior roll selects, never how many rolls are taken. The
+game never passes one, a mix restating the composition's own weights spawns the identical crowd, and
+`tests/js/labs.test.ts` pins both. (Path mode adds nothing to the simulation: it places a few
+`Agent`s of its own and steps them with the crowd's own code.)
 
 **Adding an entity type to a lab** is the inspector's two steps, and the lab follows from them:
 
@@ -1897,8 +1926,9 @@ game's -- rolled exactly as the crowd rolls agent N of the seed, and shaped by t
 **People are drawn with models by default** in the game (`?people=model` or nothing), and **only**
 with models in the people lab. The primitive people are kept as the game's
 fallback: `?people=prim` for everyone, and always for the player, for
-anyone whose recipe carries a **mobility aid or a stroller** (`drawsAsPrimitive` in
-`modelcrowd/body.ts`), and for the whole crowd if the model fails to load.
+anyone with **equipment** -- a stroller, a wheelchair, a scooter or a cane -- for **Darters**, who
+need a child model and have none yet (the crowd's model's body file says which age class it is), and
+for the whole crowd if the model fails to load (`drawsAsPrimitive` in `modelcrowd/body.ts`).
 
 The mobility fallback exists because what you see has to match what you collide with: a
 wheelchair, a scooter, a cane or a stroller widens a person's collider for the equipment, and a
@@ -1906,7 +1936,10 @@ model drawn without the equipment would be someone you bump into half a meter be
 them. Until models carry it, those people are primitives. It is flagged, not hidden: the cost
 readout (`?people=` or a stress run) and the crowd view's statistics count them ("as primitives"),
 and the lab says so on any such person it shows -- the person's card and a crowd selection
-both. The crowd view draws the fallback exactly as the game does, so it shows what the game shows. Expect about a fifth of a crowd: 17 of 80 and 37 of 190 at the stress seed.
+both. The crowd view draws the fallback exactly as the game does, so it shows what the game shows.
+The readout splits the count: at the stress seed, primed, 18 of 81 (11 with equipment and 7
+Darters) and 49 of 191 (30 and 19) -- a quarter of the crowd, up from 14 of 80 and 34 of 190 before
+Darters fell back. A child model takes the Darters back.
 
 The cost readout is on screen only under `?people=` or a stress run, and kept either way as
 `game.people` for the bench scripts. The scripts default to models too: `stress-headless.mjs` and

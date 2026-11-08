@@ -11,7 +11,8 @@
  *
  * - **family** -- the structural kind of thing it is.
  * - **type** -- the archetype: the fixed form and identity. Type fixes form; the recipe rolls only
- *   colour, which is the rule `makeRecipe` and `structurePaint` already keep.
+ *   colour, which is the rule `structurePaint` keeps. For a person the type is their behavior
+ *   profile (`behaviors.ts`): how they look is a set of independent choices, never the type.
  * - **properties** -- the behaviour and capability traits *behaviour queries*, never the type.
  * - **placement** -- how it comes to be somewhere.
  *
@@ -21,7 +22,7 @@
  * deliberately no function anywhere that maps a type to its properties**: a `propertiesFor(type)`
  * helper would be exactly the weld the split exists to prevent.
  *
- * **This file imports nothing, and that is load-bearing.** It is read by `archetypes.ts`, by
+ * **This file imports nothing, and that is load-bearing.** It is read by `behaviors.ts`, by
  * `world/`, by `sim/` and by `inspect/`, and the simulation's purity boundary means anything it
  * pulled in would come with it. `tests/js/taxonomy.test.ts` pins it.
  */

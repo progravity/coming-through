@@ -12,7 +12,7 @@ const SAMPLES = 48;
 const _w = newWorldPoint();
 
 /**
- * Toggleable top-down 2D overlay: the whole path, every agent as a dot in its archetype colour,
+ * Toggleable top-down 2D overlay: the whole path, every agent as a dot in its behavior's colour,
  * its separation radius as a circle, its collision circle, heading, and the player.
  */
 export class DebugOverlay {

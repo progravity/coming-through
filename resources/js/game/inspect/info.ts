@@ -17,9 +17,9 @@ import type { InfoCell, InfoRow, InfoSection, InfoTable, Readout, SectionId } fr
  * The shared headings, in the order a reader looks for them. Live state leads when there is any:
  * someone picked out of a running crowd is read for what they are doing before who they are.
  */
-export const SECTION_ORDER: readonly SectionId[] = ['state', 'identity', 'choices', 'behavior', 'recipe', 'geometry', 'model', 'provenance', 'cost'];
+export const SECTION_ORDER: readonly SectionId[] = ['state', 'identity', 'choices', 'behavior', 'clothing', 'recipe', 'geometry', 'model', 'provenance', 'cost'];
 export const SECTION_TITLES: Readonly<Record<SectionId, string>> = {
-    identity: 'Identity', choices: 'Choices', behavior: 'Behavior', state: 'Live state', recipe: 'Recipe', geometry: 'Geometry',
+    identity: 'Identity', choices: 'Choices', behavior: 'Behavior', clothing: 'Clothing', state: 'Live state', recipe: 'Recipe', geometry: 'Geometry',
     model: 'Model', provenance: 'Provenance', cost: 'Rendering cost',
 };
 

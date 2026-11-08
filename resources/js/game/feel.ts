@@ -1,7 +1,7 @@
 /**
  * Every number that decides how the PLAYER feels, in one file, because they are playtest-tuned and
  * are always retuned against each other rather than one at a time. Nothing here is a fact about the
- * world or the crowd -- those are `layout.ts` and `archetypes.ts` -- and nothing here is read by
+ * world or the crowd -- those are `layout.ts`, `behaviors.ts` and `composition.ts` -- and nothing here is read by
  * anyone in the crowd. This is the arcade dial.
  *
  * The direction is arcade, not simulator: press and you are moving, release and you are stopped,

@@ -130,25 +130,49 @@ function equipmentShare(r: Recipe): string {
     return `${shareOf(COMPOSITION.equipment, r.equipment)} of everyone not pushing a stroller`;
 }
 
+/** What the card says about each choice beyond its value: what it contributes to this figure. */
+export type Contributions = Partial<Record<keyof Choices | 'model', string>>;
+
+export interface ChoicesOptions {
+    /** Which choices the lab forced rather than the seed rolled. */
+    forced?: Chosen;
+    /** The model the person is drawn from, when there is one, and how it was chosen. */
+    model?: { name: string; by: string };
+    contributes?: Contributions;
+}
+
+/** What a behavior does, in a line: the card's summary of the profile the Behavior section spells out. */
+export function behaviorLine(B: Behavior): string {
+    return [
+        `${range(B.speed, ' m/s')}`,
+        B.wander === 0 ? 'holds its line' : `weaves ×${B.wander}`,
+        `avoids you ×${B.avoidPlayer}`,
+        B.stopEvery !== undefined ? `stops every ${range(B.stopEvery, ' s')}` : 'never stops',
+        B.group !== undefined ? `in a group of ${range(B.group)}` : B.parentType !== undefined ? `beside a ${BEHAVIORS[B.parentType].name} parent` : 'alone',
+    ].join(', ');
+}
+
 /**
- * Every choice this person is made of, what it contributes, and how often the default crowd makes
- * the same one. `forcedBy` marks the choices the lab forced rather than the seed rolled.
+ * Every choice this person is made of -- model, age, build, skin tone, hair, clothing scheme,
+ * behavior, equipment -- how it was chosen, how often the default crowd makes the same one, and what
+ * it contributes to the figure on stage.
  */
-export function personChoices(w: Who, forcedBy: Chosen = {}, extra: readonly InfoRow[] = []): InfoSection {
-    const r = w.recipe, B = w.profile;
+export function personChoices(w: Who, o: ChoicesOptions = {}): InfoSection {
+    const r = w.recipe, B = w.profile, forcedBy = o.forced ?? {}, add = o.contributes ?? {};
     const by = (k: keyof Choices): string => (forcedBy[k] === true ? 'chosen in the lab' : 'rolled by the seed');
+    const more = (k: keyof Contributions): string => (add[k] === undefined ? '' : ` · ${add[k]}`);
     const tone = skinToneNamed(r.skinTone), hair = hairNamed(r.hairTone);
     const rows: InfoRow[] = [
-        { k: 'behavior', v: `${B.name} · ${by('behavior')} · ${shareOf(COMPOSITION.behavior, r.behavior)} of the crowd · speed ${range(B.speed, ' m/s')}` },
+        ...(o.model === undefined ? [] : [{ k: 'model', v: `${o.model.name} · ${o.model.by}${more('model')}` }]),
         { k: 'model class', v: r.modelClass === 'adult' ? 'adult' : `${r.modelClass}: a ${B.name} needs a ${r.modelClass} model` },
-        { k: 'age', v: `${title(r.age)} · ${by('age')} · ${shareOf(COMPOSITION.age, r.age)}${r.age === 'old' ? ' · grays the hair' : ''}` },
-        { k: 'build', v: `${title(r.build)} · ${by('build')} · ${shareOf(COMPOSITION.build, r.build)} · width ${n2(r.w)}` },
-        { k: 'skin tone', color: r.skin, v: `${tone.name} · ${by('skinTone')} · ${shareOf(COMPOSITION.skinTone, r.skinTone)} · ${n2(skinAt(r.skinTone, 0.5))} on the ramp, this one ${hexOf(r.skin)}` },
-        { k: 'hair', color: r.hairColor, v: `${hair.name}${r.age === 'old' ? ', grayed with age' : ''} · ${by('hairTone')} · ${shareOf(COMPOSITION.hair, r.hairTone)}` },
-        { k: 'clothing scheme', v: schemeLine(r, by('scheme')) },
-        ...extra,
-        { k: 'equipment', v: r.equipment === 'none' ? `none · ${by('equipment')}`
-            : `${r.equipment} · ${by('equipment')} · ${equipmentShare(r)} · speed ×${n2(r.motion.speed)}, turn ×${n2(r.motion.turn)}, collider ×${n2(r.motion.radius)}` },
+        { k: 'age', v: `${title(r.age)} · ${by('age')} · ${shareOf(COMPOSITION.age, r.age)}${r.age === 'old' ? ' · grays the hair' : ''}${more('age')}` },
+        { k: 'build', v: `${title(r.build)} · ${by('build')} · ${shareOf(COMPOSITION.build, r.build)} · width ${n2(r.w)}${more('build')}` },
+        { k: 'skin tone', color: r.skin, v: `${tone.name} · ${by('skinTone')} · ${shareOf(COMPOSITION.skinTone, r.skinTone)} · ${n2(skinAt(r.skinTone, 0.5))} on the ramp, this one ${hexOf(r.skin)}${more('skinTone')}` },
+        { k: 'hair', color: r.hairColor, v: `${hair.name}${r.age === 'old' ? ', grayed with age' : ''} · ${by('hairTone')} · ${shareOf(COMPOSITION.hair, r.hairTone)}${more('hairTone')}` },
+        { k: 'clothing scheme', v: `${schemeLine(r, by('scheme'))}${more('scheme')}` },
+        { k: 'behavior', v: `${B.name} · ${by('behavior')} · ${shareOf(COMPOSITION.behavior, r.behavior)} of the crowd · ${behaviorLine(B)}${more('behavior')}` },
+        { k: 'equipment', v: (r.equipment === 'none' ? `none · ${by('equipment')}`
+            : `${r.equipment} · ${by('equipment')} · ${equipmentShare(r)} · speed ×${n2(r.motion.speed)}, turn ×${n2(r.motion.turn)}, collider ×${n2(r.motion.radius)}`) + more('equipment') },
     ];
     return { id: 'choices', rows, note: 'Each choice is rolled from this person\'s recipe fork, in a fixed order, against its weight in composition.ts.' };
 }
@@ -175,7 +199,7 @@ export function primitiveRoles(r: Recipe): ClothingRole[] {
  * The colors a scheme put on each clothing role, for the card: one row per role the figure has,
  * then the arrangement, how many were looked at to find it, and the rules it meets.
  */
-export function clothingSection(r: Recipe, d: Dressed, roles: readonly ClothingRole[], on: string): InfoSection {
+export function clothingSection(r: Recipe, d: Dressed, roles: readonly ClothingRole[], on: string, aside = ''): InfoSection {
     const s = schemeNamed(r.scheme);
     const rows: InfoRow[] = CLOTHING_ROLES.map(role => {
         const c = d.colors[role];
@@ -190,9 +214,9 @@ export function clothingSection(r: Recipe, d: Dressed, roles: readonly ClothingR
         rows.push({ k: 'rules', v: d.broken.length === 0 ? 'all met: tops and bottoms contrast, footwear differs from the bottoms or is neutral, the accessory differs from the top, headwear from the hair, nothing near the skin' : `broken: ${d.broken.join('; ')}` });
     } else rows.push({ k: 'rules', v: 'waived: a uniform is never altered for anyone' });
     return {
-        id: 'recipe', title: `Clothing on ${on}`,
+        id: 'clothing', title: `Clothing on ${on}`,
         rows,
-        note: `Distances in palette.ts's apart(): tops and bottoms ${RULES.topsBottoms}, footwear ${RULES.footwearBottoms}, accessory ${RULES.accessoryTop}, headwear ${RULES.headwearHair}, skin ${RULES.skin}.`,
+        note: `${aside === '' ? '' : `${aside} `}Distances in palette.ts's apart(): tops and bottoms ${RULES.topsBottoms}, footwear ${RULES.footwearBottoms}, accessory ${RULES.accessoryTop}, headwear ${RULES.headwearHair}, skin ${RULES.skin}.`,
     };
 }
 
@@ -231,8 +255,15 @@ export function primitiveHeight(r: Recipe): string {
     return `${n2(standingHeight(r))} m = ${n2(unit)} skeleton × ${n2(roll)} height roll × ${n2(fig)} ${title(figureName(r))}`;
 }
 
-/** Every rolled value, with the seed and the fork that rolled it. */
-export function personRecipe(w: Who, note = ''): InfoSection {
+/** The rows of the recipe only the primitive figure draws: its own clothing and parts. */
+const PRIMITIVE_ONLY = new Set(['tops', 'bottoms', 'footwear', 'headwear', 'glasses', 'jacket', 'bag', 'carrying', 'head', 'limb']);
+
+/**
+ * Every rolled value, with the seed and the fork that rolled it. `figure` is what it is drawn as: a
+ * model takes the person's colors and body from the recipe but none of the primitives' own parts,
+ * so those rows are left off its card.
+ */
+export function personRecipe(w: Who, note = '', figure: 'primitives' | 'model' = 'primitives'): InfoSection {
     const r = w.recipe;
     const rows: InfoRow[] = [
         { k: 'seed', v: String(w.seed), mono: true },
@@ -260,7 +291,8 @@ export function personRecipe(w: Who, note = ''): InfoSection {
         { k: 'gait', v: `bob ${n2(r.gait.bob)} · stride ${n2(r.gait.stride)} · cadence ${n2(r.gait.cadence, 1)} · arm ${n2(r.gait.arm)} · limp ${n2(r.gait.limp)}` },
         { k: 'motion', v: `speed ×${n2(r.motion.speed)} · turn ×${n2(r.motion.turn)} · accel ×${n2(r.motion.accel)} · radius ×${n2(r.motion.radius)} · offset ${n2(r.motion.colOffset)} m` },
     ];
-    return { id: 'recipe', rows, ...(note === '' ? {} : { note }) };
+    const shown = figure === 'model' ? rows.filter(r => !PRIMITIVE_ONLY.has(r.k)).map(r => (r.k === 'hair' ? { ...r, v: '' } : r)) : rows;
+    return { id: 'recipe', title: 'Rolls', rows: shown, ...(note === '' ? {} : { note }) };
 }
 
 /**
@@ -452,9 +484,9 @@ class PersonCast implements Cast {
     constructor(scene: THREE.Scene) { this.scene = scene; this.pools = new RecordingPools(scene); }
 
     /**
-     * Build the cast. With no archetype pinned, the row shows one of each so cross-character
-     * consistency can be judged at a glance, while the single view takes the archetype the seed
-     * hashes to. Each figure is agent N of the seed -- `agent` onward -- so it has its own fork.
+     * Build the cast. With no behavior pinned, the row shows one of each so cross-character
+     * consistency can be judged at a glance, while the single view takes the behavior the seed
+     * rolls. Each figure is agent N of the seed -- `agent` onward -- so it has its own fork.
      */
     rebuild(seed: number, count: number, c: Controls): void {
         this.c = c;
@@ -567,7 +599,7 @@ class PersonCast implements Cast {
             line: `${scheme} · ${r.age}${aid} · ${top.toFixed(2)}m`,
             sections: [
                 personIdentity(s),
-                personChoices(s, chosenBy(overridesOf(this.c))),
+                personChoices(s, { forced: chosenBy(overridesOf(this.c)) }),
                 personBehavior(s),
                 clothingSection(r, dress(r.scheme, r.arrange, r.skin, r.hairColor, roles, PRIMITIVE_SALT), roles, 'the primitive figure'),
                 personRecipe(s),
@@ -585,16 +617,26 @@ class PersonCast implements Cast {
     }
 }
 
+/** What a choice's options are called on screen: their names, and "Seed" for what the seed rolls. */
+const titled = (options: readonly string[], name: (k: string) => string): Readonly<Record<string, string>> =>
+    Object.fromEntries(options.map(o => [o, o === 'seed' ? 'Seed' : name(o)]));
+const words = (k: string): string => k.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+
 /** The controls that say which person: every choice, each with "seed" for what the seed rolls. */
 export const PERSON_CONTROLS = {
-    behavior: { kind: 'enum', id: 'behavior', label: 'behavior', options: BEHAVIOR_OPTIONS, value: 'seed', key: 't', rebuilds: true },
-    age: { kind: 'enum', id: 'age', label: 'age', options: AGE_OPTIONS, value: 'seed', key: 'a', rebuilds: true },
-    build: { kind: 'enum', id: 'build', label: 'build', options: BUILD_OPTIONS, value: 'seed', key: 'b', rebuilds: true },
-    skin: { kind: 'enum', id: 'skin', label: 'skin tone', options: SKIN_OPTIONS, value: 'seed', rebuilds: true },
-    hair: { kind: 'enum', id: 'hair', label: 'hair', options: HAIR_OPTIONS, value: 'seed', rebuilds: true },
-    equipment: { kind: 'enum', id: 'equipment', label: 'equipment', options: EQUIPMENT_OPTIONS, value: 'seed', key: 'm', rebuilds: true },
+    behavior: { kind: 'enum', id: 'behavior', label: 'behavior', options: BEHAVIOR_OPTIONS, value: 'seed', key: 't', rebuilds: true,
+        titles: titled(BEHAVIOR_OPTIONS, k => BEHAVIORS[k as BehaviorKey].name) },
+    age: { kind: 'enum', id: 'age', label: 'age', options: AGE_OPTIONS, value: 'seed', key: 'a', rebuilds: true, titles: titled(AGE_OPTIONS, words) },
+    build: { kind: 'enum', id: 'build', label: 'build', options: BUILD_OPTIONS, value: 'seed', key: 'b', rebuilds: true, titles: titled(BUILD_OPTIONS, words) },
+    skin: { kind: 'enum', id: 'skin', label: 'skin tone', options: SKIN_OPTIONS, value: 'seed', rebuilds: true,
+        titles: titled(SKIN_OPTIONS, k => skinToneNamed(k as Parameters<typeof skinToneNamed>[0]).name) },
+    hair: { kind: 'enum', id: 'hair', label: 'hair', options: HAIR_OPTIONS, value: 'seed', rebuilds: true,
+        titles: titled(HAIR_OPTIONS, k => hairNamed(k as Parameters<typeof hairNamed>[0]).name) },
+    equipment: { kind: 'enum', id: 'equipment', label: 'equipment', options: EQUIPMENT_OPTIONS, value: 'seed', key: 'm', rebuilds: true, titles: titled(EQUIPMENT_OPTIONS, words) },
     agent: { kind: 'number', id: 'agent', label: 'spawn index', value: 0, min: 0, max: 99999, rebuilds: true },
-    scheme: { kind: 'enum', id: 'scheme', label: 'clothing scheme', options: SCHEME_OPTIONS, value: 'seed', rebuilds: true },
+    // A uniform says so on the control: it is assigned, never something a seed rolls.
+    scheme: { kind: 'enum', id: 'scheme', label: 'clothing scheme', options: SCHEME_OPTIONS, value: 'seed', rebuilds: true,
+        titles: titled(SCHEME_OPTIONS, k => { const s = schemeNamed(k as Parameters<typeof schemeNamed>[0]); return s.kind === 'uniform' ? `${s.name} (uniform)` : s.name; }) },
 } as const;
 
 export const PERSON: Inspectable = {

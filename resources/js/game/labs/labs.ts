@@ -37,6 +37,11 @@ export interface Lab extends Scope {
     /** The page's own path, as `routes/web.php` names it. */
     path: string;
     views: readonly LabView[];
+    /**
+     * Whether the Individual view can also walk its subject along the promenade (`mode=path`): the
+     * people lab's can, since a person's behavior is only visible in motion among others.
+     */
+    pathMode?: boolean;
 }
 
 const entitiesOf = (c: Category): Inspectable[] => ENTITIES.filter(e => CATEGORY_OF[e.family] === c);
@@ -49,7 +54,7 @@ const modelsOf = (c: Category): Inspectable[] =>
 
 export const LABS: Readonly<Record<Category, Lab>> = {
     // People are models here and nowhere else primitives: the game keeps them only as its fallback.
-    people: { id: 'people', title: 'People', path: `${LAB_ROOT}/people`, entities: modelsOf('people'), views: ['single', 'row', 'crowd'], modelsOnly: true },
+    people: { id: 'people', title: 'People', path: `${LAB_ROOT}/people`, entities: modelsOf('people'), views: ['single', 'row', 'crowd'], modelsOnly: true, pathMode: true },
     fixtures: { id: 'fixtures', title: 'Fixtures', path: `${LAB_ROOT}/fixtures`, entities: entitiesOf('fixtures'), views: ['single', 'row', 'placement'] },
     buildings: { id: 'buildings', title: 'Buildings', path: `${LAB_ROOT}/buildings`, entities: entitiesOf('buildings'), views: ['single', 'row', 'placement'] },
 };

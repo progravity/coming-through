@@ -65,7 +65,7 @@ export class Rng {
 
 /** The named streams every run is built from. See CLAUDE.md for what each one may be used for. */
 export interface Streams {
-    /** Which archetype spawns, where and when. */
+    /** Where and when people spawn. (Who they are is each person's recipe fork, behavior first.) */
     spawn: Rng;
     /** Appearance and gait rolls. */
     recipe: Rng;

@@ -1,6 +1,6 @@
 /**
  * Everything the crowd view draws over the crowd: colliders, separation radii, heading and velocity,
- * the spatial grid and how full each cell is, group links, a disc in each person's archetype color,
+ * the spatial grid and how full each cell is, group links, a disc in each person's behavior color,
  * the furniture's own colliders, and a ring round whoever is selected.
  *
  * All of it reads the same interpolated poses the renderer reads and the simulation's own numbers

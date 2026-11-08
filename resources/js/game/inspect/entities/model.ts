@@ -32,17 +32,19 @@ import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { SIM_DT } from '../../core/time.ts';
 import { figureHeight } from '../../recipe.ts';
+import { hairNamed, schemeNamed, skinToneNamed } from '../../wardrobe.ts';
 import type { Age } from '../../recipe.ts';
 import type { Look } from '../../render/look.ts';
 import { makeToonGradient } from '../../render/materials.ts';
 import { MODELS, MODEL_DIR as DIR, MODEL_SOURCES, fetchModel } from '../../render/model-file.ts';
 import { standingHeight } from '../../render/person.ts';
 import {
-    AGES, BODY_KEYS, BUILDS, BodyRig, CHILD_NOTE, LIMITS, NOT_ON_MODELS, bakeMask,
+    AGES, AGE_PRESETS, BODY_KEYS, BUILDS, BUILD_PRESETS, BodyRig, CHILD_NOTE, LIMITS, NOT_ON_MODELS, bakeMask,
     drawnHeight, fetchBodyFile, modelFallback, patchFullness, shape, skinSpace,
 } from '../../modelcrowd/body.ts';
 import type { Body, BodyFile, FullnessUniforms, Limits, Shaped } from '../../modelcrowd/body.ts';
-import { falseHex, personColours, prepareRegions } from '../../modelcrowd/regions.ts';
+import { RUN_ON } from '../../modelcrowd/crowd.ts';
+import { dressOn, falseHex, personColours, prepareRegions } from '../../modelcrowd/regions.ts';
 import type { RegionUniforms, Regions } from '../../modelcrowd/regions.ts';
 import { count, n2 } from '../describe.ts';
 import { RULER, defaultControls } from '../inspectable.ts';
@@ -50,7 +52,8 @@ import type { Cast, Control, Controls, DrawnPart, InfoCell, InfoRow, InfoSection
 import { disposeMarks, dot } from '../markers.ts';
 import type { Subject } from '../subject.ts';
 import {
-    COLLIDER, FACING, PERSON, PERSON_CONTROLS, PersonMarks, chosenBy, overridesOf, personLegacy, personBehavior, personChoices, personGeometry, personIdentity, personRecipe, subjectFor,
+    COLLIDER, FACING, PERSON, PERSON_CONTROLS, PersonMarks, chosenBy, clothingSection, overridesOf, personLegacy, personBehavior, personChoices,
+    personGeometry, personIdentity, personRecipe, subjectFor,
 } from './person.ts';
 
 /** The clip option meaning no clip at all: the file's rest pose, which for a rig is usually a T. */
@@ -198,10 +201,22 @@ const models = new Map<string, Model>();
 const failures = new Map<string, string>();
 
 const names = Object.keys(MODELS);
+/**
+ * Which model the person is drawn from. "Seed" is the game's own answer: the crowd's model, or --
+ * for a person who needs another class, a Darter needing a child -- the first model of that class,
+ * which today does not exist, so the crowd's model stands in and the card says why.
+ */
 const modelControl: Control = {
     kind: 'enum', id: 'model', label: 'model',
-    options: names.length > 0 ? names : ['none'], value: names[0] ?? 'none', key: 'm', rebuilds: true,
+    options: ['seed', ...names], value: 'seed', key: 'm', rebuilds: true,
+    titles: { seed: "Seed (the game's model)" },
 };
+
+/** The model the game would draw this person from: the first of the class they need, else the first. */
+function gameModelFor(who: Subject): { name: string; found: boolean } {
+    const of = names.find(n => (models.get(n)?.body.ageClass ?? 'adult') === who.recipe.modelClass);
+    return { name: of ?? names[0] ?? 'none', found: of !== undefined };
+}
 /**
  * The clip names are the file's, so this control is only complete once `load` has run: it starts as
  * the rest pose alone and `adopt` fills it in. A clip change rebuilds, because a run is a wider
@@ -508,6 +523,8 @@ class ModelCast implements Cast {
     private c: Controls = {};
     /** The person the model is drawn as: rolled exactly as the crowd rolls agent N of the seed. */
     private who: Subject | null = null;
+    /** The model the person is drawn from, and how it was chosen. */
+    private chosenModel = { name: '', by: '' };
     private active: ReadonlySet<string> = new Set();
 
     constructor(scene: THREE.Scene) {
@@ -525,7 +542,12 @@ class ModelCast implements Cast {
         this.who = who;
         const r = who.recipe;
         const mode = (count > 1 ? c.compare ?? 'build' : 'single') as Compare | 'single';
-        const name = String(c.model);
+        // "Seed" is the model the game would draw this person from.
+        const game = gameModelFor(who);
+        const name = String(c.model) === 'seed' ? game.name : String(c.model);
+        this.chosenModel = String(c.model) !== 'seed' ? { name, by: 'chosen in the lab' }
+            : game.found ? { name, by: "the game's model for them" }
+            : { name, by: `the game has no ${r.modelClass} model, so the crowd's stands in` };
         // The Build preset exactly, as the crowd shapes it: the choice is the preset.
         const pos = BUILDS.indexOf(r.build);
         const specs: Spec[] =
@@ -634,24 +656,46 @@ class ModelCast implements Cast {
         const height = `${n2(m.restHeight * body.height * f.recipeHeight)} m = ${n2(m.restHeight)} base × ${n2(body.height)} ${title(f.shaped.shown)}`
             + ` × ${n2(f.recipeHeight)} recipe height${this.c.fit === true ? '' : ' (crowd scale off)'}`;
         const fallback = modelFallback(who.recipe, m.body.ageClass);
+        const r = who.recipe;
+        // The person's scheme arranged on this model's own clothing roles, as the crowd paints it.
+        const paint = m.regions?.paint ?? null;
+        const roles = paint?.clothing ?? [];
+        const dressed = dressOn(r, roles, paint?.salt ?? 0);
+        const a = AGE_PRESETS[r.age], b = BUILD_PRESETS[r.build];
+        const pace = who.speed;
+        const contributes = {
+            model: `age class ${m.body.ageClass} · ${m.body.type} body · ${count(m.triangles)} triangles`,
+            age: `height ×${n2(a.height)}, width ×${n2(a.width)}, shoulders ×${n2(a.shoulders)}, head ×${n2(a.head)}, legs ×${n2(a.legs)}, stoop ${n2(a.stoop * 180 / Math.PI, 0)}°`,
+            build: `width ×${n2(b.width)}, shoulders ×${n2(b.shoulders)}, limbs ×${n2(b.limbs)}, fullness ${n2(b.fullness * 100, 1)}%, face ${n2(b.face * 100, 2)}%, neck ×${n2(b.neck)}`,
+            scheme: roles.length === 0 ? 'this model has no clothing roles to paint'
+                : roles.map(role => `${role} #${(dressed.colors[role] ?? 0).toString(16).padStart(6, '0')}`).join(', '),
+            behavior: pace > RUN_ON ? `at ${n2(pace)} m/s the game runs them (above ${RUN_ON} m/s)` : `at ${n2(pace)} m/s the game walks them`,
+            ...(r.equipment === 'none' ? {} : { equipment: `${NOT_ON_MODELS}: the game draws this person as primitives` }),
+        };
         return {
             title: f.spec.exact === null ? name : `${f.spec.label}`,
             sub: `${name} · as ${who.profile.name} · seed ${who.seed} · agent:${who.index}`,
             rows: [
+                ['person', [who.profile.name, title(r.age), title(r.build), skinToneNamed(r.skinTone).name, `${hairNamed(r.hairTone).name} hair`, schemeNamed(r.scheme).name].join(' · ')],
                 ['height', height],
                 ['body', `${title(f.shaped.shown)}${child ? ' (a child, on an adult model)' : ''} · ${buildLabel(f.spec)}`],
-                ...(fallback === null ? [] : [['in the game', `${fallback}; its collider is sized for the equipment`] as const]),
+                ...(fallback === null ? [] : [['in the game', `${fallback}${r.equipment !== 'none' ? '; its collider is sized for the equipment' : ''}`] as const]),
                 ['clip', playing],
                 ['mesh', `${count(m.triangles)} triangles · ${m.bones} bones`],
                 ...(f.shaped.held.length > 0 ? [['held back', f.shaped.held.map(h => h.key).join(', ')] as const] : []),
             ],
-            line: `${f.spec.label} · ${n2(m.restHeight * body.height * f.recipeHeight)} m · w ${n2(body.width)} · full ${n2(body.fullness * 100, 1)}%${f.shaped.held.length > 0 ? ' · held' : ''}${childNote === '' ? '' : ' · teen body'}`,
+            swatches: [['skin', r.skin] as const, ['hair', r.hairColor] as const, ...roles.flatMap(role => {
+                const c = dressed.colors[role];
+                return c === undefined ? [] : [[role, c] as const];
+            })],
+            line: `${f.spec.label} · ${n2(m.restHeight * body.height * f.recipeHeight)} m · w ${n2(body.width)} · full ${n2(body.fullness * 100, 1)}%${f.shaped.held.length > 0 ? ' · held' : ''}${childNote}`,
             sections: [
                 personIdentity(who),
-                personChoices(who, chosenBy(overridesOf(this.pc))),
+                personChoices(who, { forced: chosenBy(overridesOf(this.pc)), model: this.chosenModel, contributes }),
                 personBehavior(who),
+                clothingSection(r, dressed, roles, name, this.c.recolour === true ? '' : 'Recipe colors are off: the model shows its own texture.'),
                 bodySection(f, who, top),
-                personRecipe(who, this.c.recolour === true ? 'The model is painted in these colors through its role file.' : 'Recipe colors are off: the model shows its own texture.'),
+                personRecipe(who, '', 'model'),
                 personGeometry(who, { top, height, ...(f.torso === undefined ? {} : { torso: f.torso }) }),
                 model,
                 provenance,
@@ -838,7 +882,14 @@ export const MODEL: Inspectable = {
     // The panel prints this over the seed box. The seed chooses the person the model is drawn as.
     title: 'Person',
     controls: [
+        // Every choice a person is made of, in the order a person is described: model, age, build,
+        // skin tone, hair, clothing scheme, behavior, equipment -- each with Seed for what the seed rolls.
         modelControl,
+        PERSON_CONTROLS.age, PERSON_CONTROLS.build, PERSON_CONTROLS.skin, PERSON_CONTROLS.hair, PERSON_CONTROLS.scheme,
+        PERSON_CONTROLS.behavior,
+        // Listed and greyed rather than hidden: the panel is also the list of what models still lack.
+        { ...equipment, disabled: `strollers, wheelchairs, scooters and canes: ${NOT_ON_MODELS}; the game draws their users as primitives` },
+        { kind: 'toggle', id: 'accessories', label: 'accessories', value: false, disabled: `hats, glasses, bags and carried things: ${NOT_ON_MODELS}` },
         // What the row stands side by side: see the file comment. Single view is always the one figure.
         { kind: 'enum', id: 'compare', label: 'row compares', options: COMPARE, value: 'build', key: 'v', rebuilds: true },
         clipControl,
@@ -853,10 +904,6 @@ export const MODEL: Inspectable = {
         // Scaled to the recipe's standing height, as the model crowd scales a clone.
         { kind: 'toggle', id: 'fit', label: 'crowd scale', value: false, key: 'k', rebuilds: true },
         ...compareControls,
-        PERSON_CONTROLS.behavior, PERSON_CONTROLS.age, PERSON_CONTROLS.build, PERSON_CONTROLS.skin, PERSON_CONTROLS.hair,
-        // Listed and greyed rather than hidden: the panel is also the list of what models still lack.
-        { ...equipment, disabled: `strollers, wheelchairs, scooters and canes: ${NOT_ON_MODELS}; the game draws their users as primitives` },
-        { kind: 'toggle', id: 'accessories', label: 'accessories', value: false, disabled: `hats, glasses, bags and carried things: ${NOT_ON_MODELS}` },
         PERSON_CONTROLS.agent,
     ],
     overlays: MODEL_OVERLAYS,

@@ -274,6 +274,15 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
             if (src === 'model') { const m = modelOf(primary); if (m !== undefined) setEntity(m.id); }
             else setEntity(primary);
         },
+        // A lab with path mode walks whoever is on stage along the promenade: a page of its own.
+        mode: 'stage',
+        onMode: m => {
+            if (m !== 'path') return;
+            const q = queryOf({ ...state, mode: 'single' }, entity, lab);
+            q.delete('view');
+            q.set('mode', 'path');
+            location.href = `${lab.path}?${q}`;
+        },
     });
 
     const panel = new Panel({

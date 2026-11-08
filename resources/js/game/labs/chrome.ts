@@ -15,6 +15,10 @@
 import type { Lab, LabView, Source } from './labs.ts';
 import { VIEW_TITLES } from './labs.ts';
 
+/** How the Individual view shows its subject: on the stage, or walking the promenade (`Lab.pathMode`). */
+export type IndividualMode = 'stage' | 'path';
+const MODE_TITLES: Readonly<Record<IndividualMode, string>> = { stage: 'Stage', path: 'Path' };
+
 export interface ChromeOptions {
     lab: Lab;
     view: LabView;
@@ -23,6 +27,9 @@ export interface ChromeOptions {
     modelBlocked: string | null;
     onView(v: LabView): void;
     onSource(s: Source): void;
+    /** The Individual view's mode, in a lab that has path mode; leave both out anywhere else. */
+    mode?: IndividualMode;
+    onMode?(m: IndividualMode): void;
 }
 
 function segmented<T extends string>(label: string, options: readonly T[], titles: Readonly<Record<T, string>>,
@@ -48,6 +55,8 @@ const SOURCE_TITLES: Readonly<Record<Source, string>> = { primitives: 'Primitive
 export class LabChrome {
     private readonly views: Map<LabView, HTMLButtonElement>;
     private readonly sources: Map<Source, HTMLButtonElement>;
+    /** The mode toggle and its label: shown in the Individual view only. */
+    private modeEls: HTMLElement[] = [];
 
     constructor(o: ChromeOptions) {
         const slot = document.getElementById('lab-tools') ?? document.body;
@@ -62,12 +71,23 @@ export class LabChrome {
             return s;
         };
         slot.append(label('view'), views.el);
+        if (o.lab.pathMode === true && o.view === 'single' && o.onMode !== undefined) {
+            const modes = segmented('Mode', ['stage', 'path'] as const, MODE_TITLES, o.onMode);
+            for (const [m, b] of modes.buttons) {
+                b.classList.toggle('on', m === (o.mode ?? 'stage'));
+                b.setAttribute('aria-pressed', String(m === (o.mode ?? 'stage')));
+                b.title = m === 'path' ? 'Walk this person along the promenade among Typical walkers' : 'Back to the turntable';
+            }
+            this.modeEls = [label('mode'), modes.el];
+            slot.append(...this.modeEls);
+        }
         if (o.lab.modelsOnly !== true) slot.append(label('source'), sources.el);
         this.set(o.view, o.source, o.modelBlocked);
     }
 
     /** Light the current view and source, and grey the model out with the reason when it is blocked. */
     set(view: LabView, source: Source, modelBlocked: string | null): void {
+        for (const e of this.modeEls) e.style.display = view === 'single' ? '' : 'none';
         for (const [v, b] of this.views) { b.setAttribute('aria-pressed', String(v === view)); b.classList.toggle('on', v === view); }
         for (const [s, b] of this.sources) { b.setAttribute('aria-pressed', String(s === source)); b.classList.toggle('on', s === source); }
         const model = this.sources.get('model');
