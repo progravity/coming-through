@@ -11,7 +11,7 @@
  *
  * - **family** -- the structural kind of thing it is.
  * - **type** -- the archetype: the fixed form and identity. Type fixes form; the recipe rolls only
- *   colour, which is the rule `structurePaint` keeps. For a person the type is their behavior
+ *   color, which is the rule `structurePaint` keeps. For a person the type is their behavior
  *   profile (`behaviors.ts`): how they look is a set of independent choices, never the type.
  * - **properties** -- the behaviour and capability traits *behaviour queries*, never the type.
  * - **placement** -- how it comes to be somewhere.

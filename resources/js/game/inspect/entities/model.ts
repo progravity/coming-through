@@ -13,7 +13,7 @@
  * What the row compares is a control of its own (`compare`):
  *
  * - `build` (the default) -- the five Build presets on the same model and recipe, each exactly as the table has it.
- * - `age` -- the four Age presets, the recipe's build held; a child is the Teen body, and says so.
+ * - `age` -- Young, Normal and Old, the recipe's build held.
  * - `models` -- every chosen model at the same recipe, presets, pose and camera, with what each one
  *   costs: triangles, bones, file size, textures, texture memory and load time.
  *
@@ -44,7 +44,7 @@ import {
 } from '../../modelcrowd/body.ts';
 import type { Body, BodyFile, FullnessUniforms, Limits, Shaped } from '../../modelcrowd/body.ts';
 import { RUN_ON } from '../../modelcrowd/crowd.ts';
-import { dressOn, falseHex, personColours, prepareRegions } from '../../modelcrowd/regions.ts';
+import { dressOn, falseHex, personColors, prepareRegions } from '../../modelcrowd/regions.ts';
 import type { RegionUniforms, Regions } from '../../modelcrowd/regions.ts';
 import { count, n2 } from '../describe.ts';
 import { RULER, defaultControls } from '../inspectable.ts';
@@ -584,7 +584,7 @@ class ModelCast implements Cast {
             const paint = f.model?.regions?.paint ?? null, u = f.regionUniforms;
             if (paint !== null && u !== null) {
                 // Each model wears the person's scheme arranged on its own roles, salted by itself.
-                paint.paint(u, c.recolour === true && who !== null ? personColours(who.recipe, paint.clothing, paint.salt) : null);
+                paint.paint(u, c.recolour === true && who !== null ? personColors(who.recipe, paint.clothing, paint.salt) : null);
                 paint.showFalse(u, c.regions === true);
             }
             const x = xs[i] ?? 0;

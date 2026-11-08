@@ -122,8 +122,8 @@ The engine:
 - `resources/js/game/entity.ts` — the entity taxonomy: the four axes every entity declares itself on, and the
   whole property vocabulary. Imports nothing, so `sim/`, `world/`, `behaviors.ts` and `inspect/`
   can all read it without any of them dragging a dependency in behind them.
-- `resources/js/game/palette.ts` — the world's colours, as one 24-entry palette plus named families, and the
-  ground tones blended out of it. A person's colours are `wardrobe.ts`'s.
+- `resources/js/game/palette.ts` — the world's colors, as one 24-entry palette plus named families, and the
+  ground tones blended out of it. A person's colors are `wardrobe.ts`'s.
 - `resources/js/game/behaviors.ts` — the behavior profiles: speed, steering, stops and grouping, and nothing about looks.
 - `resources/js/game/composition.ts` — what the crowd is made of: the default weight of every choice a person is rolled from.
 - `resources/js/game/wardrobe.ts` — `COLORS`, the one table of skin tones, hair colors and clothing schemes.
@@ -305,7 +305,7 @@ The engine:
   the patches and never the gutter, that every used texel is labelled, edges included, that two
   colours as close as the casual man's skin and khaki are pulled apart by the bandwidth search, that a
   bandwidth too wide to do so is reported and refused rather than painted, that a role file matches
-  by colour and not by order, that a blend only refuses painting across two roles, that an old role
+  by color and not by order, that a blend only refuses painting across two roles, that an old role
   name is refused with its new one, and that a model is painted in its person's scheme arranged on
   the roles it has.
 - `tests/js/wardrobe.test.ts` — the color system: every pooled scheme meets the rules on every
@@ -356,9 +356,15 @@ stationed behind a counter or walking in the crowd — so `EntityMeta` is a plai
 independent fields and **there is deliberately no function that maps a type to its properties**. A
 `propertiesFor(type)` helper is the weld this exists to prevent; its absence is the principle, and
 the test that constructs one `shop-staff` type twice, with different properties and placements, is
-what pins it. For the same reason the seven people write their metadata out one archetype at a time
-rather than sharing a constant: a default is a weld, and the first archetype that needs to be
+what pins it. For the same reason the seven behavior profiles write their metadata out one at a
+time rather than sharing a constant: a default is a weld, and the first profile that needs to be
 `stationed` and `immobile` is the one it would stand in the way of.
+
+**People are where the independence is taken furthest.** A person's type is their behavior profile
+(`behaviors.ts`), and *nothing else about them is the type*: model, age, build, skin tone, hair,
+clothing and equipment are separate choices rolled beside it (see "A person"). The old archetypes
+bundled a behavior with a look -- Dave was fast *and* orange *and* narrow -- which is the weld this
+section warns against, one level down.
 
 **Behaviour asks the property, not the type.** Two sites do, and both used to assume:
 
@@ -778,7 +784,7 @@ no pass over every obstacle. Two things about the fixed layer are deliberate and
 **The crowd avoids them with the machinery it already had.** `obstacleRepulsion` is `separation`
 with a capsule in place of a body: the same falloff, found through the same grid, so people drift
 round a bench well before they reach it and the walkway visibly narrows beside one. Its weight is a
-constant rather than the archetype's `sepW`, because a bench has no opinion about who is walking
+constant rather than the profile's `sepW`, because a bench has no opinion about who is walking
 into it and does not step aside for anyone -- a Distracted walker still ignores people and still walks round a bin.
 Under it, `Agent.clearFurniture` is the backstop for someone shoved in by the press behind them: it
 pushes out and projects velocity along the surface rather than reflecting it, so a body pinned
@@ -1405,7 +1411,7 @@ Proportions come from one height axis and the Build preset: the height roll and 
 feed height, width, head radius and shoulder width together, so a body reads as one person. The
 primitives' **figure** -- a child's for anyone who needs a child model, otherwise their age's --
 scales height, head-to-body ratio, **limb length** and a forward stoop. `h` is very nearly a stature
-in metres divided by 1.86, the skeleton's unit height: adults land between about 1.56 m and 1.90 m.
+in meters divided by 1.86, the skeleton's unit height: adults land between about 1.56 m and 1.90 m.
 
 `limb` is what stops a child being a scaled-down adult. It shortens the leg and arm bones, and
 `drawPerson` *derives* the hip from it (`hipY = ANKLE_Y + (THIGH + SHIN) * limb`) rather than
@@ -1808,8 +1814,8 @@ Four things about that interface are load-bearing:
   generic scheme reproduces every URL the character turntable ever wrote. `gate` is why `?phase=`
   still means a frozen gait: a gated scalar is written only while its gate is on, and reading one
   turns the gate on.
-- **`rebuilds` on a control is the difference between an archetype and a slider.** Changing the
-  archetype has to build a new person; dragging the gait phase must not build seven of them a frame.
+- **`rebuilds` on a control is the difference between a choice and a slider.** Changing a person's
+  behavior has to build a new person; dragging the gait phase must not build seven of them a frame.
 - **A cast may write back a scalar it drives.** The gait slider tracks a walking figure that way.
   A write-back reaches the panel and never the address bar.
 
@@ -1869,11 +1875,11 @@ Two consequences worth knowing:
   why a restaurant's third spot arrived without `entities/restaurant.ts` mentioning it. One overlay
   and one `spotRows` for all of them, because they are one question: what does this thing expose for
   something else to be placed at?
-- The person's age, build and mobility overrides are **archetype edits**, not recipe edits. They
-  set `look.age`, `look.w` and `look.aid` — the same fields `archetypes.ts` already uses to make
-  Timmy a child and Dave narrow — so `makeRecipe` still takes every draw in its fixed order and
-  only the selection from rolls already in hand changes. A person keeps their seeded colours and
-  parts while an axis moves under them, which is the point.
+- The person's controls **force choices**: `makeRecipe` still takes every draw in its fixed order
+  and only the selection from rolls already in hand changes, so a person keeps everything else they
+  rolled while one choice moves under them, which is the point. An address written before people
+  were choices still opens what it opened: `Inspectable.legacy` reads `arch=dave` as
+  `behavior=weaver`, the old ages as the new, and `mob=` as `equipment=`.
 - The part gizmos -- the **bounding boxes** (`gizmos`, `G`) and the **part origins** (`origins`, `X`),
   two switches since the labs -- read matrices back from a `PartPools` subclass that records what `put` writes and
   calls straight through to the real implementation, so nothing the inspector does can change what
@@ -1978,7 +1984,7 @@ neither hash can move, and nothing under `resources/js/game/sim/` imports it. Fi
   triangles against 15,571) lands on the same colours less the eyes, so its role file is the same
   six lines. The mask is half the texture's resolution, which leaves a skin-coloured hairline on a
   couple of the remesh's shirt seams where islands touch with no gutter -- visible only zoomed in.
-- **What each group is lives in `<model>.regions.json` beside the `.glb`**: colours mapped to the
+- **What each group is lives in `<model>.regions.json` beside the `.glb`**: colors mapped to the
   standard roles -- `headwear`, `tops`, `bottoms`, `footwear`, `accessory`, `skin`, `hair` or `keep` --
   matched by Oklab distance under 0.06 rather than by
   order, so a file survives the detector reordering and carries over to a regeneration in the same
@@ -2047,22 +2053,24 @@ own bone (`neck`), in its bind matrix like every other girth, so the head is not
 
 | Age | height | width | shoulders | head | legs | stoop |
 |---|---|---|---|---|---|---|
-| Child | as Teen | | | | | |
-| Teen | 0.94 | 0.95 | 0.95 | 1.06 | 1.04 | 0 |
-| Adult | 1 | 1 | 1 | 1 | 1 | 0 |
-| Older | 0.97 | 1 | 0.95 | 1 | 1 | 0.16 rad (about 9°: a quarter in Spine1, a third in Spine2, the rest in the neck) |
+| Young | 0.96 | 0.96 | 0.96 | 1.03 | 1.02 | 0 |
+| Normal | 1 | 1 | 1 | 1 | 1 | 0 |
+| Old | 0.97 | 1 | 0.96 | 1 | 1 | 0.12 rad (about 7°: a quarter in Spine1, a third in Spine2, the rest in the neck) |
 
-- **Build comes from the recipe's own width.** The five "recipe width" anchors are the quintiles of
-  `makeRecipe`'s width roll for an archetype of width 1 (0.84 + 0.36 × roll), so the crowd's own
-  spread is cut into fifths and really reaches Broad; a width between two anchors blends them, and
-  `tests/js/body.test.ts` holds the anchors to the roll. Dave (width 0.85) reaches from Slim to
-  Average. The lab's Build buttons set the archetype's width as before, and the model follows the
-  recipe that results; the lab's Build row shows each preset exactly.
-- **Age replaces the recipe's age height** rather than stacking on it: a model is drawn at
-  `standingHeight / AGE_HEIGHT[age] × preset height`, so the recipe's own height roll still applies.
-  `AGE_HEIGHT` is a read-only export from `recipe.ts`; nothing there rolls differently.
-- **A child is drawn as a teen.** A shrunk adult reads as a small adult, not a child; the lab says
-  "this needs a child model" wherever a child is shown.
+Age is a small adjustment relative to the model, never a change of model: Young a bit shorter and
+slimmer with a slightly larger head and longer legs, Normal the model as authored, Old slightly
+shorter with a gentle stoop. Old also grays the hair, which is the recipe's (see "Colors").
+
+- **Build is a choice, drawn exactly.** The crowd rolls one of the five presets (even fifths by
+  default), a person's width is that preset's (`BUILD_WIDTH`, the scale the "recipe width" column is
+  on), and the model wears the preset exactly; a width between two anchors would blend them, which
+  only an explicit width does now.
+- **Age replaces the recipe's figure height** rather than stacking on it: a model is drawn at
+  `standingHeight / figureHeight(recipe) × preset height`, so the recipe's own height roll still
+  applies. `figureHeight` is a read-only export from `recipe.ts`; nothing there rolls differently.
+- **A child is not an age; it is a model class.** Only a Darter needs one, and an adult model cannot
+  be made into a convincing child, so until there is a child model the game draws Darters as
+  primitives and the lab shows the adult model with a note saying it needs a child model.
 - **Limits** keep every combination sane and are a safety net, not a style: no shipped preset
   combination touches them, which the tests pin. Width 0.82 to 1.16, shoulders 0.88 to 1.10, limbs
   0.86 to 1.14, fullness 0 to 2.6%, face 0 to 0.7%, neck 0.96 to 1.12, height 0.88 to 1.05, head

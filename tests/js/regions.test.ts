@@ -12,7 +12,7 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RegionPaint, assignRoles, parseRoles, personColours, segment } from '../../resources/js/game/modelcrowd/regions.ts';
+import { RegionPaint, assignRoles, parseRoles, personColors, segment } from '../../resources/js/game/modelcrowd/regions.ts';
 import { makeRecipe } from '../../resources/js/game/recipe.ts';
 import { makeStreams } from '../../resources/js/game/core/rng.ts';
 import { dress, saltOf } from '../../resources/js/game/wardrobe.ts';
@@ -172,7 +172,7 @@ test('a model is painted in the person\'s skin and hair, and their scheme arrang
     assert.deepEqual([...paint.clothing].sort(), ['bottoms', 'footwear', 'tops']);
     assert.equal(paint.salt, saltOf('x.glb'));
     const r = makeRecipe(makeStreams(4).recipe.fork('agent:0'), { scheme: 'bold-primaries' });
-    const c = personColours(r, paint.clothing, paint.salt);
+    const c = personColors(r, paint.clothing, paint.salt);
     assert.equal(c.skin, r.skin);
     assert.equal(c.hair, r.hairColor);
     const d = dress('bold-primaries', r.arrange, r.skin, r.hairColor, paint.clothing, paint.salt).colors;

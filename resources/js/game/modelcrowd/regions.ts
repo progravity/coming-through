@@ -9,7 +9,7 @@
  * their neighbours afterwards, so a blend of two colours cannot become a third group.
  *
  * **What each group *is* lives in a data file beside the model**, `<model>.regions.json` in
- * `public/models/`, which maps colours to the standard roles every model shares: the clothing roles
+ * `public/models/`, which maps colors to the standard roles every model shares: the clothing roles
  * (headwear, tops, bottoms, footwear, accessory -- see `wardrobe.ts`), skin, hair, and keep. Entries
  * are matched by colour rather than by position in a list, so a file keeps working when the
  * detector's ordering changes and largely carries over to a regeneration in the same garments. A
@@ -31,7 +31,7 @@ import type { ClothingRole, Dressed } from '../wardrobe.ts';
 
 export const ROLES = ['skin', 'hair', 'headwear', 'tops', 'bottoms', 'footwear', 'accessory', 'keep'] as const;
 export type Role = (typeof ROLES)[number];
-/** The roles a person has a colour for; `keep` is left as the file painted it. */
+/** The roles a person has a color for; `keep` is left as the file painted it. */
 export type PaintRole = Exclude<Role, 'keep'>;
 /** The names the first role files used, and what each became. A file still using one is told. */
 const RENAMED: Readonly<Record<string, Role>> = { top: 'tops', trousers: 'bottoms', shoes: 'footwear' };
@@ -622,8 +622,8 @@ export function dressOn(r: Recipe, roles: readonly ClothingRole[], salt: number)
     return dress(r.scheme, r.arrange, r.skin, r.hairColor, roles, salt);
 }
 
-/** The colour each role is painted, for one person on one model. */
-export function personColours(r: Recipe, roles: readonly ClothingRole[], salt: number): Record<PaintRole, number> {
+/** The color each role is painted, for one person on one model. */
+export function personColors(r: Recipe, roles: readonly ClothingRole[], salt: number): Record<PaintRole, number> {
     const c = dressOn(r, roles, salt).colors;
     const fill = c.tops ?? r.shirt;
     return {

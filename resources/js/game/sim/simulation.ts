@@ -137,7 +137,7 @@ export class Simulation {
 
     /**
      * Hash of *who the seed spawns*, and nothing else: behavior profile, direction, spawn placement,
-     * group structure, and the first behaviour-stream draws each agent starts life with.
+     * group structure, and the first behavior-stream draws each agent starts life with.
      *
      * The behavior profile is the one thing here the `recipe` stream decides: it is each person's
      * first recipe roll, read ahead by the spawner, and nothing rolled after it can move it.
