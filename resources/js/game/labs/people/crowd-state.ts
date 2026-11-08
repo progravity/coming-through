@@ -14,7 +14,6 @@ import type { ArchKey, ArchMix } from '../../archetypes.ts';
 import { parseSeed } from '../../core/rng.ts';
 import { MODELS } from '../../render/model-file.ts';
 import { MAX_CROWD, MIN_CROWD, clampCrowd } from '../../sim/simulation.ts';
-import type { Source } from '../labs.ts';
 
 export type CamMode = 'top' | 'orbit' | 'follow';
 export const CAM_MODES: readonly CamMode[] = ['top', 'orbit', 'follow'];
@@ -44,7 +43,6 @@ export interface CrowdState {
     crowd: number;
     /** Spawn weights in `ARCH_KEYS` order, or null for the archetypes' own. */
     mix: number[] | null;
-    source: Source;
     model: string;
     speed: number;
     paused: boolean;
@@ -104,8 +102,7 @@ export function readCrowd(search: string): CrowdState {
         crowd: clampCrowd(Math.round(num(q.get('crowd'), DEFAULT_CROWD))),
         // A mix that restates the archetypes' own weights is no mix at all.
         mix: mix !== null && mix.some((w, i) => w !== own[i]) ? mix : null,
-        // Models are the default renderer here as in the game; `source=prim` asks for the primitives.
-        source: q.get('source') === 'prim' || q.get('source') === 'primitives' ? 'primitives' : 'model',
+        // People are drawn from models here, as in the game; an old `source=prim` opens the model too.
         model: names.includes(model) ? model : (names[0] ?? ''),
         speed: SPEEDS.includes(num(q.get('speed'), 1)) ? num(q.get('speed'), 1) : 1,
         paused: q.get('paused') === '1',
@@ -127,8 +124,7 @@ export function crowdQuery(s: CrowdState): URLSearchParams {
     q.set('seed', String(s.seed));
     if (s.crowd !== DEFAULT_CROWD) q.set('crowd', String(s.crowd));
     if (s.mix !== null) q.set('mix', s.mix.join(','));
-    if (s.source === 'primitives') q.set('source', 'prim');
-    else if (s.model !== (Object.keys(MODELS)[0] ?? '')) q.set('model', s.model);
+    if (s.model !== (Object.keys(MODELS)[0] ?? '')) q.set('model', s.model);
     if (s.speed !== 1) q.set('speed', String(s.speed));
     if (s.paused) { q.set('paused', '1'); q.set('at', String(s.at)); }
     if (s.cam !== 'top') q.set('cam', s.cam);

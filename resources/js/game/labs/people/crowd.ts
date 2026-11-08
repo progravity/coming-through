@@ -7,8 +7,8 @@
  * the game does, primes it exactly as the game does, and steps it with the command the game sends
  * between runs -- the player idle on the start pad, nobody scoring -- so what walks here is what
  * walks there for that seed and crowd size. It draws the world with `buildWorld` and the people
- * with `drawPerson` through the shared pools (or the model crowd, under the model source), under
- * the look the game ships in. The one thing it adds to the simulation is an optional archetype mix,
+ * with the model crowd -- the way the game draws people -- falling back to `drawPerson` exactly where
+ * the game does, under the look the game ships in. The one thing it adds to the simulation is an optional archetype mix,
  * which changes only what the spawn draw selects; without one the crowd is the game's exactly.
  *
  * Its own instance means it shares nothing with any other page: the simulation, the world and the
@@ -80,10 +80,9 @@ export async function startCrowd(lab: Lab): Promise<void> {
 
     // ---------- the page: chrome, renderer, world ----------
     const chrome = new LabChrome({
-        lab, view: 'crowd', source: state.source,
-        modelBlocked: Object.keys(MODELS).length > 0 ? null : 'No model files are listed in render/model-file.ts.',
+        lab, view: 'crowd', source: 'model', modelBlocked: null,
         onView: (v: LabView) => go(v === 'crowd' ? null : v),
-        onSource: src => { state.source = src; reload(); },
+        onSource: () => undefined,
     });
     void chrome;
 
@@ -98,10 +97,10 @@ export async function startCrowd(lab: Lab): Promise<void> {
     world.dress(look);
     pools.dress(look);
 
-    // ---------- the model crowd, under the model source ----------
+    // ---------- the model crowd: the game's renderer, with its fallback ----------
     let models: ModelCrowd | null = null;
     let modelNote = '';
-    if (state.source === 'model') {
+    {
         const file = MODELS[state.model];
         try {
             if (file === undefined) throw new Error(`no model named "${state.model}"`);
@@ -234,7 +233,7 @@ export async function startCrowd(lab: Lab): Promise<void> {
     youSpan.append(youSw, document.createTextNode('player, idle on the start pad'));
     legend.append(youSpan);
     body.append(label('archetype color key'), legend);
-    if (state.source === 'model') body.append(el('p', 'hint', `Model source: ${modelNote}`));
+    body.append(el('p', 'hint', `Model: ${modelNote}`));
     body.append(el('p', 'hint', 'Click a person to select them. In top-down, drag to pan and wheel to zoom; in orbit, drag to turn and right-drag to pan.'));
 
     // ---------- state changes ----------
@@ -303,13 +302,11 @@ export async function startCrowd(lab: Lab): Promise<void> {
         if (writeTimer !== 0) return;
         writeTimer = window.setTimeout(() => { writeTimer = 0; writeNow(); }, 500);
     }
-    function reload(): void { writeNow(); location.search = crowdQuery(state).toString(); }
     /** Another view of this lab: the turntable, for the selected person if there is one. */
     function go(view: LabView | null): void {
         const q = new URLSearchParams();
         if (view !== null && view !== 'single') q.set('view', view);
         q.set('seed', String(state.seed));
-        if (state.source === 'primitives') q.set('source', 'prim');
         location.href = `${lab.path}?${q}`;
     }
     /** The selected person on the turntable: the same seed, spawn index and archetype, and a group's outfit. */
@@ -320,7 +317,6 @@ export async function startCrowd(lab: Lab): Promise<void> {
         q.set('arch', a.type);
         // A family is dressed from one outfit the spawner chose; the turntable has to be handed it.
         if (a.group !== 0) q.set('outfit', String(a.recipe.outfit));
-        if (state.source === 'primitives') q.set('source', 'prim');
         return `${lab.path}?${q}`;
     }
 
@@ -534,8 +530,8 @@ export async function startCrowd(lab: Lab): Promise<void> {
         while (poses.length < agents.length) poses.push(newPose());
         for (let i = 0; i < agents.length; i++) lerpPose(poses[i], agents[i].prev, agents[i], alpha);
         if (models !== null) models.draw(agents, alpha, sim.player, pools.inkOn);
-        // The primitives draw everyone under that source, and under the model source anyone whose
-        // equipment the models cannot carry yet -- exactly as the game does.
+        // The primitives draw anyone the models cannot draw yet, and everyone if the model did not
+        // load -- exactly as the game does.
         for (let i = 0; i < agents.length; i++) {
             if (models !== null && !drawsAsPrimitive(agents[i].recipe)) continue;
             const p = poses[i];

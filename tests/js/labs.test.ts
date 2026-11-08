@@ -35,17 +35,22 @@ test('every family has a category, and every category a lab', () => {
     assert.equal(CATEGORY_OF.building, 'buildings');
 });
 
-test('the labs partition the registry: every entity is shown in exactly one', () => {
+test('the labs partition the registry: every entity is shown in exactly one, or as its model', () => {
     const shown = CATEGORIES.flatMap(c => LABS[c].entities.map(e => e.id));
-    assert.deepEqual(shown.slice().sort(), ENTITIES.map(e => e.id).sort());
-    for (const e of ENTITIES) assert.ok(labFor(e).entities.includes(e), `${e.id} is not in its own lab`);
-    assert.deepEqual(LABS.people.entities.map(e => e.id), ['person', 'model']);
+    // The primitive person is the game's fallback and is shown nowhere: the people lab shows models only.
+    assert.deepEqual(shown.slice().sort(), ENTITIES.map(e => e.id).filter(id => id !== 'person').sort());
+    for (const e of ENTITIES) {
+        const lab = labFor(e);
+        assert.ok(lab.entities.includes(e) || (lab.modelsOnly === true && lab.entities.some(m => m.modelOf === e.id)),
+            `${e.id} is not in its own lab, nor drawn there by a model`);
+    }
+    assert.deepEqual(LABS.people.entities.map(e => e.id), ['model']);
     assert.deepEqual(LABS.fixtures.entities.map(e => e.id), ['kiosk', 'furniture']);
     assert.deepEqual(LABS.buildings.entities.map(e => e.id), ['shop', 'restaurant']);
 });
 
-test('a model is a source of the thing it draws, not a second thing in the picker', () => {
-    assert.deepEqual(primaries(LABS.people).map(e => e.id), ['person']);
+test('a model is a source of the thing it draws, and the only thing a models-only lab picks', () => {
+    assert.deepEqual(primaries(LABS.people).map(e => e.id), ['model']);
     assert.equal(modelOf('person')?.id, 'model');
     for (const e of ENTITIES) {
         if (e.modelOf === undefined) continue;
@@ -56,25 +61,26 @@ test('a model is a source of the thing it draws, not a second thing in the picke
 });
 
 test('an old inspector address opens the lab that shows what it named', () => {
-    // The inspector drew people as primitives, and the people lab now opens on models: it is told.
-    assert.equal(labAddressFor('?inspect=1&seed=3&arch=dave&walk=1'), '/lab/people?seed=3&arch=dave&walk=1&source=prim');
-    assert.equal(labAddressFor('?inspect=1'), '/lab/people?source=prim');
+    // The inspector drew people as primitives; the people lab draws only models, so it opens the model.
+    assert.equal(labAddressFor('?inspect=1&seed=3&arch=dave&walk=1'), '/lab/people?seed=3&arch=dave&walk=1');
+    assert.equal(labAddressFor('?inspect=1'), '/lab/people');
     assert.equal(labAddressFor('?inspect=row&entity=kiosk&type=drinks'), '/lab/fixtures?type=drinks&view=row');
     assert.equal(labAddressFor('?inspect=1&entity=bench&seed=2'), '/lab/fixtures?entity=bench&seed=2');
     assert.equal(labAddressFor('?inspect=row&entity=restaurant'), '/lab/buildings?entity=restaurant&view=row');
     assert.equal(labAddressFor('?inspect=1&entity=taco'), '/lab/buildings?entity=taco');
     assert.equal(labAddressFor('?inspect=1&entity=building'), '/lab/buildings?entity=building');
-    // A model is the person it stands in for, drawn from its file.
-    assert.equal(labAddressFor('?inspect=row&entity=model&clip=Walk'), '/lab/people?clip=Walk&view=row&source=model');
+    // A model is how the people lab draws a person, and its default: nothing to name.
+    assert.equal(labAddressFor('?inspect=row&entity=model&clip=Walk'), '/lab/people?clip=Walk&view=row');
 });
 
-test('a lab stands only its own entities, and the source toggle reaches the model', () => {
+test('a lab stands only its own entities, and the people lab only models', () => {
     // A stale address naming something from another lab opens this lab's default instead -- and
-    // the people lab's default is its model source, since models are how people are drawn.
+    // the people lab's only entity is the model: an old link asking for primitives opens it too.
     assert.equal(resolveIn('?entity=bench', LABS.people).entity.id, 'model');
     assert.equal(resolveIn('', LABS.people).entity.id, 'model');
-    assert.equal(resolveIn('?source=prim', LABS.people).entity.id, 'person');
-    assert.equal(resolveIn('?source=primitives&entity=model', LABS.people).entity.id, 'person');
+    assert.equal(resolveIn('?source=prim', LABS.people).entity.id, 'model');
+    assert.equal(resolveIn('?source=primitives&entity=person', LABS.people).entity.id, 'model');
+    assert.equal(resolveIn('?source=primitives&entity=model', LABS.people).entity.id, 'model');
     assert.equal(resolveIn('?entity=person', LABS.fixtures).entity.id, 'kiosk');
     assert.equal(resolveIn('?entity=lamp', LABS.fixtures).entity.id, 'furniture');
     assert.equal(resolveIn('?source=model', LABS.people).entity.id, 'model');
@@ -87,7 +93,7 @@ test('a lab stands only its own entities, and the source toggle reaches the mode
 });
 
 test('a lab writes its address without naming its default, and a model as its source', () => {
-    // In the people lab the model is the default source and goes unnamed; the primitives are named.
+    // In the people lab the model is the only entity, so neither it nor a source is ever named.
     const model = readState('row', '?source=model&seed=4', LABS.people);
     const m = ENTITIES.find(e => e.id === 'model');
     assert.ok(m !== undefined);
@@ -95,7 +101,10 @@ test('a lab writes its address without naming its default, and a model as its so
     assert.equal(q.get('source'), null);
     assert.equal(q.get('entity'), null);
     const prim = readState('single', '?source=prim', LABS.people);
-    assert.equal(queryOf(prim, ENTITIES[0], LABS.people).get('source'), 'prim');
+    assert.equal(prim.entity, 'model');
+    assert.equal(queryOf(prim, m, LABS.people).get('source'), null);
+    // Outside the labs a model is still its entity plus a source.
+    assert.equal(queryOf(readState('single', '?source=model'), m).get('source'), 'model');
     assert.equal(q.get('view'), 'row');
     assert.equal(q.get('seed'), '4');
 
@@ -110,12 +119,12 @@ test('a lab writes its address without naming its default, and a model as its so
 });
 
 test('a row remembers which figure its card describes, and single mode has only one', () => {
-    assert.equal(readState('row', '?source=prim&sel=3', LABS.people).sel, 3);
-    assert.equal(readState('single', '?source=prim&sel=3', LABS.people).sel, 0);
-    // Clamped to the row: there is no eighth archetype to describe.
-    assert.equal(readState('row', '?source=prim&sel=40', LABS.people).sel, ENTITIES[0].row - 1);
-    // And to a row whose length follows a control: the model's Build row is five long.
-    assert.equal(readState('row', '?compare=build&sel=9', LABS.people).sel, 4);
+    assert.equal(readState('row', '?sel=3', LABS.people).sel, 3);
+    assert.equal(readState('single', '?sel=3', LABS.people).sel, 0);
+    // Clamped to the row, whose length follows a control: the default Build row is five long...
+    assert.equal(readState('row', '?sel=9', LABS.people).sel, 4);
+    // ...and the Age row four.
+    assert.equal(readState('row', '?compare=age&sel=9', LABS.people).sel, 3);
 });
 
 test('a view a lab does not offer opens its individual view', () => {

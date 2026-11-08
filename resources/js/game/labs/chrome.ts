@@ -6,6 +6,8 @@
  * What depends on the lab's declaration is filled in here, into its `#lab-tools` slot, so the
  * turntable, the crowd and the placement view put the same two controls in the same place.
  *
+ * A models-only lab -- the people lab -- has no source to choose, so it shows the views alone.
+ *
  * Choosing a view or a source is handed back to the view that mounted this: switching between the
  * turntable's single and row is a change in place, and anything else is a fresh page, which is the
  * cheapest clean stage there is.
@@ -52,14 +54,15 @@ export class LabChrome {
         const views = segmented('View', o.lab.views, VIEW_TITLES, o.onView);
         const sources = segmented('Source', ['primitives', 'model'] as const, SOURCE_TITLES, o.onSource);
         this.views = views.buttons;
-        this.sources = sources.buttons;
+        this.sources = o.lab.modelsOnly === true ? new Map() : sources.buttons;
         const label = (text: string): HTMLElement => {
             const s = document.createElement('span');
             s.className = 'lbl';
             s.textContent = text;
             return s;
         };
-        slot.append(label('view'), views.el, label('source'), sources.el);
+        slot.append(label('view'), views.el);
+        if (o.lab.modelsOnly !== true) slot.append(label('source'), sources.el);
         this.set(o.view, o.source, o.modelBlocked);
     }
 

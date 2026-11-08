@@ -186,7 +186,7 @@ The engine:
   whole crowd if the model fails to load. `regions.ts` finds a model's color regions and repaints
   them per person, `body.ts` shapes each clone by its recipe's age and build and decides who falls
   back (see "Model bodies"), and `index.ts` chooses the renderer and keeps the cost readout, shown
-  under `?people=` or a stress run. The people lab's model source and its crowd view use all of it.
+  under `?people=` or a stress run. The people lab, which shows only models, uses all of it.
   See "Models by default".
 - `resources/js/game/compare/` — the render-direction comparator. The six rendering directions it shows side by
   side live as data in `resources/js/game/render/look.ts`; `?look=` plays a normal run under one of them and
@@ -1520,9 +1520,12 @@ in Blade and everything below it built by the lab's entry.
 files every registered entity under its family's category. **Views**: `view=single` (the default)
 and `view=row` are the turntable (`inspect/index.ts`, mounted with the lab as its scope);
 `view=crowd` is the people lab's crowd; `view=placement` is the fixtures' and buildings' placement
-view. **Source**: `source=model` swaps an entity for the one whose `modelOf` names it, keeping every
-control the two declare alike, so the people lab's person stays on stage drawn from the file. The
-fixtures and buildings toggle is in place and stays on primitives, with its reason in the tooltip.
+view. **Source**: `source=model` swaps an entity for the one whose `modelOf` names it. The fixtures
+and buildings toggle is in place and stays on primitives, with its reason in the tooltip. **The people
+lab has no source: it shows models only** (`Lab.modelsOnly`, read as `Scope.modelsOnly`), in every
+view. Its only entity is the model, so the primitive person is filed in no lab, and any address
+naming the primitive person, an old `source=prim` and an old `/play?inspect=` person address all
+open the model. The primitive people are the game's fallback and nothing else.
 
 **The shared information panel** (`inspect/info.ts`) is the left card in every view. It renders a
 `Readout` -- the at-a-glance rows, the swatches, and `sections` under shared headings, in this order:
@@ -1531,16 +1534,15 @@ than markup, and remembers which sections were folded. Identity (category, famil
 placement, and the archetype's `desc`) comes from `describe.ts` for everyone, so it cannot drift
 into two vocabularies.
 
-- **People, individual and row** — the person turntable, **on its model source by default**
-  (`source=prim` for the primitives; an old `/play?inspect=` person address carries it): seed
+- **People, individual and row** — the person turntable, **drawn from the model only**, walking
+  (the walk clip is the default, as it is the game's normal gait): seed
   stepping, archetype, age, build and mobility, walk, run (the steering's own `SPEED_CAP`) or idle, gait scrub and freeze, a held
   angle, and `agent` (the spawn index) and `outfit` (a group's shared outfit), so any agent of any
   seed stands on the turntable as the crowd built them. Collider and orientation overlays draw the
   body the crowd steers (`Subject` mirrors `Agent`'s collider numbers; `inspect.test.ts` holds them
-  together). Under the model source the model wears the recipe's age and build (see "Model
-  bodies"), and `compare=` chooses what the row stands side by side: `source` (the default: the
-  model and the same recipe as primitives), `build` (the five Build presets exactly), `age` (the four
-  Age presets) or `models` (every model chosen by its `cmp-<name>` switch, at the same recipe,
+  together). The model wears the recipe's age and build (see "Model
+  bodies"), and `compare=` chooses what the row stands side by side: `build` (the default: the five
+  Build presets exactly), `age` (the Age presets) or `models` (every model chosen by its `cmp-<name>` switch, at the same recipe,
   presets, pose and camera). The card lists the body drawn against the presets' ask and the limits,
   clips, color regions (false color, color, share, role), proposed accessory anchors by bone (drawn
   as markers), triangles and bones, a table of every model's triangles, bones, file size, textures,
@@ -1738,12 +1740,11 @@ cart, and `?debug=1` and the game answer it.
 
 ### Models from files
 
-`/lab/people?source=model` puts a `.glb` from `public/models/` on the stage, drawn as the person the
-controls name and painted in their recipe, and `view=row` stands the same recipe beside it as
-primitives. It is **the one exhibit not drawn by the game's assembler**, deliberately: it is a bench
-for an asset the game does not use, so there is no assembler to go through. What it keeps instead
-is that the game's half of the stage is still the game's -- the person beside it is `PERSON`'s own
-cast, delegated to, with the same seed, spawn index and axes.
+`/lab/people` puts a `.glb` from `public/models/` on the stage, drawn as the person the controls
+name and painted in their recipe. It is **the one exhibit not drawn by the game's assembler**: there
+is no assembler for a model file to go through. What it keeps instead is that the person is the
+game's -- rolled exactly as the crowd rolls agent N of the seed, and shaped by the same
+`modelcrowd/body.ts` the crowd is.
 
 - **Adding a file** is dropping it in `public/models/` and one line in `MODELS` in
   `render/model-file.ts`, under the short name `?model=` uses. Nothing in a browser can list
@@ -1771,9 +1772,9 @@ cast, delegated to, with the same seed, spawn index and axes.
 
 ### Models by default
 
-**People are drawn with models by default**, in the game (`?people=model` or nothing) and in the
-people lab (its model source, and its crowd view's). The primitive people are kept as the
-fallback: `?people=prim` (or `source=prim` in the lab) for everyone, and always for the player, for
+**People are drawn with models by default** in the game (`?people=model` or nothing), and **only**
+with models in the people lab. The primitive people are kept as the game's
+fallback: `?people=prim` for everyone, and always for the player, for
 anyone whose recipe carries a **mobility aid or a stroller** (`drawsAsPrimitive` in
 `modelcrowd/body.ts`), and for the whole crowd if the model fails to load.
 
@@ -1782,8 +1783,8 @@ wheelchair, a scooter, a cane or a stroller widens a person's collider for the e
 model drawn without the equipment would be someone you bump into half a meter before you reach
 them. Until models carry it, those people are primitives. It is flagged, not hidden: the cost
 readout (`?people=` or a stress run) and the crowd view's statistics count them ("as primitives"),
-and the lab says so on any such person it shows -- the model source's card and a crowd selection
-both. Expect about a fifth of a crowd: 17 of 80 and 37 of 190 at the stress seed.
+and the lab says so on any such person it shows -- the person's card and a crowd selection
+both. The crowd view draws the fallback exactly as the game does, so it shows what the game shows. Expect about a fifth of a crowd: 17 of 80 and 37 of 190 at the stress seed.
 
 The cost readout is on screen only under `?people=` or a stress run, and kept either way as
 `game.people` for the bench scripts. The scripts default to models too: `stress-headless.mjs` and
@@ -2041,7 +2042,7 @@ game keeps compiling, keeps testing green, and keeps playing under every `?look=
 The labs' turntable (`/lab/people`, `/lab/fixtures`, `/lab/buildings`, and `view=row` for its
 side-by-side row) takes `&entity=` for what stands on it within the lab (`kiosk`, `furniture`,
 `bench`, `lamp`, `bin`, `shop` -- `building` is an alias for it -- and `restaurant` and the
-cuisines), `&source=model` for the person's model, and `&sel=` for which exhibit of a row the card
+cuisines), and `&sel=` for which exhibit of a row the card
 describes. Both views take
 `&seed=` and mirror the rest of their state back into the address bar — every control under its own
 id, every active overlay under its own, plus `paused`, `yaw`, `look`, `ink`, the view (`zoom`,

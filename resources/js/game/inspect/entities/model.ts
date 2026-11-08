@@ -1,18 +1,18 @@
 /**
- * A figure from a `.glb` file: the people lab's model source.
+ * A figure from a `.glb` file: how the people lab draws a person, and the only way it does.
  *
  * **The one exhibit not drawn by the game's assembler**, and the exception is the point of it. Every
  * other cast in `entities/` is a driver for game code and must never be a copy of it; this one is a
  * bench for an asset the game does not use yet, so there is no assembler for it to go through. The
  * rule it keeps instead is the next best one: **the game's half of the stage is still the game's.**
- * It is drawn *as a person* -- the person controls are the people source's own, so the toggle keeps
- * whoever was on stage -- painted in that person's recipe, and shaped by their age and build through
- * the same `modelcrowd/body.ts` the `?people=model` crowd is shaped by.
+ * It is drawn *as a person* -- the controls choose a person exactly as the crowd rolls one -- painted
+ * in that person's recipe, and shaped by their age and build through the same `modelcrowd/body.ts`
+ * the game's crowd is shaped by. The primitive people are not shown here at all: they are the
+ * game's fallback, and the people lab is for the way people are drawn.
  *
  * What the row compares is a control of its own (`compare`):
  *
- * - `source` -- the model, and the same recipe beside it as primitives through `PERSON`'s own cast.
- * - `build` -- the five Build presets on the same model and recipe, each exactly as the table has it.
+ * - `build` (the default) -- the five Build presets on the same model and recipe, each exactly as the table has it.
  * - `age` -- the four Age presets, the recipe's build held; a child is the Teen body, and says so.
  * - `models` -- every chosen model at the same recipe, presets, pose and camera, with what each one
  *   costs: triangles, bones, file size, textures, texture memory and load time.
@@ -45,7 +45,7 @@ import type { Body, BodyFile, FullnessUniforms, Limits, Shaped } from '../../mod
 import { falseHex, prepareRegions, recipeColours } from '../../modelcrowd/regions.ts';
 import type { RegionUniforms, Regions } from '../../modelcrowd/regions.ts';
 import { count, n2 } from '../describe.ts';
-import { INK, RULER, defaultControls } from '../inspectable.ts';
+import { RULER, defaultControls } from '../inspectable.ts';
 import type { Cast, Control, Controls, DrawnPart, InfoCell, InfoRow, InfoSection, InfoTable, Inspectable, OverlayDef, Readout } from '../inspectable.ts';
 import { disposeMarks, dot } from '../markers.ts';
 import type { Subject } from '../subject.ts';
@@ -57,7 +57,7 @@ import {
 export const POSE = 'pose';
 
 /** What the row compares. See the file comment. */
-export const COMPARE = ['source', 'build', 'age', 'models'] as const;
+export const COMPARE = ['build', 'age', 'models'] as const;
 export type Compare = (typeof COMPARE)[number];
 
 /** What stands on the stage when a file did not arrive: a person-sized box, so the frame still fits. */
@@ -214,12 +214,15 @@ const clipControl: Extract<Control, { kind: 'enum' }> = {
 const comparing = (name: string): string => `cmp-${name}`;
 const compareControls: Control[] = names.map(n => ({ kind: 'toggle', id: comparing(n), label: `compare ${n}`, value: true, rebuilds: true }));
 
-/** Every clip any loaded file has, in the order they arrived, then the rest pose. */
+/**
+ * Every clip any loaded file has, in the order they arrived, then the rest pose. The walk is the
+ * default, as it is the normal gait in the game: a person runs only when their speed calls for it.
+ */
 function refreshClips(): void {
     const seen: string[] = [];
     for (const m of models.values()) for (const k of m.clips) if (!seen.includes(k.name)) seen.push(k.name);
     clipControl.options = [...seen, POSE];
-    clipControl.value = clipControl.options[0];
+    clipControl.value = seen.find(n => /walk/i.test(n)) ?? clipControl.options[0];
 }
 
 /** What a loaded file brings beside its scene: its body file and how long it took to arrive. */
@@ -491,39 +494,24 @@ const chosen = (c: Controls): string[] => names.filter(n => c[comparing(n)] !== 
 
 /** How many stand in the row, by what it compares. */
 function rowFor(c: Controls): number {
-    const mode = (c.compare ?? 'source') as Compare;
-    if (mode === 'build') return BUILDS.length;
+    const mode = (c.compare ?? 'build') as Compare;
     if (mode === 'age') return AGES.length;
     if (mode === 'models') return Math.max(1, chosen(c).length);
-    return 2;
+    return BUILDS.length;
 }
 
 class ModelCast implements Cast {
     private readonly scene: THREE.Scene;
-    /** The game's person, drawn from the same recipe: the source row's second exhibit. */
-    private readonly person: Cast;
-    /**
-     * The person's controls: this cast's own, not the panel's. They are the model's own person
-     * controls copied across on every rebuild, so the figure beside the model is the recipe the
-     * model is painted in -- the same seed, spawn index, archetype and axes -- and the row compares
-     * one person drawn two ways.
-     */
+    /** The person controls, copied across on every rebuild: which person the model is drawn as. */
     private readonly pc: Controls = { ...defaultControls(PERSON) };
-    private readonly rest: number[] = [];
     private figures: Figure[] = [];
     private c: Controls = {};
-    /**
-     * The person the model is drawn as: rolled exactly as the people source rolls them, so the
-     * model and the game's person wear the same colors and any region painted the wrong one shows
-     * against its neighbor.
-     */
+    /** The person the model is drawn as: rolled exactly as the crowd rolls agent N of the seed. */
     private who: Subject | null = null;
     private active: ReadonlySet<string> = new Set();
-    private withPerson = false;
 
     constructor(scene: THREE.Scene) {
         this.scene = scene;
-        this.person = PERSON.mount(scene);
     }
 
     rebuild(seed: number, count: number, c: Controls): void {
@@ -536,7 +524,7 @@ class ModelCast implements Cast {
         const who = subjectFor(seed, 0, 1, this.pc);
         this.who = who;
         const r = who.recipe;
-        const mode = (count > 1 ? c.compare ?? 'source' : 'source') as Compare;
+        const mode = (count > 1 ? c.compare ?? 'build' : 'single') as Compare | 'single';
         const name = String(c.model);
         const pos = buildPosition(r.w);
         const specs: Spec[] =
@@ -551,17 +539,14 @@ class ModelCast implements Cast {
             used.add(spec.name);
             this.figures.push(new Figure(this.scene, spec, model, clone, who, c));
         }
-        this.withPerson = mode === 'source' && count > 1;
-        this.person.rebuild(seed, this.withPerson ? 1 : 0, this.pc);
         this.applyOverlays();
     }
 
     step(): void {
         if (this.c.freeze !== true) for (const f of this.figures) if (f.action !== null) f.mixer?.update(SIM_DT);
-        this.person.step();
     }
 
-    draw(t: number, xs: readonly number[], yaw: number): void {
+    draw(_t: number, xs: readonly number[], yaw: number): void {
         const c = this.c;
         const lead = this.figures[0]?.action ?? null;
         // One phase for the whole row, read off the first figure, so a comparison is at one moment.
@@ -584,28 +569,12 @@ class ModelCast implements Cast {
             for (const d of f.dots.children) (d.userData.bone as THREE.Object3D).getWorldPosition(d.position);
             f.measure();
         });
-
-        // The person beside it walks while the model plays a clip, runs while it plays a run, and
-        // holds while it holds.
-        const clipName = lead?.getClip().name ?? '';
-        this.pc.run = lead !== null && /run/i.test(clipName);
-        this.pc.walk = lead !== null;
-        this.pc.freeze = c.freeze === true;
-        if (c.freeze === true) this.pc.phase = c.phase;
-        this.rest.length = 0;
-        if (this.withPerson) this.rest.push(xs[this.figures.length] ?? 0);
-        this.person.draw(t, this.rest, yaw);
     }
 
-    parts(i: number): readonly DrawnPart[] {
-        if (i < this.figures.length) return this.figures[i].drawn;
-        return this.withPerson && i === this.figures.length ? this.person.parts(0) : [];
-    }
+    parts(i: number): readonly DrawnPart[] { return this.figures[i]?.drawn ?? []; }
 
-    /** The ink is the person's: the model has no shell to switch. The rest are this cast's own. */
     overlays(active: ReadonlySet<string>): void {
         this.active = active;
-        this.person.overlays(active);
         this.applyOverlays();
     }
 
@@ -617,15 +586,10 @@ class ModelCast implements Cast {
     }
 
     dress(look: Look | null): void {
-        this.person.dress(look);
         for (const f of this.figures) f.paint(look, this.c.own === true);
     }
 
     readout(i: number, top: number): Readout {
-        if (i >= this.figures.length) {
-            const r = this.person.readout(0, top);
-            return { ...r, sub: `the same recipe, as primitives, for scale · ${r.sub}` };
-        }
         const f = this.figures[i];
         const name = f.spec.name, file = MODELS[name] ?? name;
         const m = f.model, who = this.who;
@@ -869,7 +833,7 @@ export const MODEL: Inspectable = {
     controls: [
         modelControl,
         // What the row stands side by side: see the file comment. Single view is always the one figure.
-        { kind: 'enum', id: 'compare', label: 'row compares', options: COMPARE, value: 'source', key: 'v', rebuilds: true },
+        { kind: 'enum', id: 'compare', label: 'row compares', options: COMPARE, value: 'build', key: 'v', rebuilds: true },
         clipControl,
         // A rebuild rather than a repaint, so the readout's shading row cannot go stale.
         { kind: 'toggle', id: 'own', label: 'own materials', value: false, key: 'n', rebuilds: true },
@@ -889,12 +853,13 @@ export const MODEL: Inspectable = {
         PERSON_CONTROLS.agent, PERSON_CONTROLS.outfit,
     ],
     overlays: MODEL_OVERLAYS,
-    // A model has meshes, not the primitives' parts: no part gizmos, no part origins.
-    universal: [INK, RULER],
+    // A model has meshes, not the primitives' parts: no part gizmos, no part origins, and no ink
+    // shell on the stage to switch.
+    universal: [RULER],
     // Seeds browse the game's people; `C` already cycles the clips.
     stepping: 'seed',
-    /** The model, then the same recipe as primitives beside it: the row's default, `compare=source`. */
-    row: 2,
+    /** The five Build presets: the row's default, `compare=build`. */
+    row: BUILDS.length,
     rowFor,
     load,
     mount: (scene: THREE.Scene): Cast => new ModelCast(scene),

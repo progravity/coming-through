@@ -42,10 +42,11 @@ export type PanelId = (typeof PANELS)[number];
 export interface Scope {
     readonly entities: readonly Inspectable[];
     /**
-     * Whether an address naming no source means the model one. The people lab's does: models are
-     * the default way people are drawn, so `source=prim` is what asks for the primitives there.
+     * Whether this scope shows only models of anything that has one. The people lab's does: people
+     * are drawn from models there, with no source to choose, so an address naming the primitive
+     * person or asking for `source=prim` opens the model, and the address bar never names a source.
      */
-    readonly prefersModel?: boolean;
+    readonly modelsOnly?: boolean;
 }
 
 export const EVERYTHING: Scope = { entities: [] };
@@ -170,7 +171,9 @@ export function resolveIn(search: string, scope: Scope = EVERYTHING): { entity: 
     if (!inScope(scope, entity)) { entity = scope.entities[0] ?? entity; pinned = {}; }
     const source = q.get('source');
     const prim = source === 'prim' || source === 'primitives';
-    if ((source === 'model' || (source === null && scope.prefersModel === true)) && entity.modelOf === undefined) {
+    // A models-only scope holds no primitive with a model, so the fallback above already chose it.
+    if (scope.modelsOnly === true) return { entity, pinned };
+    if (source === 'model' && entity.modelOf === undefined) {
         const m = modelOf(entity.id);
         if (m !== undefined && inScope(scope, m)) entity = m;
     } else if (prim && entity.modelOf !== undefined) {
@@ -196,11 +199,10 @@ export function queryOf(s: InspectState, e: Inspectable, scope: Scope = EVERYTHI
     const q = new URLSearchParams();
     if (s.mode === 'row') q.set('view', 'row');
     q.set('seed', String(s.seed));
-    const named = e.modelOf ?? s.entity;
+    // A models-only scope names its model as itself; elsewhere a model is its entity plus a source.
+    const named = scope.modelsOnly === true ? s.entity : e.modelOf ?? s.entity;
     if (named !== defaultOf(scope)) q.set('entity', named);
-    // Whichever source this scope does not assume is the one written down.
-    if (e.modelOf !== undefined && scope.prefersModel !== true) q.set('source', 'model');
-    if (e.modelOf === undefined && scope.prefersModel === true && modelOf(e.id) !== undefined) q.set('source', 'prim');
+    if (e.modelOf !== undefined && scope.modelsOnly !== true) q.set('source', 'model');
     if (s.mode === 'row' && s.sel > 0) q.set('sel', String(s.sel));
     const gates = gateIds(e);
     for (const c of e.controls) {

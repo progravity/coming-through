@@ -40,10 +40,16 @@ export interface Lab extends Scope {
 }
 
 const entitiesOf = (c: Category): Inspectable[] => ENTITIES.filter(e => CATEGORY_OF[e.family] === c);
+/**
+ * A models-only lab's entities: anything a model stands in for is left out, so the model is the
+ * only way it can be shown and every address naming the primitive falls back to it.
+ */
+const modelsOf = (c: Category): Inspectable[] =>
+    entitiesOf(c).filter(e => e.modelOf !== undefined || !entitiesOf(c).some(m => m.modelOf === e.id));
 
 export const LABS: Readonly<Record<Category, Lab>> = {
-    // Models are the default way people are drawn, so the people lab opens on its model source.
-    people: { id: 'people', title: 'People', path: `${LAB_ROOT}/people`, entities: entitiesOf('people'), views: ['single', 'row', 'crowd'], prefersModel: true },
+    // People are models here and nowhere else primitives: the game keeps them only as its fallback.
+    people: { id: 'people', title: 'People', path: `${LAB_ROOT}/people`, entities: modelsOf('people'), views: ['single', 'row', 'crowd'], modelsOnly: true },
     fixtures: { id: 'fixtures', title: 'Fixtures', path: `${LAB_ROOT}/fixtures`, entities: entitiesOf('fixtures'), views: ['single', 'row', 'placement'] },
     buildings: { id: 'buildings', title: 'Buildings', path: `${LAB_ROOT}/buildings`, entities: entitiesOf('buildings'), views: ['single', 'row', 'placement'] },
 };
@@ -51,8 +57,12 @@ export const LABS: Readonly<Record<Category, Lab>> = {
 /** The lab an entity is shown in. */
 export const labFor = (e: Inspectable): Lab => LABS[CATEGORY_OF[e.family]];
 
-/** The entities a lab's picker offers: the primitive ones, since a model is reached by the source toggle. */
-export const primaries = (lab: Lab): Inspectable[] => lab.entities.filter(e => e.modelOf === undefined);
+/**
+ * The entities a lab's picker offers: the primitive ones, since a model is reached by the source
+ * toggle -- or, in a models-only lab, which has no toggle, the models themselves.
+ */
+export const primaries = (lab: Lab): Inspectable[] =>
+    lab.modelsOnly === true ? [...lab.entities] : lab.entities.filter(e => e.modelOf === undefined);
 
 /** Which view an address asks for, falling back to the individual view for anything this lab lacks. */
 export function viewOf(lab: Lab, search: string): LabView {

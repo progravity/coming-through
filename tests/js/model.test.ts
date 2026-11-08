@@ -128,14 +128,19 @@ test("the file's materials come back by identity, and only what the bench made i
     assert.ok(!shippedDisposed, "the file's own material was disposed");
 });
 
-test("the row's second exhibit is one of the game's own people, standing where the shell put it", () => {
+test('the row is models only: the five Build presets, each a figure from the file, and no primitive person', () => {
     const { root, clip } = figure();
     adopt(NAME, root, [clip]);
     const cast = MODEL.mount(new THREE.Scene());
+    assert.equal(MODEL.row, 5);
     cast.rebuild(1, MODEL.row, { ...defaultControls(MODEL), model: NAME, clip: 'Hop' });
-    cast.draw(0, [0, 2], 0);
-    assert.ok(cast.parts(1).length > 10, 'no person beside the model');
-    const h = heightOf(cast, 1);
-    assert.ok(Math.abs(h.x - 2) < 0.3, `the person stands at ${h.x}, not at its anchor`);
-    assert.match(cast.readout(1, h.maxY).sub, /for scale/);
+    cast.draw(0, [0, 2, 4, 6, 8], 0);
+    for (let i = 0; i < 5; i++) {
+        // One part per mesh: a figure from the file, never the primitive person's dozens of parts.
+        assert.equal(cast.parts(i).length, 1, `figure ${i} is not the model`);
+        const h = heightOf(cast, i);
+        assert.ok(Math.abs(h.x - 2 * i) < 0.3, `figure ${i} stands at ${h.x}, not at its anchor`);
+    }
+    assert.equal(cast.parts(5).length, 0, 'something stands beside the row');
+    assert.doesNotMatch(cast.readout(1, 1.8).sub, /primitives|for scale/);
 });
