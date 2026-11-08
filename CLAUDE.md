@@ -120,12 +120,14 @@ The engine:
   and `dmath.ts`: `sin`, `cos`, `atan2`, `asin` and `hypot` computed from exact arithmetic alone, so
   every CPU and every engine gets the same bits. See "Determinism rules".
 - `resources/js/game/entity.ts` — the entity taxonomy: the four axes every entity declares itself on, and the
-  whole property vocabulary. Imports nothing, so `sim/`, `world/`, `archetypes.ts` and `inspect/`
+  whole property vocabulary. Imports nothing, so `sim/`, `world/`, `behaviors.ts` and `inspect/`
   can all read it without any of them dragging a dependency in behind them.
 - `resources/js/game/palette.ts` — every colour in the game, as one 24-entry palette plus named families, and the
   ground tones blended out of it.
-- `resources/js/game/archetypes.ts` — who exists: behaviour numbers and look constraints per archetype.
-- `resources/js/game/recipe.ts` — the appearance and gait roll for one person, and the age/mobility profiles.
+- `resources/js/game/behaviors.ts` — the behavior profiles: speed, steering, stops and grouping, and nothing about looks.
+- `resources/js/game/composition.ts` — what the crowd is made of: the default weight of every choice a person is rolled from.
+- `resources/js/game/wardrobe.ts` — `COLORS`, the one table of skin tones, hair colors and clothing schemes.
+- `resources/js/game/recipe.ts` — one person: every choice rolled in a fixed order, the primitives' figure and equipment profiles.
 - `resources/js/game/sim/` — pure simulation, no DOM or three.js: `simulation.ts` is the whole game state and its
   fixed step; `crowd.ts`, `agent.ts`, `spawner.ts`, `steering.ts`, `player.ts`, `pose.ts`,
   `grid.ts` (the spatial index, moving layer and fixed), `obstacles.ts` (the colliders of everything
@@ -768,7 +770,7 @@ no pass over every obstacle. Two things about the fixed layer are deliberate and
 with a capsule in place of a body: the same falloff, found through the same grid, so people drift
 round a bench well before they reach it and the walkway visibly narrows beside one. Its weight is a
 constant rather than the archetype's `sepW`, because a bench has no opinion about who is walking
-into it and does not step aside for anyone -- Kyle still ignores people and still walks round a bin.
+into it and does not step aside for anyone -- a Distracted walker still ignores people and still walks round a bin.
 Under it, `Agent.clearFurniture` is the backstop for someone shoved in by the press behind them: it
 pushes out and projects velocity along the surface rather than reflecting it, so a body pinned
 against a bench slides along and walks off the end instead of bouncing. It runs **before** the
@@ -1322,33 +1324,90 @@ the simulation step (0.217 to 0.212 ms per step), the crowd being untouched. The
 stream seeded by a constant, like the shops', the kiosks' and the ground's grain, so the promenade is
 decorated identically in every run.
 
-## Character recipes
+## A person
 
-`makeRecipe` rolls one person from their own fork of the `recipe` stream. It has two hard rules:
+**A person is a set of independent choices**, not an archetype. Each is rolled by `makeRecipe` from
+the person's own fork of the `recipe` stream, against its default weight in **`composition.ts`**,
+the one table the crowd's makeup is tuned in:
+
+| choice | options | where it lives |
+|---|---|---|
+| **Model** | the model file, with its body file's age class (`adult` today; `child` and `elderly` later) | `render/model-file.ts`, `<model>.body.json` |
+| **Age** | Young, Normal, Old: small adjustments relative to the model | `AGES` in `recipe.ts`; `AGE_PRESETS` in `modelcrowd/body.ts` |
+| **Build** | Slim, Trim, Average, Solid, Broad | `BUILDS` in `recipe.ts`; `BUILD_PRESETS` in `modelcrowd/body.ts` |
+| **Skin tone** | Lightest, Light, Medium-Light, Medium, Medium-Deep, Deep, Deepest | `COLORS.skin` in `wardrobe.ts` |
+| **Hair** | black, dark brown, brown, light brown, blond, red | `COLORS.hair` in `wardrobe.ts` |
+| **Behavior** | Typical, Weaver, Slow Walker, Distracted, Sudden Stopper, Group Walker, Darter | `BEHAVIORS` in `behaviors.ts` |
+| **Equipment** | none, stroller, wheelchair, scooter, cane | `EQUIPMENT` in `recipe.ts` |
+
+None of them decides another -- the taxonomy's independent-axes rule, applied to people -- except the
+pairings that are tied on purpose: **a stroller only ever comes with a Slow Walker** (forcing a
+stroller forces the profile), **a Darter needs a child model**, and **a Group Walker's family can
+share the leader's clothing** (`groupSharesScheme`). One small tie was added for the primitives' sake:
+a child who rolls a mobility scooter walks instead, since the primitive child cannot sit one (the lab
+can still force it).
+
+**Age is an adjustment, not a stage of life.** Young is a little shorter and slimmer with a youthful
+head; Normal is the model as authored; Old is slightly shorter with a gentle stoop, and shifts the
+**hair** toward gray -- hair is the only color age changes. Age no longer changes speed or gait at
+all: that is the behavior's. A child is not an age but a model class, which only a Darter needs.
+
+**Behavior profiles carry only behavior** -- speed, steering (weaving, separation, avoiding the
+player, acceleration), stops and grouping, plus the gait multipliers that go with them -- and replace
+the archetypes one for one, in the same order, each naming the archetype it was (`was`):
+
+| profile | was | speed | what it does |
+|---|---|---|---|
+| Typical | Tourist | 1.2-1.5 | walks normally |
+| Weaver | Dave | 2.2-2.6 | fast, cuts across |
+| Slow Walker | Mary, minus the stroller | 0.7-0.9 | slow and steady; the only one who may push a stroller |
+| Distracted | Kyle | 0.9-1.1 | not looking, avoids no one |
+| Sudden Stopper | Linda, minus the camera | 1.1-1.3 | stops dead every 4-8 s for 1.5-3 s |
+| Group Walker | The Johnsons | 0.9-1.1 | three or four abreast |
+| Darter | Timmy | 2.0-2.8 | small, fast, unpredictable; beside a Typical parent; a child |
+
+**The default weights** (`COMPOSITION`): behavior 6/2/2/2/2/1/2 in that order -- the archetypes' own
+spawn weights, so the default crowd's behavior mix is today's archetype mix (measured over forty
+seeds: Typical 37.3% against Tourist 36.8%, Group Walker 16.3% against the Johnsons 16.7%, the rest
+within a point); age Young 2, Normal 6, Old 2; build even fifths; skin tone even sevenths; hair black 3,
+dark brown 3, brown 2.5, light brown 1.5, blond 1.2, red 0.5; equipment none 92.7, cane 3.1,
+wheelchair 2.7, scooter 1.5 (about 6.5% of the crowd on an aid, as before), and a stroller for 60%
+of Slow Walkers (5.4% of the crowd, down from Mary's 9.7%); a Group Walker family shares the leader's
+clothing 80% of the time.
+
+Two hard rules hold `makeRecipe` together:
 
 - **Every draw is taken up front, unconditionally, in a fixed order**, and selection happens
-  afterwards from rolls already in hand. Helpers in `palette.ts` take a roll rather than an `Rng`
-  so they cannot draw by accident. Adding a roll at the end is safe; reordering or conditioning
-  one turns agent N into a different person.
-- **Nothing in a recipe may reach the `spawn` or `behavior` streams.** Appearance, proportions,
-  gait, and the movement profile a mobility aid brings with it are all downstream of `recipe`.
+  afterwards from rolls already in hand. A forced choice -- the lab's, a group follower's profile, a
+  Darter's parent's -- still takes its roll, so the person keeps everything else they rolled.
+  Helpers in `palette.ts`, `wardrobe.ts` and `composition.ts` (`pick`) take a roll rather than an
+  `Rng`, so they cannot draw by accident. Adding a roll at the end is safe; reordering or
+  conditioning one turns agent N into a different person.
+- **The behavior roll is the first draw, and stays first.** The spawner reads it ahead of building
+  the person (`behaviorAhead`) to know whether a family or a parent comes with them, and the identity
+  hash stores what it chose. Nothing rolled after it can move it.
+- **Nothing in a recipe may reach the `spawn` or `behavior` streams.**
 
-An archetype also declares what kind of thing it is -- see "The entity taxonomy" above. That is
-metadata about the *kind* rather than a roll: it reads no stream and moves neither hash.
+A behavior profile also declares what kind of thing a person is -- see "The entity taxonomy" above;
+for a person the taxonomy's type is their profile. That is metadata about the *kind* rather than a
+roll: it reads no stream.
 
-Proportions come from two axes, not from independent rolls: a height axis and a build axis feed
-height, width, head radius and shoulder width together, so a body reads as one person. An age axis
-(`child`/`teen`/`adult`/`older`) then scales height, head-to-body ratio, **limb length**, stride,
-cadence, speed and a forward stoop. `look.h` in an archetype is the *adult* range; age does the
-rest, which is why Timmy carries an adult-sized range and a forced child age. `h` is very nearly a
-stature in metres divided by 1.86, the skeleton's unit height, so the archetype ranges read as real
-heights: adults land between about 1.55 m and 1.92 m.
+Proportions come from one height axis and the Build preset: the height roll and the preset's width
+feed height, width, head radius and shoulder width together, so a body reads as one person. The
+primitives' **figure** -- a child's for anyone who needs a child model, otherwise their age's --
+scales height, head-to-body ratio, **limb length** and a forward stoop. `h` is very nearly a stature
+in metres divided by 1.86, the skeleton's unit height: adults land between about 1.56 m and 1.90 m.
 
 `limb` is what stops a child being a scaled-down adult. It shortens the leg and arm bones, and
 `drawPerson` *derives* the hip from it (`hipY = ANKLE_Y + (THIGH + SHIN) * limb`) rather than
 hardcoding it, so the feet stay on the ground and the torso lengthens to take up the difference.
 The chest and pelvis are then placed as fractions of the hip-to-shoulder span, not at absolute
 heights, so they stretch with it.
+
+The primitives' own parts -- hats, hair styles, beards, glasses, jackets, shorts, bags, a backpack
+or a child's balloon -- are rolled after the choices, for the primitive fallback alone; a model has
+none of them yet. Nobody carries a phone or a camera any more: they were Kyle's and Linda's, and
+profiles carry only behavior.
 
 Colour comes from a curated `Outfit` rather than per-garment rolls, and reusing one of its colours
 twice is the point: that repetition is what makes a person read as designed. The exception is the
@@ -1360,10 +1419,11 @@ one shade in two lightnesses, and swapping onto the neighbour satisfies the lett
 changes nothing anyone can see. Clothing does not get this treatment: a hat matching a shirt is
 coordination, not a clash.
 
-Mobility aids (`cane`, `wheelchair`, `scooter`) are people, not obstacles. Each carries a
-`MotionProfile` the simulation applies on top of the archetype — speed, turn rate, acceleration,
-collision radius and collision offset — so they behave plausibly in the crowd rather than just
-looking different. Their odds rise steeply with the age axis.
+Equipment is people, not obstacles. Each piece carries a `MotionProfile` the simulation applies on
+top of the behavior -- speed, turn rate, acceleration, collision radius and collision offset -- so its
+users behave plausibly in the crowd rather than just looking different. The stroller's is the room
+Mary's archetype used to take: the collider widened to 0.62 m and pushed 0.6 m ahead, which widens
+the separation with it.
 
 Parts are drawn from the shared instanced pools and the budget per person is **fixed**: a person
 wearing everything costs exactly what a person wearing nothing costs, because hidden parts write a
@@ -1933,12 +1993,19 @@ Measured in a visible tab at a full 120 Hz frame (the frame time sits on the vsy
 to how people look or move moves it. Regenerate it with `npm run test:update-hash` in the same
 commit, and say so in the commit message.
 
-`Simulation.identityHash()` covers only what the `spawn` and `behavior` streams decide: archetype,
-direction, spawn placement, group structure and the timers each agent is born with. It is read off
-a freshly filled crowd, so nothing in it has been touched by a movement profile. **Work on
-appearance must leave the stored `identity` value untouched**; `test:update-hash` deliberately
-carries it through unchanged. If it moves, a draw was added, removed or reordered in the `spawn` or
-`behavior` streams — fix the cause, never the stored value.
+`Simulation.identityHash()` covers who the seed spawns: each person's behavior profile, direction,
+spawn placement, group structure and the timers each agent is born with. Everything but the profile
+is the `spawn` and `behavior` streams'; the profile is each person's **first recipe roll**, read
+ahead by the spawner, which nothing rolled after it can move. It is read off a freshly filled crowd,
+so nothing in it has been touched by a movement profile. **Work on appearance must leave the stored
+`identity` value untouched**; `test:update-hash` deliberately carries it through unchanged. If it
+moves, a draw was added, removed or reordered in the `spawn` or `behavior` streams, or ahead of the
+behavior roll — fix the cause, never the stored value.
+
+**It moved once, on purpose,** when archetypes were split into independent choices: the profile
+used to be a spawn-stream draw and became the person's own recipe roll, a Darter's parent became
+the spawn index after the child's, and a family's shared outfit stopped being a spawn draw. That is
+the only time it has moved; it was written by hand in that commit.
 
 ## URL parameters
 
@@ -2077,7 +2144,7 @@ decisions, on any machine and at any frame rate. Everything below exists to keep
   identical in every run, and moves neither hash. Behaviour rewired to read a property must give the
   same answer the assumption it replaced gave, or it is a behaviour change wearing a representation
   change's clothes. Archetype *keys* may be renamed but never reordered: both hashes store
-  `ARCH_KEYS.indexOf(a.type)`, so a key's position is load-bearing and its spelling is not.
+  `BEHAVIOR_KEYS.indexOf(a.type)`, so a key's position is load-bearing and its spelling is not.
 - Anything that iterates over agents in a way that affects outcomes must iterate in a stable order
   (spawn order, which is `crowd.agents` order, or slot order), never in hash-map or Set insertion
   order that could vary.

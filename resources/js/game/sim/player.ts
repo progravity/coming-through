@@ -1,4 +1,3 @@
-import { ARCH } from '../archetypes.ts';
 import { atan2, cos, hypot, sin } from '../core/dmath.ts';
 import { Rng } from '../core/rng.ts';
 import { SIM_DT } from '../core/time.ts';
@@ -83,8 +82,8 @@ function placeAtStart(p: Player): void {
 export function createPlayer(): Player {
     // The player's look is fixed, so the recipe roll uses a constant seed rather than a run stream.
     // h puts them at about 1.73 m: the middle of the crowd, not a head above it.
-    const recipe = makeRecipe(new Rng(0), ARCH.tourist, { shirt: 0xf2f0ea });
-    recipe.age = 'adult'; recipe.h = 0.93; recipe.hat = 'cap'; recipe.hatColor = 0xd9534f;
+    const recipe = makeRecipe(new Rng(0), { behavior: 'typical', age: 'normal', equipment: 'none', shirt: 0xf2f0ea });
+    recipe.h = 0.93; recipe.hat = 'cap'; recipe.hatColor = 0xd9534f;
     recipe.hair = 'none'; recipe.ponytail = false; recipe.beard = 'none'; recipe.acc = 'none';
     recipe.mobility = 'none'; recipe.seated = false; recipe.stoop = 0; recipe.jacket = false;
     recipe.limb = 1;

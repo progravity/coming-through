@@ -2,8 +2,8 @@
  * The whole game state and its fixed-step update, with no renderer or DOM dependency so it can be
  * run headlessly (see tests/js/determinism.test.ts) and, later, replayed from a seed plus an input log.
  */
-import { ARCH_KEYS } from '../archetypes.ts';
-import type { ArchMix } from '../archetypes.ts';
+import { BEHAVIOR_KEYS } from '../behaviors.ts';
+import type { BehaviorMix } from '../behaviors.ts';
 import { Hasher } from '../core/hash.ts';
 import { makeStreams } from '../core/rng.ts';
 import type { Streams } from '../core/rng.ts';
@@ -59,11 +59,12 @@ export class Simulation {
     onScrape: (() => void) | null = null;
 
     /**
-     * @param options.mix Spawn weights in place of the archetypes' own. The people lab's crowd view
-     *   is the only caller that passes one; a run of the game never does, so it changes nothing
-     *   either determinism hash reads. See `weightedType`.
+     * @param options.mix Behavior weights in place of the composition's. The people lab's crowd
+     *   view is the only caller that passes one; a run of the game never does, so it changes
+     *   nothing either determinism hash reads. It changes what each person's behavior roll selects,
+     *   never how many rolls are taken.
      */
-    constructor(seed: number, options: { mix?: ArchMix } = {}) {
+    constructor(seed: number, options: { mix?: BehaviorMix } = {}) {
         this.seed = seed >>> 0;
         this.streams = makeStreams(this.seed);
         this.crowd = new Crowd(this.streams, options.mix);
@@ -120,10 +121,11 @@ export class Simulation {
         h.u32(this.crowd.spawned).u32(this.crowd.agents.length);
         for (const a of this.crowd.agents) {
             const r = a.recipe;
-            h.u32(a.index).u32(ARCH_KEYS.indexOf(a.type)).u32(a.group).bool(a.dead);
+            h.u32(a.index).u32(BEHAVIOR_KEYS.indexOf(a.type)).u32(a.group).bool(a.dead);
             h.f64(a.x).f64(a.z).f64(a.vx).f64(a.vz).f64(a.yaw).f64(a.speed).f64(a.r).f64(a.colOff).f64(a.accel).f64(a.turn);
             h.f64(a.t).f64(a.wanderN).f64(a.wanderS).f64(a.nextWander).f64(a.stopUntil).f64(a.nextStop).f64(a.bumpCd);
-            h.str(r.age).f64(r.h).f64(r.w).f64(r.headR).f64(r.shoulder).f64(r.stoop).f64(r.limb);
+            h.str(r.age).str(r.build).str(r.skinTone).str(r.hairTone).str(r.equipment).str(r.modelClass).bool(r.sharesScheme);
+            h.f64(r.h).f64(r.w).f64(r.headR).f64(r.shoulder).f64(r.stoop).f64(r.limb);
             h.u32(r.skin).u32(r.shirt).u32(r.pants).u32(r.shoe);
             h.str(r.hat).u32(r.hatColor).str(r.hair).u32(r.hairColor).bool(r.ponytail).str(r.beard).bool(r.glasses);
             h.bool(r.jacket).u32(r.jacketColor).bool(r.shorts).bool(r.bag).u32(r.bagColor);
@@ -134,20 +136,22 @@ export class Simulation {
     }
 
     /**
-     * Hash of *who the seed spawns*, and nothing else: archetype, direction, spawn placement, group
-     * structure, and the first behaviour-stream draws each agent starts life with.
+     * Hash of *who the seed spawns*, and nothing else: behavior profile, direction, spawn placement,
+     * group structure, and the first behaviour-stream draws each agent starts life with.
      *
-     * Deliberately excludes everything the `recipe` stream owns -- proportions, colours, gait,
-     * speed, mobility -- and everything that moves. That is what makes it useful: appearance work
-     * may freely change `hash()`, but if it has disturbed the `spawn` or `behavior` streams this
-     * value changes too. Meant to be read off a freshly filled crowd, before any step, so no
+     * The behavior profile is the one thing here the `recipe` stream decides: it is each person's
+     * first recipe roll, read ahead by the spawner, and nothing rolled after it can move it.
+     * Everything else the recipe owns -- age, build, colors, gait, speed, equipment -- is excluded,
+     * and so is everything that moves. That is what makes it useful: appearance work may freely
+     * change `hash()`, but if it has disturbed the `spawn` or `behavior` streams, or the behavior
+     * roll, this value changes too. Meant to be read off a freshly filled crowd, before any step, so no
      * position here has been touched by a movement profile.
      */
     identityHash(): string {
         const h = new Hasher();
         h.u32(this.seed).u32(this.crowd.spawned).u32(this.crowd.agents.length);
         for (const a of this.crowd.agents) {
-            h.u32(a.index).u32(ARCH_KEYS.indexOf(a.type)).u32(a.dir > 0 ? 1 : 0).u32(a.group);
+            h.u32(a.index).u32(BEHAVIOR_KEYS.indexOf(a.type)).u32(a.dir > 0 ? 1 : 0).u32(a.group);
             h.f64(a.spawnX).f64(a.spawnZ).f64(a.offset);
             h.u32(a.leader ? a.leader.index : 0xffffffff).u32(a.parent ? a.parent.index : 0xffffffff);
             h.f64(a.nextWander).f64(a.nextStop);

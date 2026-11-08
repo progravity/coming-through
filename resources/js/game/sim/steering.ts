@@ -1,4 +1,4 @@
-import type { Archetype } from '../archetypes.ts';
+import type { Behavior } from '../behaviors.ts';
 import { hypot } from '../core/dmath.ts';
 import { SIM_DT } from '../core/time.ts';
 import type { PathFrame } from '../world/path.ts';
@@ -15,7 +15,7 @@ export interface Steer { dx: number; dz: number; }
  * Push away from nearby agents within the agent's separation radius. Group mates are excluded.
  * Distance between two bodies is Euclidean whatever shape the path is, so this stays world-space.
  */
-export function separation(self: Agent, A: Archetype, grid: SpatialGrid<Agent, Obstacle>, out: Steer): void {
+export function separation(self: Agent, A: Behavior, grid: SpatialGrid<Agent, Obstacle>, out: Steer): void {
     let sx = 0, sz = 0;
     const cx = self.cx, cz = self.cz;
     grid.forNeighbors(cx, cz, o => {
@@ -30,7 +30,7 @@ export function separation(self: Agent, A: Archetype, grid: SpatialGrid<Agent, O
 }
 
 /** Push away from the player, scaled by how much this archetype cares. */
-export function avoidPlayer(self: Agent, A: Archetype, player: Player, out: Steer): void {
+export function avoidPlayer(self: Agent, A: Behavior, player: Player, out: Steer): void {
     const cx = self.cx, cz = self.cz;
     const ex = cx - player.x, ez = cz - player.z, R = self.sepR + player.r, d2 = ex * ex + ez * ez;
     if (d2 < R * R && d2 > 1e-6) {

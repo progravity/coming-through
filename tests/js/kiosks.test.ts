@@ -410,8 +410,10 @@ test('walking into a cart is a scrape and never a bump', () => {
     let bumps = 0, scrapes = 0;
     sim.onBump = (): void => { bumps++; };
     sim.onScrape = (): void => { scrapes++; };
-    // Nobody else on the walkway, so the only thing to hit is the cart.
+    // Nobody else on the walkway, so the only thing to hit is the cart -- and nobody arriving, either:
+    // whether a newcomer happens to walk into the player is a fact about the seed, not the cart.
     sim.crowd.agents.length = 0;
+    sim.crowd.populate = (): void => undefined;
     const cart = kioskObstacles(sim.crowd.obstacles).reduce((best, o) =>
         Math.hypot(o.cx - sim.player.x, o.cz - sim.player.z) < Math.hypot(best.cx - sim.player.x, best.cz - sim.player.z) ? o : best);
     for (let i = 0; i < 1500; i++) {

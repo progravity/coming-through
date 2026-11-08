@@ -28,8 +28,7 @@
  * camera, which is what `?look=<slug>` and `npm run bench:looks` are for.
  */
 import * as THREE from 'three';
-import { archetypeForSeed, Subject } from '../inspect/subject.ts';
-import type { Overrides } from '../inspect/subject.ts';
+import { Subject } from '../inspect/subject.ts';
 import type { Look } from '../render/look.ts';
 import { drawPerson } from '../render/person.ts';
 import { PER, PartPools } from '../render/pools.ts';
@@ -78,7 +77,6 @@ export function structureOf(meshes: PoolMeshes): Structure {
  * cannot move either determinism hash. It costs the same to pose either way -- the part budget per
  * person is fixed, so who a person is does not change what drawing them costs.
  */
-const NO_OVERRIDES: Overrides = { age: 'seed', build: 'seed', mobility: 'seed' };
 
 let cachedSeed = -1;
 let cachedCrowd: Subject[] = [];
@@ -86,7 +84,7 @@ let cachedCrowd: Subject[] = [];
 function benchCrowd(seed: number): Subject[] {
     if (seed === cachedSeed) return cachedCrowd;
     const crowd: Subject[] = [];
-    for (let i = 0; i < BENCH_CROWD; i++) crowd.push(new Subject(seed, i, archetypeForSeed(seed, i), NO_OVERRIDES));
+    for (let i = 0; i < BENCH_CROWD; i++) crowd.push(new Subject(seed, i));
     cachedSeed = seed; cachedCrowd = crowd;
     return crowd;
 }

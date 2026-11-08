@@ -1,4 +1,4 @@
-import type { ArchMix } from '../archetypes.ts';
+import type { BehaviorMix } from '../behaviors.ts';
 import type { Streams } from '../core/rng.ts';
 import { stepsFor } from '../core/time.ts';
 import { hasProperty } from '../entity.ts';
@@ -44,10 +44,10 @@ export class Crowd {
     readonly released: number[] = [];
 
     private readonly streams: Streams;
-    /** Spawn weights in place of the archetypes' own, for the people lab; the game never sets one. */
-    readonly mix: ArchMix | undefined;
+    /** Behavior weights in place of the composition's, for the people lab; the game never sets one. */
+    readonly mix: BehaviorMix | undefined;
 
-    constructor(streams: Streams, mix?: ArchMix) {
+    constructor(streams: Streams, mix?: BehaviorMix) {
         this.streams = streams;
         this.mix = mix;
         this.grid.setFixed(this.obstacles, reachOf);

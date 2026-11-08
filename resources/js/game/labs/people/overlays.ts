@@ -9,7 +9,7 @@
  * call -- and drawn over everything, so a ring under a stroller still shows.
  */
 import * as THREE from 'three';
-import { ARCH } from '../../archetypes.ts';
+import { BEHAVIORS } from '../../behaviors.ts';
 import type { Agent } from '../../sim/agent.ts';
 import type { Obstacle } from '../../sim/obstacles.ts';
 import type { Player } from '../../sim/player.ts';
@@ -158,7 +158,7 @@ export class CrowdOverlays {
             const a = agents[i], p = poses[i];
             const hx = Math.sin(p.yaw), hz = Math.cos(p.yaw);
             const cx = p.x + hx * a.colOff, cz = p.z + hz * a.colOff;
-            const key = ARCH[a.type].color;
+            const key = BEHAVIORS[a.type].color;
             if (show.key) {
                 this.m.compose(this.v.set(cx, PATH.surfaceY(cx, cz) + 0.02, cz), this.q, this.s.set(a.r, a.r, 1));
                 this.discs.setMatrixAt(discs, this.m);

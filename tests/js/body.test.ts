@@ -13,28 +13,28 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
-import { ARCH } from '../../resources/js/game/archetypes.ts';
 import { makeStreams } from '../../resources/js/game/core/rng.ts';
 import {
-    AGE_PRESETS, BUILDS, BUILD_PRESETS, BodyRig, CHILD_AS, LIMITS, bakeMask, buildAt, buildPosition, drawnHeight,
+    AGES, AGE_PRESETS, BUILDS, BUILD_PRESETS, BodyRig, CHILD_NOTE, LIMITS, bakeMask, buildAt, buildPosition, drawnHeight,
     drawsAsPrimitive, modelFallback, parseBodyFile, patchFullness, shape,
 } from '../../resources/js/game/modelcrowd/body.ts';
 import { Subject } from '../../resources/js/game/inspect/subject.ts';
 import type { Body } from '../../resources/js/game/modelcrowd/body.ts';
-import { AGE_HEIGHT, makeRecipe } from '../../resources/js/game/recipe.ts';
+import { BUILD_WIDTH, figureHeight, makeRecipe } from '../../resources/js/game/recipe.ts';
 
 const NEUTRAL: Body = { height: 1, width: 1, shoulders: 1, limbs: 1, fullness: 0, face: 0, neck: 1, head: 1, legs: 1, stoop: 0 };
 
-test("the Build presets are the crowd's own width roll, cut into fifths", () => {
-    // An archetype of width 1 rolls 0.84 to 1.20: the presets have to span exactly that, or the
-    // crowd never reaches Broad, or reaches it with half its people.
-    let lo = Infinity, hi = -Infinity;
-    for (let seed = 1; seed <= 400; seed++) {
-        const w = makeRecipe(makeStreams(seed).recipe.fork('agent:0'), ARCH.tourist).w;
-        lo = Math.min(lo, w); hi = Math.max(hi, w);
+test("the Build presets are the crowd's own builds, each a fifth of it, visibly apart", () => {
+    // Build is a choice: the crowd rolls one of the five presets, and a person's width is that
+    // preset's, which is the width a model body is anchored to.
+    const counts = new Map<string, number>();
+    for (let seed = 1; seed <= 1000; seed++) {
+        const r = makeRecipe(makeStreams(seed).recipe.fork('agent:0'));
+        assert.equal(r.w, BUILD_WIDTH[r.build]);
+        assert.equal(BUILD_PRESETS[r.build].w, r.w);
+        counts.set(r.build, (counts.get(r.build) ?? 0) + 1);
     }
-    assert.ok(Math.abs(lo - BUILD_PRESETS.slim.w) < 0.01, `the narrowest tourist is ${lo}`);
-    assert.ok(Math.abs(hi - BUILD_PRESETS.broad.w) < 0.01, `the widest tourist is ${hi}`);
+    for (const b of BUILDS) assert.ok((counts.get(b) ?? 0) > 150, `only ${counts.get(b) ?? 0} of 1000 are ${b}`);
     for (let i = 1; i < BUILDS.length; i++) {
         const a = BUILD_PRESETS[BUILDS[i - 1]], b = BUILD_PRESETS[BUILDS[i]];
         assert.ok(b.w > a.w, `${BUILDS[i]} sits below ${BUILDS[i - 1]} on the width axis`);
@@ -65,7 +65,7 @@ test("a crowd person's width lands between the presets and blends them", () => {
 });
 
 test('every preset combination stays inside the global limits, and the limits say what they hold', () => {
-    for (const age of ['child', 'teen', 'adult', 'older'] as const) {
+    for (const age of AGES) {
         for (let pos = 0; pos < BUILDS.length; pos++) {
             const s = shape(age, pos);
             assert.deepEqual(s.held, [], `${age} ${BUILDS[pos]} is held back by the shipped limits`);
@@ -73,21 +73,31 @@ test('every preset combination stays inside the global limits, and the limits sa
     }
     // A model that does not stretch well narrows its own: Broad is then held, and says by how much.
     const tight = { ...LIMITS, width: [0.9, 1.05] as const, fullness: [0, 0.01] as const };
-    const s = shape('adult', 4, tight);
+    const s = shape('normal', 4, tight);
     assert.equal(s.body.width, 1.05);
     assert.deepEqual(s.held.map(h => h.key).sort(), ['fullness', 'width']);
     assert.equal(s.held.find(h => h.key === 'width')?.wanted, BUILD_PRESETS.broad.width);
 });
 
-test('a child is drawn as a teen, at the teen height, never as a shrunk adult', () => {
-    const s = shape('child', 2);
-    assert.equal(s.shown, CHILD_AS);
-    assert.deepEqual(s.body, shape('teen', 2).body);
-    const r = makeRecipe(makeStreams(3).recipe.fork('agent:0'), ARCH.timmy);
-    assert.equal(r.age, 'child');
-    // The recipe's own child height is taken back out and the model's teen height put in.
-    const h = drawnHeight(1, r, s.body);
-    assert.ok(Math.abs(h - AGE_PRESETS.teen.height / AGE_HEIGHT.child) < 1e-12);
+test('age is a small adjustment to the model: Young a little shorter and slimmer, Old a little shorter and stooped', () => {
+    const young = AGE_PRESETS.young, normal = AGE_PRESETS.normal, old = AGE_PRESETS.old;
+    assert.deepEqual(normal, { height: 1, width: 1, shoulders: 1, head: 1, legs: 1, stoop: 0 });
+    assert.ok(young.height < 1 && young.height > 0.94, 'Young is a bit shorter, not a child');
+    assert.ok(young.width < 1 && young.shoulders < 1, 'and slimmer');
+    assert.ok(old.height < 1 && old.height > 0.95, 'Old is slightly shorter');
+    assert.ok(old.stoop > 0.05 && old.stoop < 0.16, 'with a gentle stoop');
+    // The recipe's own figure height is taken back out and the model's Age height put in.
+    const r = makeRecipe(makeStreams(3).recipe.fork('agent:0'), { age: 'young', behavior: 'typical' });
+    const h = drawnHeight(1, r, shape('young', 2).body);
+    assert.ok(Math.abs(h - young.height / figureHeight(r)) < 1e-12);
+});
+
+test('a Darter is drawn at an adult model\'s size, never shrunk, and the lab says it needs a child model', () => {
+    const r = makeRecipe(makeStreams(3).recipe.fork('agent:0'), { behavior: 'darter', age: 'normal' });
+    assert.equal(r.modelClass, 'child');
+    // The primitives' child height comes back out: no model is ever scaled into a child.
+    assert.ok(Math.abs(drawnHeight(1, r, shape('normal', 2).body) - 1 / figureHeight(r)) < 1e-12);
+    assert.match(CHILD_NOTE, /child model/);
 });
 
 test('a body file names its type and may narrow the limits; a bad one is read as average and says why', () => {
@@ -100,6 +110,12 @@ test('a body file names its type and may narrow the limits; a bad one is read as
     assert.equal(bad.type, 'average');
     assert.match(bad.error ?? '', /giant/);
     assert.equal(parseBodyFile('not json', 'z.body.json').type, 'average');
+    // The age class says who the model can be: an adult unless it says child or elderly.
+    assert.equal(f.ageClass, 'adult');
+    assert.equal(parseBodyFile('{"ageClass":"child"}', 'c.body.json').ageClass, 'child');
+    const odd = parseBodyFile('{"ageClass":"toddler"}', 't.body.json');
+    assert.equal(odd.ageClass, 'adult');
+    assert.match(odd.error ?? '', /toddler/);
 });
 
 /** A Mixamo-named rig: spine, neck and head up the middle, a left arm hanging, a left leg standing. */
@@ -252,16 +268,22 @@ test('a thicker neck thickens the neck and carries nothing with it', () => {
     assert.ok(world(bone.Head).equals(head), 'the head moved');
 });
 
-test('models leave mobility aids and strollers to the primitives, and say why', () => {
-    const plain = new Subject(1, 0, 'tourist', { age: 'adult', build: 'seed', mobility: 'none' }).recipe;
-    const chair = new Subject(1, 0, 'tourist', { age: 'adult', build: 'seed', mobility: 'wheelchair' }).recipe;
-    const pram = new Subject(1, 0, 'mary', { age: 'adult', build: 'seed', mobility: 'none' }).recipe;
+test('models leave equipment and Darters to the primitives, and say why', () => {
+    const plain = new Subject(1, 0, { behavior: 'typical', equipment: 'none' }).recipe;
+    const chair = new Subject(1, 0, { behavior: 'typical', equipment: 'wheelchair' }).recipe;
+    const pram = new Subject(1, 0, { equipment: 'stroller' }).recipe;
+    const darter = new Subject(1, 0, { behavior: 'darter', equipment: 'none' }).recipe;
     assert.equal(pram.acc, 'stroller');
+    assert.equal(pram.behavior, 'slow-walker');
     assert.equal(drawsAsPrimitive(plain), false);
     assert.equal(modelFallback(plain), null);
-    assert.ok(drawsAsPrimitive(chair) && drawsAsPrimitive(pram));
+    assert.ok(drawsAsPrimitive(chair) && drawsAsPrimitive(pram) && drawsAsPrimitive(darter));
     assert.match(modelFallback(chair) ?? '', /wheelchair.*not yet supported on models/);
     assert.match(modelFallback(pram) ?? '', /stroller.*not yet supported on models/);
+    assert.match(modelFallback(darter) ?? '', /Darter needs a child model/);
+    // A child model, when there is one, takes the Darters back from the primitives.
+    assert.equal(drawsAsPrimitive(darter, 'child'), false);
+    assert.equal(drawsAsPrimitive(plain, 'child'), true);
 });
 
 test('a seam swells as one surface: coincident vertices share the direction they are pushed', () => {

@@ -1,4 +1,4 @@
-import { ARCH } from './archetypes.ts';
+import { BEHAVIORS } from './behaviors.ts';
 import type { Crowd } from './sim/crowd.ts';
 import type { Player } from './sim/player.ts';
 import { EXIT_S, GOAL_S, L, PAD_LENGTH, START_S } from './world/layout.ts';
@@ -98,7 +98,7 @@ export class DebugOverlay {
         ctx.lineWidth = 1;
         for (const a of crowd.agents) {
             if (a.dead) continue;
-            const col = '#' + ARCH[a.type].color.toString(16).padStart(6, '0');
+            const col = '#' + BEHAVIORS[a.type].color.toString(16).padStart(6, '0');
             // separation radius (about the collision centre, matching the steering test)
             ctx.strokeStyle = col; ctx.globalAlpha = 0.35;
             ctx.beginPath(); ctx.arc(X(a.cx), Y(a.cz), a.sepR * s, 0, Math.PI * 2); ctx.stroke();

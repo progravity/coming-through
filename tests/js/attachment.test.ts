@@ -19,12 +19,11 @@ import * as THREE from 'three';
 import { RecordingPools } from '../../resources/js/game/inspect/gizmos.ts';
 import { Subject } from '../../resources/js/game/inspect/subject.ts';
 import type { Overrides } from '../../resources/js/game/inspect/subject.ts';
-import type { ArchKey } from '../../resources/js/game/archetypes.ts';
 import { INK } from '../../resources/js/game/palette.ts';
 import { drawPerson } from '../../resources/js/game/render/person.ts';
 
 const SEED = 9;
-const NONE: Overrides = { age: 'seed', build: 'seed', mobility: 'seed' };
+const NONE: Partial<Overrides> = { behavior: 'typical', equipment: 'none' };
 const CORNERS: readonly (readonly [number, number, number])[] = [
     [-0.5, -0.5, -0.5], [0.5, -0.5, -0.5], [-0.5, 0.5, -0.5], [0.5, 0.5, -0.5],
     [-0.5, -0.5, 0.5], [0.5, -0.5, 0.5], [-0.5, 0.5, 0.5], [0.5, 0.5, 0.5],
@@ -45,9 +44,9 @@ function lowestPoint(pools: RecordingPools): number {
 }
 
 /** Walk one figure through a full stride, returning the lowest point at each of eight phases. */
-function strideLows(arch: ArchKey, o: Overrides): number[] {
+function strideLows(o: Partial<Overrides>): number[] {
     const pools = new RecordingPools(new THREE.Scene());
-    const s = new Subject(SEED, 0, arch, o);
+    const s = new Subject(SEED, 0, o);
     s.mv = 1;
     const lows: number[] = [];
     for (let i = 0; i < 8; i++) {
@@ -59,23 +58,23 @@ function strideLows(arch: ArchKey, o: Overrides): number[] {
     return lows;
 }
 
-interface Case { label: string; arch: ArchKey; o: Overrides; grounded: boolean }
+interface Case { label: string; o: Partial<Overrides>; grounded: boolean }
 /** `grounded` marks the cases carrying equipment that rests on the pavement. */
 const CASES: readonly Case[] = [
-    { label: 'on foot', arch: 'tourist', o: NONE, grounded: false },
-    { label: 'child on foot', arch: 'tourist', o: { ...NONE, age: 'child' }, grounded: false },
-    { label: 'cane', arch: 'tourist', o: { ...NONE, mobility: 'cane' }, grounded: true },
-    { label: 'wheelchair', arch: 'tourist', o: { ...NONE, mobility: 'wheelchair' }, grounded: true },
-    { label: 'scooter', arch: 'tourist', o: { ...NONE, mobility: 'scooter' }, grounded: true },
-    { label: 'stroller', arch: 'mary', o: NONE, grounded: true },
-    { label: 'child in a wheelchair', arch: 'tourist', o: { ...NONE, age: 'child', mobility: 'wheelchair' }, grounded: true },
-    { label: 'broad build with a cane', arch: 'tourist', o: { ...NONE, build: 'broad', mobility: 'cane' }, grounded: true },
-    { label: 'older on a scooter', arch: 'tourist', o: { ...NONE, age: 'older', mobility: 'scooter' }, grounded: true },
+    { label: 'on foot', o: NONE, grounded: false },
+    { label: 'child on foot', o: { behavior: 'darter', equipment: 'none' }, grounded: false },
+    { label: 'cane', o: { behavior: 'typical', equipment: 'cane' }, grounded: true },
+    { label: 'wheelchair', o: { behavior: 'typical', equipment: 'wheelchair' }, grounded: true },
+    { label: 'scooter', o: { behavior: 'typical', equipment: 'scooter' }, grounded: true },
+    { label: 'stroller', o: { equipment: 'stroller' }, grounded: true },
+    { label: 'child in a wheelchair', o: { behavior: 'darter', equipment: 'wheelchair' }, grounded: true },
+    { label: 'broad build with a cane', o: { ...NONE, build: 'broad', equipment: 'cane' }, grounded: true },
+    { label: 'older on a scooter', o: { ...NONE, age: 'old', equipment: 'scooter' }, grounded: true },
 ];
 
 test('nothing a person stands or rides on sinks through the ground', () => {
-    for (const { label, arch, o } of CASES) {
-        const lows = strideLows(arch, o);
+    for (const { label, o } of CASES) {
+        const lows = strideLows(o);
         const deepest = Math.min(...lows);
         assert.ok(deepest > -0.02, `${label}: sinks ${(-deepest).toFixed(3)} below the ground`);
         assert.ok(deepest < 0.06, `${label}: floats ${deepest.toFixed(3)} above the ground`);
@@ -85,9 +84,9 @@ test('nothing a person stands or rides on sinks through the ground', () => {
 test('ground equipment holds still while the body bobs through a stride', () => {
     // The figures on foot are deliberately excluded: their own lowest point *should* move over a
     // stride, because that is a foot lifting off the pavement.
-    for (const { label, arch, o, grounded } of CASES) {
+    for (const { label, o, grounded } of CASES) {
         if (!grounded) continue;
-        const lows = strideLows(arch, o);
+        const lows = strideLows(o);
         const spread = Math.max(...lows) - Math.min(...lows);
         assert.ok(spread < 0.005, `${label}: ground contact moves ${spread.toFixed(4)} over a stride`);
     }
@@ -125,10 +124,10 @@ function bounds(m: THREE.Matrix4): { lo: number[]; hi: number[] } {
 test('overlapping boxes are buried inside each other, never flush', () => {
     // Boxes only. A sphere or a cylinder shares a *bounding* face with its neighbour long before it
     // shares a surface with it, so the same measurement on a rounded part means nothing.
-    for (const { label, arch, o } of CASES) {
+    for (const { label, o } of CASES) {
         for (const seed of [SEED, 3948736537, 20260904]) {
             const pools = new RecordingPools(new THREE.Scene());
-            const s = new Subject(seed, 0, arch, o);
+            const s = new Subject(seed, 0, o);
             s.mv = 1;
             pools.beginRecord();
             drawPerson(pools, 0, s, s, 0);
@@ -164,7 +163,7 @@ test('a pram body sits on its wheels rather than above them', () => {
     // stays green however far the body floats over them. Daylight between the two reads as a box
     // parked near some wheels rather than as a pram, which is a gap no other check would catch.
     const pools = new RecordingPools(new THREE.Scene());
-    const s = new Subject(SEED, 0, 'mary', NONE);
+    const s = new Subject(SEED, 0, { equipment: 'stroller' });
     s.mv = 1;
     pools.beginRecord();
     drawPerson(pools, 0, s, s, 0);

@@ -1,7 +1,7 @@
 /**
  * What the crowd view is showing, and how it survives a reload.
  *
- * Everything that decides the crowd -- the seed, the crowd size and the archetype mix -- and
+ * Everything that decides the crowd -- the seed, the crowd size and the behavior mix -- and
  * everything that decides how it is looked at -- the camera, the overlays, the selection, the time
  * scale -- lives in the address bar, so a link reopens the same crowd seen the same way. A paused
  * crowd also carries `at`, the steps run since it was primed: the crowd is a pure function of its
@@ -9,8 +9,9 @@
  *
  * None of it is saved anywhere. A mix is a view setting for this page and nothing else.
  */
-import { ARCH, ARCH_KEYS } from '../../archetypes.ts';
-import type { ArchKey, ArchMix } from '../../archetypes.ts';
+import { BEHAVIOR_KEYS } from '../../behaviors.ts';
+import type { BehaviorKey, BehaviorMix } from '../../behaviors.ts';
+import { COMPOSITION } from '../../composition.ts';
 import { parseSeed } from '../../core/rng.ts';
 import { MODELS } from '../../render/model-file.ts';
 import { MAX_CROWD, MIN_CROWD, clampCrowd } from '../../sim/simulation.ts';
@@ -24,7 +25,7 @@ export const SPEEDS: readonly number[] = [1, 0.5, 0.25, 0.1];
 export interface OverlayDef { id: string; label: string; key?: string; on?: boolean }
 
 export const CROWD_OVERLAYS: readonly OverlayDef[] = [
-    { id: 'key', label: 'archetype colors', key: 'k', on: true },
+    { id: 'key', label: 'behavior colors', key: 'k', on: true },
     { id: 'collider', label: 'colliders', key: 'c' },
     { id: 'separation', label: 'separation radii', key: 'r' },
     { id: 'vectors', label: 'heading & velocity', key: 'v' },
@@ -41,7 +42,7 @@ export interface OrbitView { px: number; py: number; pz: number; tx: number; ty:
 export interface CrowdState {
     seed: number;
     crowd: number;
-    /** Spawn weights in `ARCH_KEYS` order, or null for the archetypes' own. */
+    /** Behavior weights in `BEHAVIOR_KEYS` order, or null for the composition's own. */
     mix: number[] | null;
     model: string;
     speed: number;
@@ -63,11 +64,11 @@ export const DEFAULT_CROWD = 80;
 /** The most steps a link may ask to be fast-forwarded: ten minutes of simulated time. */
 export const MAX_AT = 36000;
 
-export const ownWeights = (): number[] => ARCH_KEYS.map(k => ARCH[k].weight);
+export const ownWeights = (): number[] => BEHAVIOR_KEYS.map(k => COMPOSITION.behavior[k]);
 
-export function mixOf(weights: readonly number[] | null): ArchMix | undefined {
+export function mixOf(weights: readonly number[] | null): BehaviorMix | undefined {
     if (weights === null) return undefined;
-    return Object.fromEntries(ARCH_KEYS.map((k, i) => [k, weights[i] ?? 0])) as Record<ArchKey, number>;
+    return Object.fromEntries(BEHAVIOR_KEYS.map((k, i) => [k, weights[i] ?? 0])) as Record<BehaviorKey, number>;
 }
 
 const num = (v: string | null, fallback: number): number => {
@@ -85,7 +86,7 @@ function nums(v: string | null, count: number): number[] | null {
 export function readCrowd(search: string): CrowdState {
     const q = new URLSearchParams(search);
     const seed = q.get('seed');
-    const mix = nums(q.get('mix'), ARCH_KEYS.length);
+    const mix = nums(q.get('mix'), BEHAVIOR_KEYS.length);
     const own = ownWeights();
     const overlays = new Set(CROWD_OVERLAYS.filter(o => o.on === true).map(o => o.id));
     for (const o of CROWD_OVERLAYS) {
@@ -100,7 +101,7 @@ export function readCrowd(search: string): CrowdState {
     return {
         seed: seed !== null && seed !== '' ? parseSeed(seed) : DEFAULT_SEED,
         crowd: clampCrowd(Math.round(num(q.get('crowd'), DEFAULT_CROWD))),
-        // A mix that restates the archetypes' own weights is no mix at all.
+        // A mix that restates the composition's own weights is no mix at all.
         mix: mix !== null && mix.some((w, i) => w !== own[i]) ? mix : null,
         // People are drawn from models here, as in the game; an old `source=prim` opens the model too.
         model: names.includes(model) ? model : (names[0] ?? ''),

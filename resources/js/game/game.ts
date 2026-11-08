@@ -363,7 +363,7 @@ function frame(now: number): void {
         modelCrowd.draw(sim.crowd.agents, alpha, sim.player, pools.inkOn);
         // And the people it leaves to the primitives, whose colliders their equipment sets.
         for (const a of sim.crowd.agents) {
-            if (!drawsAsPrimitive(a.recipe)) continue;
+            if (!drawsAsPrimitive(a.recipe, modelCrowd.drawable)) continue;
             lerpPose(view, a.prev, a, alpha); drawPerson(pools, a.slot, a, view, t, PATH.surfaceY(view.x, view.z));
         }
     } else for (const a of sim.crowd.agents) { lerpPose(view, a.prev, a, alpha); drawPerson(pools, a.slot, a, view, t, PATH.surfaceY(view.x, view.z)); }

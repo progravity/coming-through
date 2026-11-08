@@ -208,14 +208,17 @@ test('the crowd goes round the furniture instead of through it', () => {
 test('the furniture narrows the walkway without stopping anyone in it', () => {
     // The narrowing is the point -- the crowd should bunch beside a bench -- but a pinch that holds
     // somebody still is a bug. Measured as throughput against the same run with the colliders taken
-    // out, which is the only baseline that separates "slower" from "stuck".
+    // out, which is the only baseline that separates "slower" from "stuck". Summed over four seeds:
+    // thirty seconds of one seed is sixty-odd people, and a single seed can tie either way.
     const flow = (withFurniture: boolean): number => {
-        const sim = new Simulation(1);
-        if (!withFurniture) sim.crowd.grid.setFixed([], reachOf);
-        sim.prime(190);
-        const cmd = running(190);
         let through = 0;
-        for (let i = 0; i < 1800; i++) { sim.step(cmd); through += sim.crowd.released.length; }
+        for (const seed of [1, 2, 3, 4]) {
+            const sim = new Simulation(seed);
+            if (!withFurniture) sim.crowd.grid.setFixed([], reachOf);
+            sim.prime(190);
+            const cmd = running(190);
+            for (let i = 0; i < 1800; i++) { sim.step(cmd); through += sim.crowd.released.length; }
+        }
         return through;
     };
     const bare = flow(false), furnished = flow(true);

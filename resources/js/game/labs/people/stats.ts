@@ -9,8 +9,8 @@
  * touches this step and did not last step is a new one. Reading, never writing: nothing here can
  * reach either determinism hash.
  */
-import { ARCH_KEYS } from '../../archetypes.ts';
-import type { ArchKey } from '../../archetypes.ts';
+import { BEHAVIOR_KEYS } from '../../behaviors.ts';
+import type { BehaviorKey } from '../../behaviors.ts';
 import { SIM_DT } from '../../core/time.ts';
 import type { Simulation } from '../../sim/simulation.ts';
 import { L } from '../../world/layout.ts';
@@ -37,7 +37,7 @@ export interface CellCount { ix: number; iz: number; n: number }
 export interface Snapshot {
     people: number;
     spawned: number;
-    byType: ReadonlyMap<ArchKey, number>;
+    byType: ReadonlyMap<BehaviorKey, number>;
     /** People on the walkway itself, per square meter. */
     density: number;
     area: number;
@@ -90,7 +90,7 @@ export class CrowdStats {
 
     snapshot(sim: Simulation, cellSize: number): Snapshot {
         const agents = sim.crowd.agents;
-        const byType = new Map<ArchKey, number>(ARCH_KEYS.map(k => [k, 0]));
+        const byType = new Map<BehaviorKey, number>(BEHAVIOR_KEYS.map(k => [k, 0]));
         let onWalk = 0, stopped = 0, standing = 0;
         this.cells.clear();
         for (const a of agents) {

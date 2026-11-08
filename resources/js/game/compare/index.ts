@@ -23,8 +23,8 @@ import * as THREE from 'three';
 import { parseSeed, randomSeed } from '../core/rng.ts';
 import { MAX_CATCHUP_STEPS, SIM_DT } from '../core/time.ts';
 import { RecordingPools, measure, newBounds } from '../inspect/gizmos.ts';
-import { ARCH_OPTIONS, Subject, archetypeForSeed } from '../inspect/subject.ts';
-import type { ArchOverride, Overrides } from '../inspect/subject.ts';
+import { BEHAVIOR_OPTIONS, Subject } from '../inspect/subject.ts';
+import type { ArchOverride } from './state.ts';
 import { LOOKS } from '../render/look.ts';
 import type { Look } from '../render/look.ts';
 import { drawPerson } from '../render/person.ts';
@@ -40,7 +40,6 @@ const TAU = Math.PI * 2;
 /** Turntable rate in radians per second, the turntable's own. */
 const SPIN = 0.4;
 /** The comparison is about how a *person* looks, so the axis overrides stay out of it. */
-const NO_OVERRIDES: Overrides = { age: 'seed', build: 'seed', mobility: 'seed' };
 /** Height of the control bar, in CSS pixels. */
 const BAR = 46;
 /** Margin around each panel, in CSS pixels, so the panels read as separate cards. */
@@ -226,8 +225,7 @@ export function startCompare(mode: string): void {
         const count = state.mode === 'row' ? ROW_COUNT : 1;
         subjects = [];
         for (let i = 0; i < count; i++) {
-            const type = state.arch !== 'seed' ? state.arch : archetypeForSeed(state.seed, i);
-            subjects.push(new Subject(state.seed, i, type, NO_OVERRIDES));
+            subjects.push(new Subject(state.seed, i, { behavior: state.arch }));
         }
         relayout(count);
         for (const p of panels) p.pools.freeAll();
@@ -318,7 +316,7 @@ export function startCompare(mode: string): void {
     }
 
     const cycleArch = (step: number): ArchOverride =>
-        ARCH_OPTIONS[(ARCH_OPTIONS.indexOf(state.arch) + step + ARCH_OPTIONS.length) % ARCH_OPTIONS.length];
+        BEHAVIOR_OPTIONS[(BEHAVIOR_OPTIONS.indexOf(state.arch) + step + BEHAVIOR_OPTIONS.length) % BEHAVIOR_OPTIONS.length] as ArchOverride;
 
     /** Fields that rebuild the cast; everything else is a live value. */
     const REBUILDS = ['mode', 'seed', 'arch'] as const;

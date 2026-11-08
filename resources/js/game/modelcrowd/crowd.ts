@@ -1,7 +1,8 @@
 /**
  * The crowd drawn as clones of one rigged model: **the default way people are drawn**. The primitive
  * people remain the fallback -- `?people=prim` for the whole crowd, and always for the player and for
- * anyone with a mobility aid or a stroller, which models cannot carry yet (`drawsAsPrimitive`).
+ * anyone with equipment, which models cannot carry yet, and anyone whose model class this model is
+ * not -- a Darter needs a child model (`drawsAsPrimitive`).
  *
  * It reads the same interpolated pose the primitive renderer reads and writes nothing back, so it
  * can move neither determinism hash. The simulation never imports it.
@@ -31,6 +32,7 @@ import { MAX } from '../world/layout.ts';
 import { PATH } from '../world/path.ts';
 import { BodyRig, LIMITS, bakeMask, drawnHeight, drawsAsPrimitive, patchFullness, shapeRecipe } from './body.ts';
 import type { BodyFile, FullnessUniforms, Limits } from './body.ts';
+import type { ModelClass } from '../behaviors.ts';
 import { recipeColours } from './regions.ts';
 import type { RegionPaint, RegionUniforms } from './regions.ts';
 
@@ -127,10 +129,15 @@ export class ModelCrowd {
     /** People whose skeleton was evaluated in the last `draw`. */
     animated = 0;
     /**
-     * People in the last `draw` this renderer left to the primitives: anyone with a mobility aid or a
-     * stroller, which models cannot carry yet (`modelFallback`). The caller draws them.
+     * People in the last `draw` this renderer left to the primitives: anyone with equipment, which
+     * models cannot carry yet, and anyone who needs a model class this one is not (`modelFallback`).
+     * The caller draws them.
      */
     fallback = 0;
+    /** Equipment users, out of `fallback`; the rest need another model class (a Darter, a child). */
+    fallbackEquipment = 0;
+    /** The class of person this model can be, from its body file: an adult unless it says otherwise. */
+    readonly drawable: ModelClass;
     /** People drawn in the last frame, and ink shells drawn, counted by the renderer as it drew them. */
     bodyDraws = 0;
     inkDraws = 0;
@@ -152,6 +159,7 @@ export class ModelCrowd {
         this.knobs = knobs;
         this.paint = paint;
         this.limits = body?.limits ?? LIMITS;
+        this.drawable = body?.ageClass ?? 'adult';
         let source: THREE.SkinnedMesh | null = null;
         file.scene.traverse(o => { if (source === null && (o as THREE.SkinnedMesh).isSkinnedMesh) source = o as THREE.SkinnedMesh; });
         if (source === null) throw new Error('the file has no skinned mesh');
@@ -247,13 +255,13 @@ export class ModelCrowd {
         this.bodyDraws = 0; this.inkDraws = 0;
         const k = this.knobs, view = this.view, frame = this.frame++;
         const far2 = k.far * k.far, every = Math.max(1, Math.round(k.every));
-        let animated = 0, fallback = 0;
+        let animated = 0, fallback = 0, equipment = 0;
         for (const s of this.slots) s.used = false;
         for (const a of agents) {
             const s = this.slots[a.slot];
             if (s === undefined) continue;
             // Equipment the model cannot carry: left to the primitives, whose collider it matches.
-            if (drawsAsPrimitive(a.recipe)) { fallback++; continue; }
+            if (drawsAsPrimitive(a.recipe, this.drawable)) { fallback++; if (a.recipe.equipment !== 'none') equipment++; continue; }
             s.used = true;
             lerpPose(view, a.prev, a, alpha);
             if (s.recipe !== a.recipe) this.dress(s, a.recipe);
@@ -287,6 +295,7 @@ export class ModelCrowd {
         }
         this.animated = animated;
         this.fallback = fallback;
+        this.fallbackEquipment = equipment;
     }
 
     /**

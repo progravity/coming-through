@@ -19,11 +19,11 @@
  * person as they stand, which read and never write.
  */
 import * as THREE from 'three';
-import { ARCH, ARCH_KEYS } from '../../archetypes.ts';
+import { BEHAVIORS, BEHAVIOR_KEYS } from '../../behaviors.ts';
 import { parseSeed, randomSeed } from '../../core/rng.ts';
 import { MAX_CATCHUP_STEPS, SIM_DT } from '../../core/time.ts';
 import { count, n2 } from '../../inspect/describe.ts';
-import { personArchetype, personGeometry, personIdentity, personProvenance, personRecipe } from '../../inspect/entities/person.ts';
+import { personBehavior, personChoices, personGeometry, personIdentity, personProvenance, personRecipe } from '../../inspect/entities/person.ts';
 import type { Who } from '../../inspect/entities/person.ts';
 import { InfoPanel } from '../../inspect/info.ts';
 import type { InfoRow, InfoSection, Readout } from '../../inspect/inspectable.ts';
@@ -69,7 +69,7 @@ const _pp = newPathPoint(), _frame = newPathFrame();
 
 /** A person as the shared info panel's person sections want one. */
 const whoOf = (seed: number, a: Agent): Who => ({
-    seed, index: a.index, type: a.type, arch: a.A, recipe: a.recipe,
+    seed, index: a.index, type: a.type, profile: a.A, recipe: a.recipe,
     speed: a.speed, r: a.r, colOff: a.colOff, sepR: a.sepR, accel: a.accel, turn: a.turn,
 });
 
@@ -183,21 +183,21 @@ export async function startCrowd(lab: Lab): Promise<void> {
     sizeRange.onchange = () => setCrowd(Number(sizeRange.value));
     body.append(label('crowd size'), row(sizeBox, sizeRange));
 
-    // Archetype mix.
+    // Behavior mix.
     const mixBoxes: HTMLInputElement[] = [];
     const mixRows = el('div', 'mix');
     const own = ownWeights();
-    ARCH_KEYS.forEach((k, i) => {
+    BEHAVIOR_KEYS.forEach((k, i) => {
         const sw = el('i', 'sw');
-        sw.style.background = cssHex(ARCH[k].color);
-        const name = el('span', 'mix-name', ARCH[k].name);
-        const box = numberBox((state.mix ?? own)[i], 0, 50, () => setMix(), `${ARCH[k].name} weight`);
+        sw.style.background = cssHex(BEHAVIORS[k].color);
+        const name = el('span', 'mix-name', BEHAVIORS[k].name);
+        const box = numberBox((state.mix ?? own)[i], 0, 50, () => setMix(), `${BEHAVIORS[k].name} weight`);
         mixBoxes.push(box);
         const r = el('label', 'mix-row');
         r.append(sw, name, box);
         mixRows.append(r);
     });
-    body.append(label('archetype mix (spawn weights)'), mixRows, row(button('reset mix', () => { mixBoxes.forEach((b, i) => { b.value = String(own[i]); }); setMix(); })));
+    body.append(label('behavior mix (weights)'), mixRows, row(button('reset mix', () => { mixBoxes.forEach((b, i) => { b.value = String(own[i]); }); setMix(); })));
 
     // Time.
     const pauseBtn = button('pause', () => setPaused(!state.paused));
@@ -218,13 +218,13 @@ export async function startCrowd(lab: Lab): Promise<void> {
     }
     body.append(label('overlays'), ov);
 
-    // The archetype color key, which the discs are drawn in.
+    // The behavior color key, which the discs are drawn in.
     const legend = el('div', 'legend');
-    for (const k of ARCH_KEYS) {
+    for (const k of BEHAVIOR_KEYS) {
         const s = el('span');
         const sw = el('i', 'sw');
-        sw.style.background = cssHex(ARCH[k].color);
-        s.append(sw, document.createTextNode(ARCH[k].name));
+        sw.style.background = cssHex(BEHAVIORS[k].color);
+        s.append(sw, document.createTextNode(BEHAVIORS[k].name));
         legend.append(s);
     }
     const youSpan = el('span');
@@ -232,7 +232,7 @@ export async function startCrowd(lab: Lab): Promise<void> {
     youSw.style.background = '#ffffff';
     youSpan.append(youSw, document.createTextNode('player, idle on the start pad'));
     legend.append(youSpan);
-    body.append(label('archetype color key'), legend);
+    body.append(label('behavior color key'), legend);
     body.append(el('p', 'hint', `Model: ${modelNote}`));
     body.append(el('p', 'hint', 'Click a person to select them. In top-down, drag to pan and wheel to zoom; in orbit, drag to turn and right-drag to pan.'));
 
@@ -309,12 +309,15 @@ export async function startCrowd(lab: Lab): Promise<void> {
         q.set('seed', String(state.seed));
         location.href = `${lab.path}?${q}`;
     }
-    /** The selected person on the turntable: the same seed, spawn index and archetype, and a group's outfit. */
+    /**
+     * The selected person on the turntable: the same seed and spawn index, their behavior (forced
+     * on a group follower or a parent, so it has to be said), and a group's shared outfit.
+     */
     function individualUrl(a: Agent): string {
         const q = new URLSearchParams();
         q.set('seed', String(sim.seed));
         q.set('agent', String(a.index));
-        q.set('arch', a.type);
+        q.set('behavior', a.type);
         // A family is dressed from one outfit the spawner chose; the turntable has to be handed it.
         if (a.group !== 0) q.set('outfit', String(a.recipe.outfit));
         return `${lab.path}?${q}`;
@@ -329,10 +332,10 @@ export async function startCrowd(lab: Lab): Promise<void> {
         const weights = state.mix ?? own;
         const wsum = weights.reduce((a, b) => a + b, 0);
         const table = {
-            caption: state.mix === null ? "spawn weights are the archetypes' own" : 'spawn weights are this view\'s mix',
-            columns: ['archetype', 'people', 'share', 'weight'],
-            rows: ARCH_KEYS.map((k, i) => [
-                { text: ARCH[k].name, color: ARCH[k].color },
+            caption: state.mix === null ? "behavior weights are the composition's own" : 'behavior weights are this view\'s mix',
+            columns: ['behavior', 'people', 'share', 'weight'],
+            rows: BEHAVIOR_KEYS.map((k, i) => [
+                { text: BEHAVIORS[k].name, color: BEHAVIORS[k].color },
                 String(s.byType.get(k) ?? 0),
                 `${Math.round(((s.byType.get(k) ?? 0) / total) * 100)}%`,
                 `${weights[i]} · ${Math.round((weights[i] / Math.max(1, wsum)) * 100)}%`,
@@ -428,12 +431,12 @@ export async function startCrowd(lab: Lab): Promise<void> {
         open.className = 'btnlink';
         selActions.append(follow, open, button('clear', () => select(-1)));
         const who = whoOf(sim.seed, a);
-        const fallback = models !== null ? modelFallback(a.recipe) : null;
+        const fallback = models !== null ? modelFallback(a.recipe, models.drawable) : null;
         selInfo.show({
             title: a.A.name,
             sub: `seed ${sim.seed} · agent:${a.index}`,
             rows: fallback === null ? [] : [['drawn as', `${fallback}; the collider is sized for the equipment`]],
-            sections: [stateSection(a), personIdentity(who), personArchetype(who), personRecipe(who), personGeometry(who), personProvenance(who)],
+            sections: [stateSection(a), personIdentity(who), personChoices(who), personBehavior(who), personRecipe(who), personGeometry(who), personProvenance(who)],
         });
     }
 
@@ -533,7 +536,7 @@ export async function startCrowd(lab: Lab): Promise<void> {
         // The primitives draw anyone the models cannot draw yet, and everyone if the model did not
         // load -- exactly as the game does.
         for (let i = 0; i < agents.length; i++) {
-            if (models !== null && !drawsAsPrimitive(agents[i].recipe)) continue;
+            if (models !== null && !drawsAsPrimitive(agents[i].recipe, models.drawable)) continue;
             const p = poses[i];
             drawPerson(pools, agents[i].slot, agents[i], p, t, PATH.surfaceY(p.x, p.z));
         }

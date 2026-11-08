@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { test } from 'node:test';
 import { join, relative } from 'node:path';
-import { ARCH, ARCH_KEYS } from '../../resources/js/game/archetypes.ts';
+import { BEHAVIORS, BEHAVIOR_KEYS } from '../../resources/js/game/behaviors.ts';
 import { buildObstacles, obstaclesFrom } from '../../resources/js/game/sim/obstacles.ts';
 import { Simulation } from '../../resources/js/game/sim/simulation.ts';
 import { PROPERTIES, entityMeta, hasProperty } from '../../resources/js/game/entity.ts';
@@ -61,7 +61,7 @@ test('the vocabulary is declared in exactly one place', () => {
 });
 
 test('the vocabulary module imports nothing', () => {
-    // What lets sim/, world/, archetypes.ts and inspect/ all read it without any of them dragging a
+    // What lets sim/, world/, behaviors.ts and inspect/ all read it without any of them dragging a
     // dependency in behind them -- the simulation's purity boundary in particular.
     const src = readFileSync(join(SRC, 'entity.ts'), 'utf8');
     const specifiers = [...src.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)].map(m => m[1]);
@@ -110,23 +110,23 @@ test('the inspector shelves entities by the same family the game files them unde
 });
 
 test('every person declares themselves a crowd-spawned, mobile, bump-relevant person', () => {
-    for (const key of ARCH_KEYS) {
-        const meta = ARCH[key].entity;
+    for (const key of BEHAVIOR_KEYS) {
+        const meta = BEHAVIORS[key].entity;
         assert.equal(meta.family, 'person', `${key} is not filed as a person`);
-        // The metadata names the archetype the game already files it under, rather than inventing a
-        // second identity that could drift from the first.
+        // A person's type is their behavior profile -- what the simulation asks about -- named as
+        // the game already files it, rather than a second identity that could drift from the first.
         assert.equal(meta.type, key, `${key} calls itself '${meta.type}'`);
         assert.equal(meta.placement, 'crowd-spawned');
         assert.deepEqual(new Set(meta.properties), new Set(['bump-relevant', 'mobile']));
     }
 });
 
-test('the archetype keys are what they always were, in the order they always were', () => {
-    // Both determinism hashes store `ARCH_KEYS.indexOf(a.type)`, so the *position* of every key is
-    // load-bearing and its spelling is not. Renaming `family` to `johnsons` -- it collided with the
-    // name of a taxonomy axis -- is safe precisely because it kept its place.
-    assert.deepEqual(ARCH_KEYS, ['tourist', 'dave', 'mary', 'kyle', 'linda', 'johnsons', 'timmy']);
-    assert.equal(ARCH.johnsons.name, 'The Johnsons');
+test('the behavior profiles stand where the archetypes they replaced stood, in the same order', () => {
+    // Both determinism hashes store `BEHAVIOR_KEYS.indexOf(a.type)`, so the *position* of every key
+    // is load-bearing and its spelling is not. Each profile took its archetype's place.
+    assert.deepEqual(BEHAVIOR_KEYS, ['typical', 'weaver', 'slow-walker', 'distracted', 'sudden-stopper', 'group-walker', 'darter']);
+    assert.deepEqual(BEHAVIOR_KEYS.map(k => BEHAVIORS[k].was), ['Tourist', 'Dave', 'Mary', 'Kyle', 'Linda', 'The Johnsons', 'Timmy']);
+    assert.equal(BEHAVIORS['group-walker'].name, 'Group Walker');
 });
 
 test('every cart declares itself an immobile, solid, placed vendor', () => {
@@ -248,7 +248,7 @@ test('softening any entity drops exactly its own footprints', () => {
 test('everyone the player can bump into says they are bump-relevant', () => {
     // The score has exactly one definition -- player-versus-person contact -- and the property is
     // now what says so, rather than the fact that the collision took the agent code path.
-    for (const key of ARCH_KEYS) assert.ok(hasProperty(ARCH[key].entity, 'bump-relevant'), key);
+    for (const key of BEHAVIOR_KEYS) assert.ok(hasProperty(BEHAVIORS[key].entity, 'bump-relevant'), key);
     // And nothing you walk into is: hitting the furniture is a scrape, counted nowhere.
     for (const e of edgePlans().entities) {
         assert.ok(!hasProperty(e.meta, 'bump-relevant'), `piece ${e.piece} would score a bump`);
@@ -277,7 +277,7 @@ test('nothing is stationed yet', () => {
     // The seam, asserted empty. `stationed` is one line of vocabulary held open for the shop staff,
     // and this is what stops it becoming half a feature while it waits: the day something carries
     // it, this test fails and whoever added it has to say so.
-    for (const key of ARCH_KEYS) assert.ok(!hasProperty(ARCH[key].entity, 'stationed'), key);
+    for (const key of BEHAVIOR_KEYS) assert.ok(!hasProperty(BEHAVIORS[key].entity, 'stationed'), key);
     for (const e of edgePlans().entities) assert.ok(!hasProperty(e.meta, 'stationed'), `piece ${e.piece}`);
 });
 

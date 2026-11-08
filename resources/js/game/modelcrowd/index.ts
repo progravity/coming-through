@@ -50,6 +50,8 @@ export interface PeopleStats {
     body: string;
     /** People the model renderer left to the primitives last frame: mobility aids and strollers. */
     fallback: number;
+    /** Equipment users, out of `fallback`; the rest are Darters, who need a child model. */
+    fallbackEquipment: number;
     /** Last frame. */
     animated: number;
     bodyDraws: number;
@@ -89,7 +91,7 @@ export async function startPeople(mode: PeopleMode, scene: THREE.Scene, params: 
     };
     const stats: PeopleStats = {
         renderer: 'primitives', model: null, error: null, ink: false, throttle: knobs.throttle, far: knobs.far, every: knobs.every,
-        trisPerModel: 0, bones: 0, clips: '', colours: '', body: '', fallback: 0, animated: 0, bodyDraws: 0, inkDraws: 0, calls: 0, triangles: 0, people: 0,
+        trisPerModel: 0, bones: 0, clips: '', colours: '', body: '', fallback: 0, fallbackEquipment: 0, animated: 0, bodyDraws: 0, inkDraws: 0, calls: 0, triangles: 0, people: 0,
         fps: 0, frameMs: 0, simMs: 0, poseMs: 0, renderMs: 0,
     };
     let models: ModelCrowd | null = null;
@@ -135,6 +137,7 @@ export async function startPeople(mode: PeopleMode, scene: THREE.Scene, params: 
             if (models !== null) {
                 stats.animated = models.animated; stats.bodyDraws = models.bodyDraws; stats.inkDraws = models.inkDraws;
                 stats.fallback = models.fallback;
+                stats.fallbackEquipment = models.fallbackEquipment;
             }
             if (time < 0.5) return;
             stats.fps = frames / time; stats.frameMs = (time / frames) * 1000;
@@ -207,7 +210,7 @@ class Panel {
             lines.push(`animated ${s.animated} · drawn ${s.bodyDraws} bodies + ${s.inkDraws} ink`);
             lines.push(`colours: ${s.colours}`);
             lines.push(`bodies: ${s.body}`);
-            lines.push(`as primitives: ${s.fallback} (mobility aids and strollers, not yet supported on models)`);
+            lines.push(`as primitives: ${s.fallback} (${s.fallbackEquipment} with equipment, not yet supported on models; ${s.fallback - s.fallbackEquipment} Darters, who need a child model)`);
         }
         this.text.textContent = lines.join('\n');
     }

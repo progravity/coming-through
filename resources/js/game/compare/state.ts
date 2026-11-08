@@ -6,8 +6,11 @@
  * to a fixed value rather than a random one for exactly that reason.
  */
 import { parseSeed } from '../core/rng.ts';
-import { ARCH_OPTIONS } from '../inspect/subject.ts';
-import type { ArchOverride } from '../inspect/subject.ts';
+import { BEHAVIOR_OPTIONS } from '../inspect/subject.ts';
+import type { Overrides } from '../inspect/subject.ts';
+
+/** Which behavior profile the panels stand, or `seed` for what each seed rolls. Still `?arch=`. */
+export type ArchOverride = Overrides['behavior'];
 
 export type CompareMode = 'single' | 'row';
 
@@ -34,7 +37,7 @@ export interface CompareState {
 export const DEFAULT_SEED = 1;
 
 const pick = (v: string | null, fallback: ArchOverride): ArchOverride =>
-    v !== null && (ARCH_OPTIONS as readonly string[]).includes(v) ? (v as ArchOverride) : fallback;
+    v !== null && BEHAVIOR_OPTIONS.includes(v) ? (v as ArchOverride) : fallback;
 
 const flag = (v: string | null, fallback: boolean): boolean => (v === null ? fallback : v === '1');
 const num = (v: string | null, fallback: number): number => {

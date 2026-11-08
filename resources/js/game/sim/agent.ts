@@ -1,10 +1,10 @@
-import { ARCH } from '../archetypes.ts';
-import type { ArchKey, Archetype } from '../archetypes.ts';
+import { BEHAVIORS } from '../behaviors.ts';
+import type { Behavior, BehaviorKey, BehaviorMix } from '../behaviors.ts';
 import { atan2, cos, hypot, sin } from '../core/dmath.ts';
 import type { Rng, Streams } from '../core/rng.ts';
 import { SIM_DT } from '../core/time.ts';
 import { makeRecipe } from '../recipe.ts';
-import type { Recipe } from '../recipe.ts';
+import type { Choices, Recipe } from '../recipe.ts';
 import { clamp, wrapAngle } from '../util.ts';
 import { EXIT_S } from '../world/layout.ts';
 import { PATH, newPathFrame, newPathPoint, newWorldPoint, pathDir } from '../world/path.ts';
@@ -27,6 +27,10 @@ export interface Poseable extends Pose {
 
 export interface AgentOptions {
     speed?: number;
+    /** Choices forced on this person: a group follower's profile, a Darter's parent's, or the lab's. */
+    choices?: Partial<Choices>;
+    /** Behavior weights in place of the composition's, for the people lab's crowd mix. */
+    mix?: BehaviorMix;
     /** Index into OUTFITS, so a group can be dressed from one coordinated combination. */
     outfit?: number;
     leader?: Agent;
@@ -47,14 +51,15 @@ const _push: Push = { nx: 0, nz: 0, depth: 0 };
 export class Agent implements GridItem, Poseable {
     /** Position in spawn order across the whole run; also names this agent's RNG forks. */
     readonly index: number;
-    readonly type: ArchKey;
-    readonly A: Archetype;
+    /** The behavior profile this person rolled (or was given): what the simulation asks about. */
+    readonly type: BehaviorKey;
+    readonly A: Behavior;
     x: number; z: number; vx: number; vz: number;
     /** Where the spawner put this agent, kept so identity can be hashed without replaying motion. */
     readonly spawnX: number;
     readonly spawnZ: number;
     readonly dir: 1 | -1;
-    /** Archetype speed after the recipe's age and mobility multipliers. */
+    /** The profile's speed after the equipment's multiplier. */
     readonly speed: number;
     readonly r: number;
     readonly colOff: number;
@@ -86,19 +91,20 @@ export class Agent implements GridItem, Poseable {
     /** Rendered state at the end of the previous step, for interpolation. */
     readonly prev: Pose = newPose();
 
-    constructor(streams: Streams, index: number, type: ArchKey, x: number, z: number, dir: 1 | -1, slot: number, opts: AgentOptions = {}) {
-        const A: Archetype = ARCH[type];
+    constructor(streams: Streams, index: number, x: number, z: number, dir: 1 | -1, slot: number, opts: AgentOptions = {}) {
         const label = `agent:${index}`;
         const recipeRng = streams.recipe.fork(label), cosmetic = streams.cosmetic.fork(label);
         this.rng = streams.behavior.fork(label);
+        // Who this is comes first: the recipe rolls every choice, the behavior profile among them.
+        const recipe = makeRecipe(recipeRng, { ...opts.choices, mix: opts.mix, outfit: opts.outfit });
+        const A: Behavior = BEHAVIORS[recipe.behavior];
         this.index = index;
-        this.type = type; this.A = A;
+        this.type = recipe.behavior; this.A = A;
         this.x = x; this.z = z; this.spawnX = x; this.spawnZ = z; this.dir = dir;
         // Born walking along the path rather than along +z: `dir` is the sign of ds/dt.
         const at = PATH.toPath(x, z, _here), frame = PATH.frameAt(at.s, _frame);
         const v0 = pathDir(frame, dir * 0.5, 0, _world);
         this.vx = v0.x; this.vz = v0.z;
-        const recipe = makeRecipe(recipeRng, A, opts);
         this.recipe = recipe;
         // Drawn unconditionally: a group follower takes the leader's speed instead, but the draw
         // still has to happen or this fork would run at a different offset for the rest of the run.
@@ -108,7 +114,7 @@ export class Agent implements GridItem, Poseable {
         const m = recipe.motion;
         this.speed = (opts.speed ?? ownSpeed) * m.speed;
         this.r = A.radius * m.radius;
-        this.colOff = (A.colOffset ?? 0) + m.colOffset;
+        this.colOff = m.colOffset;
         this.sepR = A.sepR + (this.r - A.radius);
         this.accel = A.accel * m.accel;
         this.turn = 8 * m.turn;

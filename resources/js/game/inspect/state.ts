@@ -112,6 +112,7 @@ const num = (v: string | null, fallback: number): number => {
  */
 export function stateFor(e: Inspectable, mode: string, search: string, pinned: Controls = {}): InspectState {
     const q = new URLSearchParams(search);
+    e.legacy?.(q);
     const controls = { ...defaultControls(e), ...pinned };
     const overlays = defaultOverlays(e);
     for (const c of e.controls) {

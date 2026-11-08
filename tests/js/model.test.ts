@@ -83,7 +83,7 @@ test('a skinned figure is measured in its pose, and the rest pose comes back at 
     const cast = MODEL.mount(new THREE.Scene());
     // An adult: the bench now draws a model at its person's age height, and this is about measuring
     // the pose, so the figure is held at the size it was authored at.
-    const c: Controls = { ...defaultControls(MODEL), model: NAME, clip: 'Hop', freeze: true, phase: 0.5, age: 'adult' };
+    const c: Controls = { ...defaultControls(MODEL), model: NAME, clip: 'Hop', freeze: true, phase: 0.5, age: 'normal' };
     cast.rebuild(1, 1, c);
     cast.draw(0, [0], 0);
     let h = heightOf(cast);

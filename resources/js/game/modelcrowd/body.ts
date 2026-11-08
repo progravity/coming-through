@@ -24,23 +24,22 @@
  * its own body file, `<model>.body.json` beside its `.regions.json`.
  */
 import * as THREE from 'three';
-import { AGE_HEIGHT } from '../recipe.ts';
-import type { Age, Recipe } from '../recipe.ts';
+import { BEHAVIORS } from '../behaviors.ts';
+import type { ModelClass } from '../behaviors.ts';
+import { AGES, BUILDS, BUILD_WIDTH, figureHeight } from '../recipe.ts';
+import type { Age, Build, Recipe } from '../recipe.ts';
 import { MODEL_DIR } from '../render/model-file.ts';
 
 // ---------- the tables ----------
 
-export const BUILDS = ['slim', 'trim', 'average', 'solid', 'broad'] as const;
-export type Build = (typeof BUILDS)[number];
-export const AGES: readonly Age[] = ['child', 'teen', 'adult', 'older'];
+export { AGES, BUILDS };
+export type { Age, Build };
 
 /** The body values one preset contributes. Every field is a factor on the model as authored, except `fullness`. */
 export interface BuildPreset {
     /**
-     * Where this preset sits on the recipe's own width axis (`Recipe.w`), so a crowd person between
-     * two presets gets a blend. The five are the quintiles of `makeRecipe`'s width roll for an
-     * archetype of width 1 (0.84 + 0.36 × roll): the crowd's own spread, cut into fifths, so it
-     * really does reach Broad. `tests/js/body.test.ts` holds them to the roll.
+     * Where this preset sits on the width scale the primitive people are drawn with (`Recipe.w`,
+     * which is `BUILD_WIDTH` of the person's Build): a width between two presets blends them.
      */
     w: number;
     /** Sideways girth of the hips, spine and chest, and how far apart the legs stand. */
@@ -62,15 +61,20 @@ export interface BuildPreset {
 }
 
 export const BUILD_PRESETS: Readonly<Record<Build, BuildPreset>> = {
-    slim: { w: 0.84, width: 0.88, shoulders: 0.94, limbs: 0.90, fullness: 0, face: 0, neck: 1 },
-    trim: { w: 0.93, width: 0.94, shoulders: 0.97, limbs: 0.95, fullness: 0, face: 0, neck: 1 },
-    average: { w: 1.02, width: 1.00, shoulders: 1.00, limbs: 1.00, fullness: 0.005, face: 0.0012, neck: 1.02 },
-    solid: { w: 1.11, width: 1.07, shoulders: 1.04, limbs: 1.06, fullness: 0.012, face: 0.003, neck: 1.05 },
-    broad: { w: 1.20, width: 1.14, shoulders: 1.08, limbs: 1.12, fullness: 0.022, face: 0.0055, neck: 1.09 },
+    slim: { w: BUILD_WIDTH.slim, width: 0.88, shoulders: 0.94, limbs: 0.90, fullness: 0, face: 0, neck: 1 },
+    trim: { w: BUILD_WIDTH.trim, width: 0.94, shoulders: 0.97, limbs: 0.95, fullness: 0, face: 0, neck: 1 },
+    average: { w: BUILD_WIDTH.average, width: 1.00, shoulders: 1.00, limbs: 1.00, fullness: 0.005, face: 0.0012, neck: 1.02 },
+    solid: { w: BUILD_WIDTH.solid, width: 1.07, shoulders: 1.04, limbs: 1.06, fullness: 0.012, face: 0.003, neck: 1.05 },
+    broad: { w: BUILD_WIDTH.broad, width: 1.14, shoulders: 1.08, limbs: 1.12, fullness: 0.022, face: 0.0055, neck: 1.09 },
 };
 
+/**
+ * Age is a small adjustment relative to the model, never a change of model: Young a little shorter
+ * and slimmer, with a slightly larger head and longer legs for youth; Normal the model as authored;
+ * Old slightly shorter with a gentle stoop. (Old also grays the hair, which is the recipe's.)
+ */
 export interface AgePreset {
-    /** Uniform scale on the model, in place of the recipe's own age height (the height roll stays). */
+    /** Uniform scale on the model, in place of the recipe's own figure height (the height roll stays). */
     height: number;
     /** Multiplies the build's width and shoulders. */
     width: number;
@@ -84,17 +88,13 @@ export interface AgePreset {
 }
 
 export const AGE_PRESETS: Readonly<Record<Age, AgePreset>> = {
-    // A child cannot be made out of an adult: a shrunk adult reads as a small adult, not a child.
-    // So a child is drawn as a teen until there is a child model, and the lab says so.
-    child: { height: 0.94, width: 0.95, shoulders: 0.95, head: 1.06, legs: 1.04, stoop: 0 },
-    teen: { height: 0.94, width: 0.95, shoulders: 0.95, head: 1.06, legs: 1.04, stoop: 0 },
-    adult: { height: 1, width: 1, shoulders: 1, head: 1, legs: 1, stoop: 0 },
-    older: { height: 0.97, width: 1, shoulders: 0.95, head: 1, legs: 1, stoop: 0.16 },
+    young: { height: 0.96, width: 0.96, shoulders: 0.96, head: 1.03, legs: 1.02, stoop: 0 },
+    normal: { height: 1, width: 1, shoulders: 1, head: 1, legs: 1, stoop: 0 },
+    old: { height: 0.97, width: 1, shoulders: 0.96, head: 1, legs: 1, stoop: 0.12 },
 };
 
-/** What a child is drawn as on an adult model, and why. */
-export const CHILD_AS: Age = 'teen';
-export const CHILD_NOTE = 'A child cannot be made convincingly from an adult model: this is the Teen body. It needs a child model.';
+/** What a person who needs a child model is drawn as on an adult one, and why. */
+export const CHILD_NOTE = 'A Darter is a child, and an adult model cannot be made into one convincingly: this is the adult model. The game draws Darters as primitives until there is a child model.';
 
 /** One body: every value the rig and the shader take. */
 export interface Body {
@@ -106,8 +106,8 @@ export const BODY_KEYS: readonly (keyof Body)[] = ['height', 'width', 'shoulders
 export type Limits = Readonly<Record<keyof Body, readonly [number, number]>>;
 
 /**
- * The most any model is pushed, so no combination comes out grotesque: an Older Broad is the
- * widest a body gets, a Teen Slim the narrowest. A model's body file may override any of them --
+ * The most any model is pushed, so no combination comes out grotesque: a Normal Broad is the
+ * widest a body gets, a Young Slim the narrowest. A model's body file may override any of them --
  * some models stretch better than others.
  */
 export const LIMITS: Limits = {
@@ -124,10 +124,13 @@ export const LIMITS: Limits = {
 };
 
 /** What a model's body file says about it. */
-export type BodyType = 'average' | 'heavy' | 'child';
-export const BODY_TYPES: readonly BodyType[] = ['average', 'heavy', 'child'];
+export type BodyType = 'average' | 'heavy';
+export const BODY_TYPES: readonly BodyType[] = ['average', 'heavy'];
+export const AGE_CLASSES: readonly ModelClass[] = ['adult', 'child', 'elderly'];
 
 export interface BodyFile {
+    /** Who the model can be: an adult today; child and elderly models later. A Darter needs a child. */
+    readonly ageClass: ModelClass;
     /** The figure as authored, before any preset: the fullest end of the crowd will come from `heavy` models. */
     readonly type: BodyType;
     readonly limits: Limits;
@@ -165,14 +168,14 @@ export interface Shaped {
     body: Body;
     /** What the presets asked for, before the limits. */
     wanted: Body;
-    /** The age actually drawn: a child is a teen until there is a child model. */
+    /** The age drawn: always the age asked for, kept so a readout can say which preset it was. */
     shown: Age;
     held: { key: keyof Body; wanted: number; limit: number }[];
 }
 
 /** The body an age and a build position ask for, inside `limits`. */
 export function shape(age: Age, pos: number, limits: Limits = LIMITS): Shaped {
-    const shown = age === 'child' ? CHILD_AS : age;
+    const shown = age;
     const a = AGE_PRESETS[shown], b = buildAt(pos);
     const wanted: Body = {
         height: a.height, width: b.width * a.width, shoulders: b.shoulders * a.shoulders, limbs: b.limbs,
@@ -189,15 +192,15 @@ export function shape(age: Age, pos: number, limits: Limits = LIMITS): Shaped {
     return { body, wanted, shown, held };
 }
 
-/** The body a recipe gets in the crowd: its age, and its width placed among the Build presets. */
-export const shapeRecipe = (r: Recipe, limits: Limits = LIMITS): Shaped => shape(r.age, buildPosition(r.w), limits);
+/** The body a recipe gets in the crowd: its Age preset and its Build preset, exactly. */
+export const shapeRecipe = (r: Recipe, limits: Limits = LIMITS): Shaped => shape(r.age, BUILDS.indexOf(r.build), limits);
 
 /**
- * How tall to draw a recipe on a model: its standing height with its age's own height taken back
- * out and the model's age height put in, so a child is not an adult shrunk to 0.62 and the
+ * How tall to draw a recipe on a model: its standing height with its figure's own height taken
+ * back out and the model's Age height put in, so a model is never shrunk into anything and the
  * recipe's own height roll still applies on top.
  */
-export const drawnHeight = (standing: number, r: Recipe, body: Body): number => standing / AGE_HEIGHT[r.age] * body.height;
+export const drawnHeight = (standing: number, r: Recipe, body: Body): number => standing / figureHeight(r) * body.height;
 
 // ---------- what models cannot draw yet ----------
 
@@ -207,20 +210,27 @@ export const NOT_ON_MODELS = 'not yet supported on models';
 /**
  * Why this person cannot be drawn as a model yet, or null when they can.
  *
- * A mobility aid -- a wheelchair, a scooter, a cane -- and a stroller are equipment the models do
- * not carry yet, and their colliders are sized for the equipment: a model drawn without it would
- * be a person you bump into half a meter before you reach them. So until models carry it, these
- * people are drawn as primitives even under the model renderer, and what you see matches what you
- * collide with. The crowd's readout counts them; the lab notes it when one is selected.
+ * Two reasons, both flagged rather than hidden:
+ *
+ * - **Equipment** -- a stroller, a wheelchair, a scooter, a cane -- is not on the models yet, and
+ *   its collider is sized for the equipment: a model drawn without it would be a person you bump
+ *   into half a meter before you reach them. Until models carry it, these people are primitives.
+ * - **A Darter is a child**, and the crowd's model is an adult one (`drawable`, from its body
+ *   file's age class). An adult model cannot be made into a child, so until a child model exists
+ *   Darters are primitives too.
+ *
+ * The crowd's readout counts them; the lab notes it when one is shown or selected.
  */
-export function modelFallback(r: Recipe): string | null {
-    if (!drawsAsPrimitive(r)) return null;
-    if (r.mobility !== 'none') return `a ${r.mobility}: mobility aids are ${NOT_ON_MODELS}, so this person is drawn as primitives`;
-    return `a stroller: ${NOT_ON_MODELS}, so this person is drawn as primitives`;
+export function modelFallback(r: Recipe, drawable: ModelClass = 'adult'): string | null {
+    if (!drawsAsPrimitive(r, drawable)) return null;
+    if (r.equipment === 'stroller') return `a stroller: ${NOT_ON_MODELS}, so this person is drawn as primitives`;
+    if (r.equipment !== 'none') return `a ${r.equipment}: mobility aids are ${NOT_ON_MODELS}, so this person is drawn as primitives`;
+    return `a ${BEHAVIORS[r.behavior].name} needs a ${r.modelClass} model and there is none yet, so this person is drawn as primitives`;
 }
 
 /** The same question without the reason: two comparisons, asked of every person on every frame. */
-export const drawsAsPrimitive = (r: Recipe): boolean => r.mobility !== 'none' || r.acc === 'stroller';
+export const drawsAsPrimitive = (r: Recipe, drawable: ModelClass = 'adult'): boolean =>
+    r.equipment !== 'none' || r.modelClass !== drawable;
 
 // ---------- the body file ----------
 
@@ -244,13 +254,17 @@ function parseLimits(raw: unknown): { limits: Limits; overridden: (keyof Body)[]
 /** Read a body file's text. An absent field is the default; a malformed file is reported, not thrown. */
 export function parseBodyFile(text: string, path: string): BodyFile {
     try {
-        const raw = JSON.parse(text) as { bodyType?: unknown; limits?: unknown };
+        const raw = JSON.parse(text) as { ageClass?: unknown; bodyType?: unknown; limits?: unknown };
         const type = BODY_TYPES.includes(raw.bodyType as BodyType) ? raw.bodyType as BodyType : 'average';
+        const ageClass = AGE_CLASSES.includes(raw.ageClass as ModelClass) ? raw.ageClass as ModelClass : 'adult';
         const { limits, overridden } = parseLimits(raw.limits);
-        const error = raw.bodyType !== undefined && type !== raw.bodyType ? `unknown bodyType "${String(raw.bodyType)}"; read as average` : null;
-        return { type, limits, overridden, path, error };
+        const errors = [
+            ...(raw.bodyType !== undefined && type !== raw.bodyType ? [`unknown bodyType "${String(raw.bodyType)}"; read as average`] : []),
+            ...(raw.ageClass !== undefined && ageClass !== raw.ageClass ? [`unknown ageClass "${String(raw.ageClass)}"; read as adult`] : []),
+        ];
+        return { ageClass, type, limits, overridden, path, error: errors.length === 0 ? null : errors.join('; ') };
     } catch (e) {
-        return { type: 'average', limits: LIMITS, overridden: [], path, error: e instanceof Error ? e.message : String(e) };
+        return { ageClass: 'adult', type: 'average', limits: LIMITS, overridden: [], path, error: e instanceof Error ? e.message : String(e) };
     }
 }
 
@@ -260,11 +274,11 @@ export async function fetchBodyFile(file: string): Promise<BodyFile> {
     try {
         const res = await fetch(MODEL_DIR + path);
         if (!res.ok || (res.headers.get('content-type') ?? '').includes('text/html')) {
-            return { type: 'average', limits: LIMITS, overridden: [], path, error: 'no body file; read as average, inside the global limits' };
+            return { ageClass: 'adult', type: 'average', limits: LIMITS, overridden: [], path, error: 'no body file; read as an average adult, inside the global limits' };
         }
         return parseBodyFile(await res.text(), path);
     } catch (e) {
-        return { type: 'average', limits: LIMITS, overridden: [], path, error: e instanceof Error ? e.message : String(e) };
+        return { ageClass: 'adult', type: 'average', limits: LIMITS, overridden: [], path, error: e instanceof Error ? e.message : String(e) };
     }
 }
 

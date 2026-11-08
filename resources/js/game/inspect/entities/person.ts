@@ -3,36 +3,43 @@
  *
  * A driver for the game's character code and never a copy of it: `makeRecipe` rolls the person (in
  * `Subject`, which mirrors the lines of `Agent`'s constructor that follow it), `drawPerson` poses
- * them, the shared instanced `PartPools` draw them, `palette.ts` colours them. This file adds a
- * declaration the panel can render, a cast the shell can drive, and the words the shared
- * information panel says about a person -- which the crowd view reuses for whoever is clicked, so
- * a person reads the same on the turntable and in the crowd. If something here would need
- * character code to change, it belongs in the character code.
+ * them, the shared instanced `PartPools` draw them, `palette.ts` and `wardrobe.ts` color them. This
+ * file adds a declaration the panel can render, a cast the shell can drive, and the words the
+ * shared information panel says about a person -- which the model on the people lab's stage and the
+ * crowd view reuse for whoever is shown, so a person reads the same everywhere.
  *
- * The four axis overrides are **archetype edits** rather than recipe edits -- see `subject.ts` --
- * so `makeRecipe` still takes every draw in its fixed order and only the selection from rolls
- * already in hand moves. `tests/js/inspect.test.ts` is what holds that.
+ * The primitive person itself is no longer shown in the people lab, which draws people only from
+ * models; it stays registered so the game's fallback can still be checked against the crowd
+ * (`tests/js/inspect.test.ts`), and its card's sections are every person's.
+ *
+ * A person is a set of independent choices (`recipe.ts`), each rolled against its weight in
+ * `composition.ts`; the controls force choices, which still take their rolls, so only the
+ * selection moves.
  */
 import * as THREE from 'three';
-import { AGE_MIX_DEFAULT, AID_DEFAULT, ARCH, ARCH_KEYS } from '../../archetypes.ts';
-import type { ArchKey, Archetype } from '../../archetypes.ts';
+import { BEHAVIORS, BEHAVIOR_KEYS } from '../../behaviors.ts';
+import type { Behavior, BehaviorKey } from '../../behaviors.ts';
+import { COMPOSITION } from '../../composition.ts';
 import { OUTFITS, PALETTE } from '../../palette.ts';
-import { AGES, AGE_HEIGHT } from '../../recipe.ts';
-import type { Recipe } from '../../recipe.ts';
+import { figureHeight, figureName } from '../../recipe.ts';
+import type { Choices, Recipe } from '../../recipe.ts';
 import type { Range } from '../../util.ts';
 import type { Look } from '../../render/look.ts';
 import { drawPerson, eyeHeight, standingHeight } from '../../render/person.ts';
 import { PER } from '../../render/pools.ts';
 import { SPEED_CAP } from '../../sim/steering.ts';
 import type { PoolName } from '../../render/pools.ts';
+import { hairNamed, skinAt, skinToneNamed } from '../../wardrobe.ts';
 import { colorRow, count, identitySection, n2 } from '../describe.ts';
 import type { PartRecord } from '../gizmos.ts';
 import { RecordingPools } from '../gizmos.ts';
 import { INK } from '../inspectable.ts';
 import type { Cast, Controls, DrawnPart, InfoRow, InfoSection, Inspectable, OverlayDef, Readout } from '../inspectable.ts';
 import { MARK, arrow, ring } from '../markers.ts';
-import { AGE_OPTIONS, ARCH_OPTIONS, BUILD_OPTIONS, MOBILITY_OPTIONS, Subject, archetypeForSeed } from '../subject.ts';
-import type { AgeOverride, ArchOverride, BuildOverride, MobilityOverride, Overrides } from '../subject.ts';
+import {
+    AGE_OPTIONS, BEHAVIOR_OPTIONS, BUILD_OPTIONS, EQUIPMENT_OPTIONS, HAIR_OPTIONS, SKIN_OPTIONS, Subject,
+} from '../subject.ts';
+import type { Overrides } from '../subject.ts';
 
 const TAU = Math.PI * 2;
 const wrap01 = (v: number): number => ((v % 1) + 1) % 1;
@@ -80,9 +87,9 @@ export interface Who {
     seed: number;
     /** Spawn index: the `agent:N` the recipe fork is named after. */
     index: number;
-    type: ArchKey;
-    /** The archetype as rolled against -- with any lab overrides applied. */
-    arch: Archetype;
+    type: BehaviorKey;
+    /** The behavior profile as rolled or forced. */
+    profile: Behavior;
     recipe: Recipe;
     speed: number;
     r: number;
@@ -92,11 +99,11 @@ export interface Who {
     turn: number;
 }
 
-/** The identity section for a person: their archetype's metadata and its description. */
+/** The identity section for a person: their behavior profile's metadata and its description. */
 export function personIdentity(w: Who): InfoSection {
-    const A = ARCH[w.type];
+    const A = BEHAVIORS[w.type];
     return identitySection(A.entity, A.desc, [
-        { k: 'archetype', v: A.name },
+        { k: 'behavior', v: `${A.name} (was ${A.was})` },
         { k: 'key color', color: A.color, v: 'the debug overlay and the crowd view draw it in this' },
     ]);
 }
@@ -104,67 +111,81 @@ export function personIdentity(w: Who): InfoSection {
 const yesNo = (b: boolean): string => (b ? 'yes' : 'no');
 const pct = (v: number): string => `${Math.round(v * 1000) / 10}%`;
 const range = (r: Range, unit = ''): string => (typeof r === 'number' ? `${r}${unit}` : `${r[0]}–${r[1]}${unit}`);
-const title = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
+const title = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1).replace(/-/g, ' ');
+
+/** One option's share of its choice in the default crowd. */
+export function shareOf<K extends string>(weights: Readonly<Record<K, number>>, key: K): string {
+    let total = 0;
+    for (const v of Object.values(weights) as number[]) total += v;
+    return total > 0 ? pct((weights[key] ?? 0) / total) : '0%';
+}
+
+/** Whether a choice was the seed's roll or forced by the lab, for the card. */
+export type Chosen = Partial<Record<keyof Choices, boolean>>;
+
+/** The share of the crowd a person's equipment has: a stroller is a share of Slow Walkers. */
+function equipmentShare(r: Recipe): string {
+    if (r.equipment === 'stroller') return `${pct(COMPOSITION.stroller)} of Slow Walkers`;
+    return `${shareOf(COMPOSITION.equipment, r.equipment)} of everyone not pushing a stroller`;
+}
 
 /**
- * What one archetype decides, in two groups: how its people **behave** -- read by the simulation --
- * and how they **look** -- read by the recipe. An archetype bundles both, and this is the place to
- * see which half a number belongs to. Read off `ARCH` as authored, without the lab's overrides,
- * so it shows the archetype rather than this one person.
+ * Every choice this person is made of, what it contributes, and how often the default crowd makes
+ * the same one. `forcedBy` marks the choices the lab forced rather than the seed rolled.
  */
-export function personArchetype(w: Who): InfoSection {
-    const A = ARCH[w.type], L = A.look;
-    const total = ARCH_KEYS.reduce((t, k) => t + ARCH[k].weight, 0);
-    // An adult's stature from the height multiplier, at this person's own skeleton-and-head unit.
-    const unit = standingHeight(w.recipe) / w.recipe.h;
-    const h = typeof L.h === 'number' ? [L.h, L.h] : L.h;
-    const counts = new Map<string, number>();
-    for (const a of L.acc) counts.set(a, (counts.get(a) ?? 0) + 1);
-    const acc = [...counts].map(([a, n]) => `${a} ${Math.round((n / L.acc.length) * 100)}%`).join(', ');
-    const ages = L.age ?? AGE_MIX_DEFAULT, aid = L.aid ?? AID_DEFAULT;
-    const behavior: [string, string][] = [
-        ['spawns', `${A.weight} in ${total} of the crowd (${pct(A.weight / total)})`],
-        ['speed', `${range(A.speed, ' m/s')}, before age and mobility`],
+export function personChoices(w: Who, forcedBy: Chosen = {}, extra: readonly InfoRow[] = []): InfoSection {
+    const r = w.recipe, B = w.profile;
+    const by = (k: keyof Choices): string => (forcedBy[k] === true ? 'chosen in the lab' : 'rolled by the seed');
+    const tone = skinToneNamed(r.skinTone), hair = hairNamed(r.hairTone);
+    const rows: InfoRow[] = [
+        { k: 'behavior', v: `${B.name} · ${by('behavior')} · ${shareOf(COMPOSITION.behavior, r.behavior)} of the crowd · speed ${range(B.speed, ' m/s')}` },
+        { k: 'model class', v: r.modelClass === 'adult' ? 'adult' : `${r.modelClass}: a ${B.name} needs a ${r.modelClass} model` },
+        { k: 'age', v: `${title(r.age)} · ${by('age')} · ${shareOf(COMPOSITION.age, r.age)}${r.age === 'old' ? ' · grays the hair' : ''}` },
+        { k: 'build', v: `${title(r.build)} · ${by('build')} · ${shareOf(COMPOSITION.build, r.build)} · width ${n2(r.w)}` },
+        { k: 'skin tone', color: r.skin, v: `${tone.name} · ${by('skinTone')} · ${shareOf(COMPOSITION.skinTone, r.skinTone)} · ${n2(skinAt(r.skinTone, 0.5))} on the ramp, this one ${hexOf(r.skin)}` },
+        { k: 'hair', color: r.hairColor, v: `${hair.name}${r.age === 'old' ? ', grayed with age' : ''} · ${by('hairTone')} · ${shareOf(COMPOSITION.hair, r.hairTone)}` },
+        ...extra,
+        { k: 'equipment', v: r.equipment === 'none' ? `none · ${by('equipment')}`
+            : `${r.equipment} · ${by('equipment')} · ${equipmentShare(r)} · speed ×${n2(r.motion.speed)}, turn ×${n2(r.motion.turn)}, collider ×${n2(r.motion.radius)}` },
+    ];
+    return { id: 'choices', rows, note: 'Each choice is rolled from this person\'s recipe fork, in a fixed order, against its weight in composition.ts.' };
+}
+
+const hexOf = (c: number): string => `#${c.toString(16).padStart(6, '0')}`;
+
+/**
+ * What this person's behavior profile decides: speed, steering, stops and grouping, as the
+ * simulation reads them, and the gait it walks with. Read off `BEHAVIORS` as authored.
+ */
+export function personBehavior(w: Who): InfoSection {
+    const A = BEHAVIORS[w.type];
+    const rows: [string, string][] = [
+        ['spawns', `${A.name}: ${shareOf(COMPOSITION.behavior, w.type)} of the default crowd`],
+        ['speed', `${range(A.speed, ' m/s')}, before equipment · this one ${n2(w.speed)} m/s`],
         ['acceleration', `${A.accel} m/s²`],
         ['weaving', A.wander === 0 ? 'holds its line' : `drifts ×${A.wander} toward a new lane every ${range(A.wanderEvery, ' s')}`],
         ['separation', `keeps ${A.sepR} m from others, at weight ${A.sepW}`],
         ['avoids you', `×${A.avoidPlayer}${A.avoidPlayer < 0.3 ? ' (barely)' : A.avoidPlayer >= 1 ? ' (fully)' : ''}`],
         ['stops', A.stopEvery !== undefined && A.stopFor !== undefined ? `every ${range(A.stopEvery, ' s')}, for ${range(A.stopFor, ' s')}` : 'never'],
-        ['group', A.group !== undefined ? `${range(A.group)} together, ${A.spacing ?? 1} m apart, abreast`
-            : A.parentType !== undefined ? `walks with a ${ARCH[A.parentType].name} parent` : 'walks alone'],
-        ['collider', `r ${A.radius} m${A.colOffset !== undefined ? `, ${A.colOffset} m ahead (the stroller)` : ''}, before mobility`],
-    ];
-    const appearance: [string, string][] = [
-        ['color family', `${L.palette}${L.sameOutfit === true ? ' · one outfit for the whole group' : ''}`],
-        ['age', AGES.map((a, i) => `${a} ${pct(ages[i] / ages.reduce((x, y) => x + y, 0))}`).join(', ')],
-        ['height', `h ${range(L.h)}: about ${n2(h[0] * unit)}–${n2(h[1] * unit)} m as an adult`],
-        ['width', `×${L.w ?? 1}`],
-        ['accessories', acc],
-        ['hat', `${pct(L.hat)}${L.hatType !== undefined ? `, always a ${L.hatType}` : ''}`],
-        ['mobility aid', `cane ${pct(aid.cane)}, wheelchair ${pct(aid.wheelchair)}, scooter ${pct(aid.scooter)}, before age`],
-        ['also', [
-            `glasses ${pct(L.glasses ?? 0.18)}`, `beard ${pct(L.beard ?? 0.2)}`, `ponytail ${pct(L.ponytail ?? 0.22)}`,
-            `jacket ${pct(L.jacket ?? 0.3)}`, `shorts ${pct(L.shorts ?? 0.28)}`, `bag ${pct(L.bag ?? 0.2)}`,
-        ].join(', ')],
-        ['gait', [`stride ×${L.stride ?? 1}`, `cadence ×${L.cadence ?? 1}`, `bob ×${L.bob ?? 1}`, ...(L.headPitch !== undefined ? [`head down ${L.headPitch} rad`] : [])].join(', ')],
+        ['grouping', A.group !== undefined ? `${range(A.group)} together, ${A.spacing ?? 1} m apart, abreast; the family ${pct(COMPOSITION.groupSharesScheme)} of the time in the leader's clothing scheme`
+            : A.parentType !== undefined ? `walks with a ${BEHAVIORS[A.parentType].name} parent` : 'walks alone'],
+        ['collider', `r ${A.radius} m, before equipment`],
+        ['gait', `stride ×${A.gait.stride ?? 1}, cadence ×${A.gait.cadence ?? 1}`],
     ];
     return {
-        id: 'archetype', title: `Archetype: ${A.name}`,
-        tables: [
-            { caption: 'Behavior: what the simulation reads', columns: ['', ''], rows: behavior },
-            { caption: 'Appearance: what the recipe rolls from', columns: ['', ''], rows: appearance },
-        ],
-        note: `${A.desc}. ARCH.${w.type} in archetypes.ts; the lab's age, build and mobility buttons edit a copy, never this.`,
+        id: 'behavior', title: `Behavior: ${A.name}`,
+        tables: [{ caption: 'what the simulation reads', columns: ['', ''], rows }],
+        note: `${A.desc}. BEHAVIORS['${w.type}'] in behaviors.ts, which replaced the archetype ${A.was}.`,
     };
 }
 
 /**
  * A primitive person's height, and what it is made of: the skeleton with this head on it, the
- * height roll, and the age's own share.
+ * height roll, and the figure's own share (a child's, or the age's).
  */
 export function primitiveHeight(r: Recipe): string {
-    const unit = standingHeight(r) / r.h, age = AGE_HEIGHT[r.age], roll = r.h / age;
-    return `${n2(standingHeight(r))} m = ${n2(unit)} skeleton × ${n2(roll)} height roll × ${n2(age)} ${title(r.age)}`;
+    const unit = standingHeight(r) / r.h, fig = figureHeight(r), roll = r.h / fig;
+    return `${n2(standingHeight(r))} m = ${n2(unit)} skeleton × ${n2(roll)} height roll × ${n2(fig)} ${title(figureName(r))}`;
 }
 
 /** Every rolled value, with the seed and the fork that rolled it. */
@@ -212,7 +233,7 @@ export function personGeometry(w: Who, measured: { top?: number; torso?: number;
         ...(measured.top !== undefined ? [{ k: 'drawn', v: `${n2(measured.top)} m to the top of everything, hat included` }] : []),
         { k: 'eye', v: `${n2(eyeHeight(r))} m` },
         { k: 'collider', v: `circle · r ${n2(w.r, 3)} m${w.colOff !== 0 ? ` · ${n2(w.colOff)} m ahead of the body` : ''}` },
-        { k: 'separation', v: `r ${n2(w.sepR)} m · weight ${n2(w.arch.sepW)}` },
+        { k: 'separation', v: `r ${n2(w.sepR)} m · weight ${n2(w.profile.sepW)}` },
     ];
     if (measured.torso !== undefined) {
         const gap = w.r - measured.torso;
@@ -231,9 +252,10 @@ export function personProvenance(w: Who): InfoSection {
     return {
         id: 'provenance',
         rows: [
-            { k: 'archetype', v: `resources/js/game/archetypes.ts · ARCH.${w.type}`, mono: true },
+            { k: 'behavior', v: `resources/js/game/behaviors.ts · BEHAVIORS['${w.type}']`, mono: true },
             { k: 'recipe', v: 'resources/js/game/recipe.ts · makeRecipe', mono: true },
-            { k: 'colors', v: 'resources/js/game/palette.ts · OUTFITS, PALETTE', mono: true },
+            { k: 'weights', v: 'resources/js/game/composition.ts · COMPOSITION', mono: true },
+            { k: 'colors', v: 'resources/js/game/wardrobe.ts · COLORS; palette.ts · OUTFITS, PALETTE', mono: true },
             { k: 'drawn by', v: 'resources/js/game/render/person.ts · drawPerson', mono: true },
             { k: 'streams', v: `recipe and cosmetic forks agent:${w.index} of seed ${w.seed}; never spawn or behavior`, mono: true },
         ],
@@ -317,20 +339,60 @@ export class PersonMarks {
     }
 }
 
+/**
+ * The old archetype names, and the profiles that replaced them. An archetype bundled behavior and
+ * appearance; the profile is the half that was behavior, so this is the honest translation.
+ */
+const WAS: Readonly<Record<string, BehaviorKey>> = Object.fromEntries(
+    BEHAVIOR_KEYS.map(k => [BEHAVIORS[k].was.toLowerCase().replace(/^the /, ''), k]),
+);
+/** The old ages, which were stages of life, as the ages that are now adjustments to a model. */
+const OLD_AGES: Readonly<Record<string, string>> = { child: 'young', teen: 'young', adult: 'normal', older: 'old' };
+
+/**
+ * Read an address written before people were choices: `arch` (an archetype) as `behavior`, the old
+ * ages as the new ones, and `mob` (a mobility aid) as `equipment`. A key already in the new form
+ * wins over its old name.
+ */
+export function personLegacy(q: URLSearchParams): void {
+    const arch = q.get('arch');
+    if (arch !== null && q.get('behavior') === null) q.set('behavior', arch === 'seed' ? 'seed' : WAS[arch] ?? arch);
+    q.delete('arch');
+    const age = q.get('age');
+    if (age !== null && OLD_AGES[age] !== undefined) q.set('age', OLD_AGES[age]);
+    const mob = q.get('mob');
+    if (mob !== null && q.get('equipment') === null) q.set('equipment', mob);
+    q.delete('mob');
+}
+
+/** The choices a set of controls forces, under the control ids the address bar carries. */
+export function overridesOf(c: Controls): Partial<Overrides> {
+    return {
+        behavior: (c.behavior ?? 'seed') as Overrides['behavior'],
+        age: (c.age ?? 'seed') as Overrides['age'],
+        build: (c.build ?? 'seed') as Overrides['build'],
+        skinTone: (c.skin ?? 'seed') as Overrides['skinTone'],
+        hairTone: (c.hair ?? 'seed') as Overrides['hairTone'],
+        // A control the panel shows disabled is not in `c` at all, so it rolls with the seed.
+        equipment: (c.equipment ?? 'seed') as Overrides['equipment'],
+    };
+}
+
+/** Which choices a set of controls forced, for the card. */
+export function chosenBy(o: Partial<Overrides>): Chosen {
+    const out: Chosen = {};
+    for (const [k, v] of Object.entries(o) as [keyof Choices, string | undefined][]) out[k] = v !== undefined && v !== 'seed';
+    return out;
+}
+
 /** Which person a set of controls stands at stage position `i`, out of `count`. */
 export function subjectFor(seed: number, i: number, count: number, c: Controls): Subject {
-    const o: Overrides = {
-        age: (c.age ?? 'seed') as AgeOverride,
-        build: (c.build ?? 'seed') as BuildOverride,
-        mobility: (c.mob ?? 'seed') as MobilityOverride,
-    };
-    const arch = (c.arch ?? 'seed') as ArchOverride;
+    const o = overridesOf(c);
     const index = Number(c.agent ?? 0) + i;
-    const type: ArchKey = arch !== 'seed' ? arch
-        : count > 1 ? ARCH_KEYS[i % ARCH_KEYS.length]
-        : archetypeForSeed(seed, index);
+    // A row with no behavior forced shows one of each, so the whole cast is on stage at once.
+    if (o.behavior === 'seed' && count > 1) o.behavior = BEHAVIOR_KEYS[i % BEHAVIOR_KEYS.length];
     const outfit = Number(c.outfit ?? -1);
-    return new Subject(seed, index, type, o, outfit >= 0 ? { outfit } : {});
+    return new Subject(seed, index, o, outfit >= 0 ? { outfit } : {});
 }
 
 class PersonCast implements Cast {
@@ -448,10 +510,11 @@ class PersonCast implements Cast {
             : this.c.walk === true ? `walking ${n2(s.speed)} m/s` : 'idle';
         const outfit = Number(this.c.outfit ?? -1);
         return {
-            title: s.arch.name,
+            title: s.profile.name,
             sub: `seed ${s.seed} · agent:${s.index}`,
             rows: [
-                ['age', `${r.age}`],
+                ['age', `${r.age}${r.modelClass === 'child' ? ' · a child' : ''}`],
+                ['build', r.build],
                 ['outfit', OUTFITS[r.outfit].name],
                 ['height', primitiveHeight(r)],
                 ['mobility', `${r.mobility}${r.seated ? ' · seated' : ''}`],
@@ -462,7 +525,8 @@ class PersonCast implements Cast {
             line: `${OUTFITS[r.outfit].name} · ${r.age}${aid} · ${top.toFixed(2)}m`,
             sections: [
                 personIdentity(s),
-                personArchetype(s),
+                personChoices(s, chosenBy(overridesOf(this.c))),
+                personBehavior(s),
                 personRecipe(s, outfit >= 0 ? `Dressed from outfit #${outfit}, as the spawner dresses a whole group from one.` : ''),
                 personGeometry(s, { top, ...widths }),
                 personProvenance(s),
@@ -478,12 +542,14 @@ class PersonCast implements Cast {
     }
 }
 
-/** The controls that say which person: shared with the model source, so the toggle keeps them. */
+/** The controls that say which person: every choice, each with "seed" for what the seed rolls. */
 export const PERSON_CONTROLS = {
-    arch: { kind: 'enum', id: 'arch', label: 'archetype', options: ARCH_OPTIONS, value: 'seed', key: 't', rebuilds: true },
+    behavior: { kind: 'enum', id: 'behavior', label: 'behavior', options: BEHAVIOR_OPTIONS, value: 'seed', key: 't', rebuilds: true },
     age: { kind: 'enum', id: 'age', label: 'age', options: AGE_OPTIONS, value: 'seed', key: 'a', rebuilds: true },
     build: { kind: 'enum', id: 'build', label: 'build', options: BUILD_OPTIONS, value: 'seed', key: 'b', rebuilds: true },
-    mob: { kind: 'enum', id: 'mob', label: 'mobility', options: MOBILITY_OPTIONS, value: 'seed', key: 'm', rebuilds: true },
+    skin: { kind: 'enum', id: 'skin', label: 'skin tone', options: SKIN_OPTIONS, value: 'seed', rebuilds: true },
+    hair: { kind: 'enum', id: 'hair', label: 'hair', options: HAIR_OPTIONS, value: 'seed', rebuilds: true },
+    equipment: { kind: 'enum', id: 'equipment', label: 'equipment', options: EQUIPMENT_OPTIONS, value: 'seed', key: 'm', rebuilds: true },
     agent: { kind: 'number', id: 'agent', label: 'spawn index', value: 0, min: 0, max: 99999, rebuilds: true },
     outfit: { kind: 'number', id: 'outfit', label: 'group outfit', value: -1, min: -1, max: OUTFITS.length - 1, rebuilds: true },
 } as const;
@@ -493,7 +559,8 @@ export const PERSON: Inspectable = {
     family: 'person',
     title: 'Person',
     controls: [
-        PERSON_CONTROLS.arch, PERSON_CONTROLS.age, PERSON_CONTROLS.build, PERSON_CONTROLS.mob,
+        PERSON_CONTROLS.behavior, PERSON_CONTROLS.age, PERSON_CONTROLS.build, PERSON_CONTROLS.skin, PERSON_CONTROLS.hair,
+        PERSON_CONTROLS.equipment,
         { kind: 'toggle', id: 'walk', label: 'walk', value: false, key: 'w' },
         { kind: 'toggle', id: 'run', label: 'run', value: false, key: 'u' },
         { kind: 'toggle', id: 'freeze', label: 'freeze gait', value: false, key: 'f' },
@@ -501,8 +568,9 @@ export const PERSON: Inspectable = {
         PERSON_CONTROLS.agent, PERSON_CONTROLS.outfit,
     ],
     overlays: PERSON_OVERLAYS,
+    legacy: personLegacy,
     stepping: 'seed',
-    /** One per archetype, so the whole cast is on stage at once. */
-    row: ARCH_KEYS.length,
+    /** One per behavior profile, so the whole cast is on stage at once. */
+    row: BEHAVIOR_KEYS.length,
     mount: (scene: THREE.Scene): Cast => new PersonCast(scene),
 };

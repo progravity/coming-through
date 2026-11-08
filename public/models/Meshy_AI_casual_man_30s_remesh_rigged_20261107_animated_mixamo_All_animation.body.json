@@ -1,4 +1,5 @@
 {
-    "about": "This model's body, for the model renderer (resources/js/game/modelcrowd/body.ts). bodyType is the figure as authored, before any Age or Build preset: average, heavy, or child. limits, optional, overrides the global limits for this model only, as [min, max] per key: height, width, shoulders, limbs, fullness, head, legs, stoop. Shown at /lab/people?source=model.",
+    "about": "This model's body, for the model renderer (resources/js/game/modelcrowd/body.ts). ageClass is who the model can be: adult, child or elderly (a Darter needs a child). bodyType is the figure as authored, before any Age or Build preset: average or heavy. limits, optional, overrides the global limits for this model only, as [min, max] per key: height, width, shoulders, limbs, fullness, face, neck, head, legs, stoop. Shown at /lab/people.",
+    "ageClass": "adult",
     "bodyType": "average"
 }

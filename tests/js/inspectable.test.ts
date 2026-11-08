@@ -19,7 +19,7 @@ import type { Extent, View } from '../../resources/js/game/inspect/stage.ts';
 import type { DrawnPart } from '../../resources/js/game/inspect/inspectable.ts';
 import { PERSON } from '../../resources/js/game/inspect/entities/person.ts';
 import { Subject } from '../../resources/js/game/inspect/subject.ts';
-import { ARCH_KEYS } from '../../resources/js/game/archetypes.ts';
+import { BEHAVIOR_KEYS } from '../../resources/js/game/behaviors.ts';
 import { INK, controlOf, defaultControls, findKey, overlaysOf } from '../../resources/js/game/inspect/inspectable.ts';
 import type { Cast, Inspectable } from '../../resources/js/game/inspect/inspectable.ts';
 import { ENTITIES, resolve } from '../../resources/js/game/inspect/registry.ts';
@@ -70,13 +70,13 @@ test('a lamp post casts its shadow under itself and not at the stage origin', ()
 test('the person cast puts the crowd\'s own people on the stage', () => {
     const cast = PERSON.mount(new THREE.Scene());
     const c = defaultControls(PERSON);
-    // Row mode is one per archetype, which is what it has always been.
+    // Row mode is one per behavior profile, as it was one per archetype.
     cast.rebuild(7, PERSON.row, c);
-    cast.draw(0, ARCH_KEYS.map((_, i) => i * 1.15), 0);
+    cast.draw(0, BEHAVIOR_KEYS.map((_, i) => i * 1.15), 0);
     for (let i = 0; i < PERSON.row; i++) {
-        const want = new Subject(7, i, ARCH_KEYS[i], { age: 'seed', build: 'seed', mobility: 'seed' });
+        const want = new Subject(7, i, { behavior: BEHAVIOR_KEYS[i] });
         const got = cast.readout(i, 1.8);
-        assert.equal(got.title, want.arch.name, `figure ${i} is not ${ARCH_KEYS[i]}`);
+        assert.equal(got.title, want.profile.name, `figure ${i} is not ${BEHAVIOR_KEYS[i]}`);
         // 18 is the true floor: torso, neck, head, both legs, both arms, both hands and both feet
         // are put() unconditionally by drawPerson (even a seated rider's legs are repositioned
         // rather than hidden), so anything under it can only mean the cast recorded nobody. The
@@ -90,11 +90,12 @@ test('the person cast puts the crowd\'s own people on the stage', () => {
 
 test('an axis override reaches the cast and nothing else does', () => {
     const cast = PERSON.mount(new THREE.Scene());
-    const c = { ...defaultControls(PERSON), arch: 'linda', age: 'child' };
+    const c = { ...defaultControls(PERSON), behavior: 'sudden-stopper', age: 'old' };
     cast.rebuild(3, 1, c);
     cast.draw(0, [0], 0);
-    const rows = new Map(cast.readout(0, 1.2).rows);
-    assert.equal(rows.get('age'), 'child');
+    const out = cast.readout(0, 1.2);
+    assert.equal(new Map(out.rows).get('age'), 'old');
+    assert.equal(out.title, 'Sudden Stopper');
 });
 
 /**
@@ -160,15 +161,21 @@ test('a hypothetical entity is inspectable without the shell changing', () => {
 });
 
 test('every person URL that worked before still works', () => {
+    // Written when a person was an archetype: `arch` now arrives as the behavior profile that
+    // replaced it, the old ages as the adjustments that replaced them, `mob` as equipment.
     const person = ENTITIES[0];
-    const url = '?inspect=1&seed=3&arch=dave&age=child&build=broad&mob=cane&walk=1' +
+    const url = '?inspect=1&seed=3&arch=dave&age=older&build=broad&mob=cane&walk=1' +
         '&paused=1&yaw=45&phase=0.5&gizmos=1&ink=0';
     const s = stateFor(person, 'single', url);
     assert.equal(s.seed, 3);
-    assert.equal(s.controls.arch, 'dave');
-    assert.equal(s.controls.age, 'child');
+    assert.equal(s.controls.behavior, 'weaver');
+    assert.equal(s.controls.age, 'old');
     assert.equal(s.controls.build, 'broad');
-    assert.equal(s.controls.mob, 'cane');
+    assert.equal(s.controls.equipment, 'cane');
+    for (const [arch, behavior] of [['tourist', 'typical'], ['mary', 'slow-walker'], ['kyle', 'distracted'], ['linda', 'sudden-stopper'], ['johnsons', 'group-walker'], ['timmy', 'darter']]) {
+        assert.equal(stateFor(person, 'single', `?arch=${arch}`).controls.behavior, behavior, arch);
+    }
+    assert.equal(stateFor(person, 'single', '?arch=seed').controls.behavior, 'seed');
     assert.equal(s.controls.walk, true);
     // A gated scalar in the URL means "hold it there", so `phase` alone turns the gait freeze on.
     assert.equal(s.controls.phase, 0.5);

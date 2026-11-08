@@ -1,4 +1,4 @@
-import { ARCH, ARCH_KEYS } from './archetypes.ts';
+import { BEHAVIORS, BEHAVIOR_KEYS } from './behaviors.ts';
 import { BOB, BOB_CONTROLS, STAMINA, resetBob } from './feel.ts';
 import type { BobKey } from './feel.ts';
 import type { CameraMode, StaminaState } from './sim/player.ts';
@@ -54,8 +54,8 @@ export class UI {
 
     constructor() {
         const legend = el<HTMLElement>('legend');
-        for (const k of ARCH_KEYS) {
-            const A = ARCH[k]; const row = document.createElement('div');
+        for (const k of BEHAVIOR_KEYS) {
+            const A = BEHAVIORS[k]; const row = document.createElement('div');
             row.innerHTML = `<i style="background:#${A.color.toString(16).padStart(6, '0')}"></i>${A.name} <span>${A.desc}</span>`;
             legend.appendChild(row);
         }
@@ -86,7 +86,7 @@ export class UI {
      * Build one slider per tuning axis, from `BOB_CONTROLS` and nothing else.
      *
      * The list is the single source of the ranges, so a new axis is an entry in `feel.ts` and no
-     * change at all here -- the same reason the legend above is built from `ARCH_KEYS` rather than
+     * change at all here -- the same reason the legend above is built from `BEHAVIOR_KEYS` rather than
      * written out in the markup.
      *
      * A slider writes straight into `BOB` and the next frame reads it. There is no apply step and

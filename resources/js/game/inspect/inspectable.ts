@@ -99,7 +99,7 @@ export interface OverlayDef { id: string; label: string; key?: string; on?: bool
  * section ids are the shared headings, in the order a reader looks for them; an entity fills in the
  * ones it has something to say under and leaves the rest out.
  */
-export type SectionId = 'identity' | 'archetype' | 'recipe' | 'geometry' | 'model' | 'state' | 'provenance' | 'cost';
+export type SectionId = 'identity' | 'choices' | 'behavior' | 'recipe' | 'geometry' | 'model' | 'state' | 'provenance' | 'cost';
 
 /** One line of a section. `v` is plain text; `color` adds a swatch, `tags` a row of chips. */
 export interface InfoRow {
@@ -277,6 +277,15 @@ export interface Inspectable {
      * row is two, five, four or one per chosen model, by what it is comparing. Omitted, it is `row`.
      */
     rowFor?(c: Controls): number;
+    /**
+     * Rewrite the query keys this entity used to write into the ones it writes now, before the
+     * shell reads the address. Omit it if nothing was ever renamed.
+     *
+     * An address is a promise: a link written before a control was renamed still has to open what
+     * it opened. The person's archetype became a behavior profile, so `arch=dave` has to arrive as
+     * `behavior=weaver`, and only the entity knows that -- the shell never learns what either means.
+     */
+    legacy?(q: URLSearchParams): void;
     /**
      * Fetch whatever the declaration depends on, before the shell reads it. Omit it if nothing does.
      *

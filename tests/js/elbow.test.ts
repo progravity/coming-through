@@ -18,11 +18,10 @@ import * as THREE from 'three';
 import { RecordingPools } from '../../resources/js/game/inspect/gizmos.ts';
 import { Subject } from '../../resources/js/game/inspect/subject.ts';
 import type { Overrides } from '../../resources/js/game/inspect/subject.ts';
-import type { ArchKey } from '../../resources/js/game/archetypes.ts';
 import { drawPerson } from '../../resources/js/game/render/person.ts';
 
 const SEED = 9;
-const NONE: Overrides = { age: 'seed', build: 'seed', mobility: 'seed' };
+const NONE: Partial<Overrides> = { behavior: 'typical', equipment: 'none' };
 /**
  * How far an elbow may open past straight, in radians. Real elbows do hyperextend a little -- five
  * to fifteen degrees is ordinary -- and the relaxed hanging arm uses some of that on purpose, so
@@ -66,9 +65,9 @@ function flexion(shoulder: THREE.Vector3, elbow: THREE.Vector3, wrist: THREE.Vec
 }
 
 /** The worst (most negative) flexion either elbow reaches over a full stride. */
-function worstFlexion(arch: ArchKey, o: Overrides): { value: number; at: string } {
+function worstFlexion(o: Partial<Overrides>): { value: number; at: string } {
     const pools = new RecordingPools(new THREE.Scene());
-    const s = new Subject(SEED, 0, arch, o);
+    const s = new Subject(SEED, 0, o);
     s.mv = 1;
     let value = Infinity, at = '';
     for (let i = 0; i < 8; i++) {
@@ -91,22 +90,21 @@ function worstFlexion(arch: ArchKey, o: Overrides): { value: number; at: string 
     return { value, at };
 }
 
-interface Case { label: string; arch: ArchKey; o: Overrides }
+interface Case { label: string; o: Partial<Overrides> }
 /** One of each pose the arms can be in: swinging, one-handed, and each of the held poses. */
 const CASES: readonly Case[] = [
-    { label: 'walking', arch: 'tourist', o: NONE },
-    { label: 'child walking', arch: 'tourist', o: { ...NONE, age: 'child' } },
-    { label: 'on a phone', arch: 'kyle', o: NONE },
-    { label: 'with a cane', arch: 'tourist', o: { ...NONE, mobility: 'cane' } },
-    { label: 'pushing a stroller', arch: 'mary', o: NONE },
-    { label: 'in a wheelchair', arch: 'tourist', o: { ...NONE, mobility: 'wheelchair' } },
-    { label: 'on a scooter', arch: 'tourist', o: { ...NONE, mobility: 'scooter' } },
-    { label: 'older on a scooter', arch: 'tourist', o: { ...NONE, age: 'older', mobility: 'scooter' } },
+    { label: 'walking', o: NONE },
+    { label: 'child walking', o: { behavior: 'darter', equipment: 'none' } },
+    { label: 'with a cane', o: { behavior: 'typical', equipment: 'cane' } },
+    { label: 'pushing a stroller', o: { equipment: 'stroller' } },
+    { label: 'in a wheelchair', o: { behavior: 'typical', equipment: 'wheelchair' } },
+    { label: 'on a scooter', o: { behavior: 'typical', equipment: 'scooter' } },
+    { label: 'older on a scooter', o: { ...NONE, age: 'old', equipment: 'scooter' } },
 ];
 
 test('no elbow bends backwards, in any pose', () => {
-    for (const { label, arch, o } of CASES) {
-        const { value, at } = worstFlexion(arch, o);
+    for (const { label, o } of CASES) {
+        const { value, at } = worstFlexion(o);
         const deg = (value * 180) / Math.PI;
         assert.ok(value > -HYPEREXTENSION,
             `${label}: elbow opens ${(-deg).toFixed(1)}deg past straight (${at})`);
@@ -125,7 +123,7 @@ test('a handle out in front of the body is reached with a bent arm', () => {
     for (const label of ['pushing a stroller', 'on a scooter', 'older on a scooter']) {
         const c = CASES.find(x => x.label === label);
         assert.ok(c, `no case named ${label}`);
-        const { value } = worstFlexion(c.arch, c.o);
+        const { value } = worstFlexion(c.o);
         const deg = (value * 180) / Math.PI;
         assert.ok(deg > 30, `${label}: elbow is only ${deg.toFixed(1)}deg from straight`);
     }
