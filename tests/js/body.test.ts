@@ -1,21 +1,20 @@
 /**
- * Model bodies (`modelcrowd/body.ts`): the recipe's age and Body Type turned into bone changes and a
+ * Model bodies (`modelcrowd/body.ts`): the recipe's Body Type turned into bone changes and a
  * fullness displacement for the model crowd and the people lab.
  *
  * Checked on a small rig built in code with Mixamo's bone names: that the Body Types are the
  * crowd's own width roll cut into fifths and adjacent ones stay visibly apart; that the limits hold
- * and say what they held back; that a child is drawn as a teen; that widening the chest moves
- * nothing hung from it (the head stays put, the arms move only with the shoulders); that limbs
- * thicken across the bone and longer legs lift the figure by exactly what they add; that a stoop
- * does not compound when nothing animates the bone; that the fullness mask leaves hands, feet and
- * the head alone; and that the fullness shader composes with a material's own.
+ * and say what they held back; that a body is its Body Type and nothing else, with no age in it;
+ * that widening the chest moves nothing hung from it (the head stays put, the arms move only with
+ * the shoulders); that limbs thicken across the bone and keep their length; that the fullness mask
+ * leaves hands, feet and the head alone; and that the fullness shader composes with a material's own.
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
 import { makeStreams } from '../../resources/js/game/core/rng.ts';
 import {
-    AGES, AGE_PRESETS, BODY_TYPES, BODY_TYPE_PRESETS, BodyRig, CHILD_NOTE, LIMITS, bakeMask, bodyTypeAt, bodyTypePosition, drawnHeight,
+    BODY_KEYS, BODY_TYPES, BODY_TYPE_PRESETS, BodyRig, CHILD_NOTE, LIMITS, bakeMask, bodyTypeAt, bodyTypePosition, drawnHeight,
     bodyOf, drawsAsPrimitive, modelFallback, patchFullness, shape,
 } from '../../resources/js/game/modelcrowd/body.ts';
 import { personModel } from '../../resources/js/game/data/people.ts';
@@ -23,7 +22,7 @@ import { Subject } from '../../resources/js/game/inspect/subject.ts';
 import type { Body } from '../../resources/js/game/modelcrowd/body.ts';
 import { BODY_TYPE_WIDTH, figureHeight, makeRecipe } from '../../resources/js/game/recipe.ts';
 
-const NEUTRAL: Body = { height: 1, width: 1, shoulders: 1, limbs: 1, fullness: 0, face: 0, neck: 1, head: 1, legs: 1, stoop: 0 };
+const NEUTRAL: Body = { width: 1, shoulders: 1, limbs: 1, fullness: 0, face: 0, neck: 1 };
 
 test("the Body Types are the crowd's own, each a fifth of it, visibly apart", () => {
     // The Body Type is a choice: the crowd rolls one of the five presets, and a person's width is
@@ -65,39 +64,33 @@ test("a crowd person's width lands between the presets and blends them", () => {
     assert.ok(Math.abs(mid.width - (BODY_TYPE_PRESETS.solid.width + BODY_TYPE_PRESETS.broad.width) / 2) < 1e-9);
 });
 
-test('every preset combination stays inside the global limits, and the limits say what they hold', () => {
-    for (const age of AGES) {
-        for (let pos = 0; pos < BODY_TYPES.length; pos++) {
-            const s = shape(age, pos);
-            assert.deepEqual(s.held, [], `${age} ${BODY_TYPES[pos]} is held back by the shipped limits`);
-        }
+test('every Body Type stays inside the global limits, and the limits say what they hold', () => {
+    for (let pos = 0; pos < BODY_TYPES.length; pos++) {
+        assert.deepEqual(shape(pos).held, [], `${BODY_TYPES[pos]} is held back by the shipped limits`);
     }
     // A model that does not stretch well narrows its own: Broad is then held, and says by how much.
     const tight = { ...LIMITS, width: [0.9, 1.05] as const, fullness: [0, 0.01] as const };
-    const s = shape('normal', 4, tight);
+    const s = shape(4, tight);
     assert.equal(s.body.width, 1.05);
     assert.deepEqual(s.held.map(h => h.key).sort(), ['fullness', 'width']);
     assert.equal(s.held.find(h => h.key === 'width')?.wanted, BODY_TYPE_PRESETS.broad.width);
 });
 
-test('age is a small adjustment to the model: Young a little shorter and slimmer, Old a little shorter and stooped', () => {
-    const young = AGE_PRESETS.young, normal = AGE_PRESETS.normal, old = AGE_PRESETS.old;
-    assert.deepEqual(normal, { height: 1, width: 1, shoulders: 1, head: 1, legs: 1, stoop: 0 });
-    assert.ok(young.height < 1 && young.height > 0.94, 'Young is a bit shorter, not a child');
-    assert.ok(young.width < 1 && young.shoulders < 1, 'and slimmer');
-    assert.ok(old.height < 1 && old.height > 0.95, 'Old is slightly shorter');
-    assert.ok(old.stoop > 0.05 && old.stoop < 0.16, 'with a gentle stoop');
-    // The recipe's own figure height is taken back out and the model's Age height put in.
-    const r = makeRecipe(makeStreams(3).recipe.fork('agent:0'), { age: 'young', behavior: 'typical' });
-    const h = drawnHeight(1, r, shape('young', 2).body);
-    assert.ok(Math.abs(h - young.height / figureHeight(r)) < 1e-12);
+test('a body is its Body Type and nothing else: no age in it, and an adult drawn at their own height', () => {
+    // Age comes only from a model's age class: nothing shortens, stoops or reshapes anyone for it.
+    const fields = Object.keys(BODY_TYPE_PRESETS.average).filter(k => k !== 'w').sort();
+    assert.deepEqual([...BODY_KEYS].sort(), fields);
+    for (let pos = 0; pos < BODY_TYPES.length; pos++) assert.deepEqual(Object.keys(shape(pos).body).sort(), fields);
+    const r = makeRecipe(makeStreams(3).recipe.fork('agent:0'), { behavior: 'typical' });
+    assert.equal(figureHeight(r), 1);
+    assert.equal(drawnHeight(1.7, r), 1.7);
 });
 
 test('a Darter is drawn at an adult model\'s size, never shrunk, and the lab says it needs a child model', () => {
-    const r = makeRecipe(makeStreams(3).recipe.fork('agent:0'), { behavior: 'darter', age: 'normal' });
+    const r = makeRecipe(makeStreams(3).recipe.fork('agent:0'), { behavior: 'darter' });
     assert.equal(r.modelClass, 'child');
     // The primitives' child height comes back out: no model is ever scaled into a child.
-    assert.ok(Math.abs(drawnHeight(1, r, shape('normal', 2).body) - 1 / figureHeight(r)) < 1e-12);
+    assert.ok(Math.abs(drawnHeight(1, r) - 1 / figureHeight(r)) < 1e-12);
     assert.match(CHILD_NOTE, /child model/);
 });
 
@@ -112,7 +105,7 @@ test('a model\'s body is its data file\'s: its age class, its build, and any lim
     assert.equal(f.build, 'heavy-set');
     assert.deepEqual(f.limits.width, [0.9, 1.2]);
     assert.deepEqual(f.overridden, ['width']);
-    assert.equal(f.limits.height, LIMITS.height);
+    assert.equal(f.limits.shoulders, LIMITS.shoulders);
 });
 
 /** A Mixamo-named rig: spine, neck and head up the middle, a left arm hanging, a left leg standing. */
@@ -196,37 +189,17 @@ test('the shoulders carry the arms out, and limbs thicken across the bone, not a
     close(now.y - nowBone.y, fore.y - foreBone.y, 'the forearm kept its length');
 });
 
-test('longer legs reach further down, and the lift is exactly what they added', () => {
+test('the broadest body keeps the feet where they stood and the head where it was', () => {
+    // Nothing lengthens a leg, lifts a figure or bends a spine: those were age's, and age is the model's.
     const { root, mesh, bone, v } = rig();
-    const foot = world(bone.LeftFoot), hip = world(bone.LeftUpLeg), sole = vertex(mesh, v.LeftFoot);
+    const sole = vertex(mesh, v.LeftFoot), head = world(bone.Head);
     const body = new BodyRig(root, [mesh]);
-    close(body.legLength, hip.distanceTo(foot), 'leg length');
-    body.apply({ ...NEUTRAL, legs: 1.04 });
+    body.apply(shape(BODY_TYPES.length - 1).body);
     body.pose();
     root.updateMatrixWorld(true);
-    close(world(bone.LeftFoot).y, hip.y - (hip.y - foot.y) * 1.04, 'the foot went down');
-    close(body.lift, 0.04 * body.legLength, 'the lift');
-    // Lifted by the lift, the sole is back where it stood.
-    close(vertex(mesh, v.LeftFoot).y + body.lift, sole.y, 'the sole on the ground');
-});
-
-test('a stoop bends forward, and posing again without an animation does not bend further', () => {
-    const { root, mesh, bone } = rig();
-    const head = world(bone.Head);
-    const body = new BodyRig(root, [mesh]);
-    body.apply({ ...NEUTRAL, stoop: 0.16 });
-    body.pose();
-    root.updateMatrixWorld(true);
-    const once = world(bone.Head);
-    assert.ok(once.z > head.z + 0.01, 'the head did not come forward');
-    body.pose(); body.pose();
-    root.updateMatrixWorld(true);
-    assert.ok(world(bone.Head).distanceTo(once) < 1e-9, 'the stoop compounded on a bone nothing animates');
-    // An animation writing the bone afresh is composed onto, once.
-    bone.Neck.quaternion.identity();
-    body.pose();
-    root.updateMatrixWorld(true);
-    assert.ok(world(bone.Head).distanceTo(once) < 1e-9, 'a fresh pose was stooped differently');
+    close(vertex(mesh, v.LeftFoot).y, sole.y, 'the sole left the ground');
+    close(world(bone.Head).y, head.y, 'the head moved up or down');
+    close(world(bone.Head).z, head.z, 'the head came forward');
 });
 
 test('a body leaves the inverse bind matrices of every other figure alone', () => {

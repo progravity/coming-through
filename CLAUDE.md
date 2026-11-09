@@ -192,7 +192,7 @@ The engine:
   model (`casual-man` unless `?model=` names another). `?people=prim` keeps the primitive people,
   which stay the fallback: for the player, for anyone with a mobility aid or a stroller, and for the
   whole crowd if the model fails to load. `regions.ts` finds a model's color regions and repaints
-  them per person, `body.ts` shapes each clone by its recipe's age and Body Type and decides who falls
+  them per person, `body.ts` shapes each clone by its recipe's Body Type and decides who falls
   back (see "Model bodies"), and `index.ts` chooses the renderer and keeps the cost readout, shown
   under `?people=` or a stress run. The people lab, which shows only models, uses all of it.
   See "Models by default".
@@ -235,7 +235,8 @@ The engine:
   parts: that nothing a person stands or rides on sinks through the ground, that it holds still
   while the body bobs through a stride — a grip placed at the bobbing hand height rather than its
   rest height drives a cane through the pavement twice a step — that overlapping boxes are buried
-  inside each other rather than left flush, and that a pram body sits on its wheels.
+  inside each other rather than left flush, that a seated rider carries no backpack (it would be
+  drawn inside the seat back), and that a pram body sits on its wheels.
 - `tests/js/elbow.test.ts` — which way an elbow bends. A held pose is two absolute pitches and nothing
   in that pair says which of them has to be further forward, so the invariant is read back off the
   arm cylinders rather than off the constants: no elbow is forward of the shoulder-to-wrist line by
@@ -304,10 +305,10 @@ The engine:
   failed its check, by file and field.
 - `tests/js/body.test.ts` — model bodies, on a Mixamo-named rig built in code: that the Body Types
   are the crowd's own width roll cut into fifths with neighbors visibly apart, that the limits hold
-  and say what they held, that a child is drawn as a teen at the teen height, that widening the chest
-  moves nothing hung from it, that the shoulders carry the arms and limbs thicken across the bone,
-  that longer legs lift the figure by exactly what they add, that a stoop never compounds, that a
-  body never writes another figure's bind matrices, that fullness leaves the hands, feet and head
+  and say what they held, that a body is its Body Type and nothing else (no age in it: the broadest
+  keeps the feet and the head where they were), that widening the chest moves nothing hung from it,
+  that the shoulders carry the arms and limbs thicken across the bone, that a body never writes
+  another figure's bind matrices, that fullness leaves the hands, feet and head
   alone and swells a seam as one surface, that its shader runs after the material's own, and that a
   model's body (age class, build, limits) is its data file's.
 - `tests/js/regions.test.ts` — a model's colour regions, on atlases built in code: that the groups are
@@ -318,11 +319,12 @@ The engine:
   file's color slots reach the detector as they are, and that a model is painted in its person's
   scheme arranged on the clothing slots it has.
 - `tests/js/wardrobe.test.ts` — the color system: every pooled scheme meets the rules on every
-  model's color slots and the clothing slot sets to come, at every skin tone and hair color, young and old, in
-  few tries; the crowd as rolled meets them on the models and the primitives; a pooled scheme
-  arranges differently by model and by person, from its pool alone; a uniform is the same clothing
-  on everyone and never rolled; skin tones are named by lightness alone and stay human; Old grays
-  the hair and nothing else.
+  model's color slots and the clothing slot sets to come, at every skin tone and hair color, in few
+  tries; the crowd as rolled meets them on the models and the primitives; a pooled scheme arranges
+  differently by model and by person, from its pool alone; a uniform is the same clothing on
+  everyone and never rolled; skin tones are named by lightness alone and stay human; gray is a hair
+  color of its own, near neutral from salt-and-pepper to silver, rolled at its composition share,
+  and nothing else grays anyone.
 - `tests/js/people-data.test.ts` — the person model data files: that every file in `data/people/`
   is found without being listed and is valid, named by its ID, and points at a GLB that is there;
   that casual-man and casual-man-low state their facts and leave what nobody knows as `unknown`;
@@ -384,7 +386,7 @@ time rather than sharing a constant: a default is a weld, and the first profile 
 `stationed` and `immobile` is the one it would stand in the way of.
 
 **People are where the independence is taken furthest.** A person's type is their behavior profile
-(`behaviors.ts`), and *nothing else about them is the type*: model, age, Body Type, skin tone, hair,
+(`behaviors.ts`), and *nothing else about them is the type*: model, Body Type, skin tone, hair,
 clothing and equipment are separate choices rolled beside it (see "A person"). The old archetypes
 bundled a behavior with a look -- Dave was fast *and* orange *and* narrow -- which is the weld this
 section warns against, one level down.
@@ -1371,10 +1373,9 @@ the one table the crowd's makeup is tuned in:
 | choice | options | where it lives |
 |---|---|---|
 | **Model** | the model, with its data file's age class (`adult` today; `child` and `elder` later) | `data/people/<id>.json`, `render/model-file.ts` (`CROWD_MODEL`) |
-| **Age** | Young, Normal, Old: small adjustments relative to the model | `AGES` in `recipe.ts`; `AGE_PRESETS` in `modelcrowd/body.ts` |
 | **Body Type** | Slim, Trim, Average, Solid, Broad | `BODY_TYPES` in `recipe.ts`; `BODY_TYPE_PRESETS` in `modelcrowd/body.ts` |
 | **Skin tone** | Lightest, Light, Medium-Light, Medium, Medium-Deep, Deep, Deepest | `COLORS.skin` in `wardrobe.ts` |
-| **Hair** | black, dark brown, brown, light brown, blond, red | `COLORS.hair` in `wardrobe.ts` |
+| **Hair** | black, dark brown, brown, light brown, blond, red, gray | `COLORS.hair` in `wardrobe.ts` |
 | **Behavior** | Typical, Weaver, Slow Walker, Distracted, Sudden Stopper, Group Walker, Darter | `BEHAVIORS` in `behaviors.ts` |
 | **Equipment** | none, stroller, wheelchair, scooter, cane | `EQUIPMENT` in `recipe.ts` |
 
@@ -1383,12 +1384,16 @@ pairings that are tied on purpose: **a stroller only ever comes with a Slow Walk
 stroller forces the profile), **a Darter needs a child model**, and **a Group Walker's family can
 share the leader's clothing** (`groupSharesScheme`). One small tie was added for the primitives' sake:
 a child who rolls a mobility scooter walks instead, since the primitive child cannot sit one (the lab
-can still force it).
+can still force it); and a seated rider -- a wheelchair or a scooter -- carries no backpack, which
+would be drawn inside the seat back (the roll is taken either way).
 
-**Age is an adjustment, not a stage of life.** Young is a little shorter and slimmer with a youthful
-head; Normal is the model as authored; Old is slightly shorter with a gentle stoop, and shifts the
-**hair** toward gray -- hair is the only color age changes. Age no longer changes speed or gait at
-all: that is the behavior's. A child is not an age but a model class, which only a Darter needs.
+**Age is not a choice: it comes only from a model's age class** (`adult`, `child`, `elder`, in its
+data file). Children and elderly people come from models made for those ages, never from adjusting
+an adult, so there are no age presets: no roll, no lab control or row, no table. They were Young,
+Normal and Old (a little shorter and slimmer, as authored, a little shorter with a stoop and grayer
+hair), and an old lab address that names an `age` still loads, with the age ignored. Graying hair is
+a hair color now, rolled like the rest. A Darter is the one profile that needs a model class other
+than adult.
 
 **Behavior profiles carry only behavior** -- speed, steering (weaving, separation, avoiding the
 player, acceleration), stops and grouping, plus the gait multipliers that go with them -- and replace
@@ -1407,8 +1412,9 @@ the archetypes one for one, in the same order, each naming the archetype it was 
 **The default weights** (`COMPOSITION`): behavior 6/2/2/2/2/1/2 in that order -- the archetypes' own
 spawn weights, so the default crowd's behavior mix is today's archetype mix (measured over forty
 seeds: Typical 37.3% against Tourist 36.8%, Group Walker 16.3% against the Johnsons 16.7%, the rest
-within a point); age Young 2, Normal 6, Old 2; Body Type even fifths; skin tone even sevenths; hair black 3,
-dark brown 3, brown 2.5, light brown 1.5, blond 1.2, red 0.5; equipment none 92.7, cane 3.1,
+within a point); Body Type even fifths; skin tone even sevenths; hair black 3, dark brown 3, brown
+2.5, light brown 1.5, blond 1.2, red 0.5, gray 1 (7.9% of the crowd: the adults whose hair reads gray
+from the walkway, while elders, who will bring their own, have no model yet); equipment none 92.7, cane 3.1,
 wheelchair 2.7, scooter 1.5 (about 6.5% of the crowd on an aid, as before), and a stroller for 60%
 of Slow Walkers (5.4% of the crowd, down from Mary's 9.7%); a Group Walker family shares the leader's
 clothing 80% of the time.
@@ -1437,14 +1443,20 @@ Four hard rules hold `makeRecipe` together:
   equipment out, and `hash()` was expected to move for the appearance change anyway.
 - **Nothing in a recipe may reach the `spawn` or `behavior` streams.**
 
+**The player is rolled from a constant seed and then pinned** (`createPlayer` in `sim/player.ts`):
+their Body Type, skin, head, trousers, shoes and gait are written out rather than left to the roll,
+because the first-person eye height reads the player's `h` and `headR`. Removing the age roll would
+otherwise have dressed the player all in white and lowered the camera 1.7 cm; a change to the
+appearance rolls re-dresses the crowd and never the player.
+
 A behavior profile also declares what kind of thing a person is -- see "The entity taxonomy" above;
 for a person the taxonomy's type is their profile. That is metadata about the *kind* rather than a
 roll: it reads no stream.
 
 Proportions come from one height axis and the Body Type: the height roll and the preset's width
 feed height, width, head radius and shoulder width together, so a body reads as one person. The
-primitives' **figure** -- a child's for anyone who needs a child model, otherwise their age's --
-scales height, head-to-body ratio, **limb length** and a forward stoop. `h` is very nearly a stature
+primitives' **figure** -- a child's for anyone who needs a child model, an adult's for everyone
+else -- scales height, head-to-body ratio and **limb length**; a cane user's recipe stoops. `h` is very nearly a stature
 in meters divided by 1.86, the skeleton's unit height: adults land between about 1.56 m and 1.90 m.
 
 `limb` is what stops a child being a scaled-down adult. It shortens the leg and arm bones, and
@@ -1461,8 +1473,7 @@ profiles carry only behavior.
 ### Colors: skin, hair, and clothing schemes
 
 Every color a person is made of is data in **one table, `COLORS` in `wardrobe.ts`**: the skin
-ramp and its seven tones, the six hair colors and the gray that Old shifts them toward, and the
-clothing schemes. Retuning the crowd's look is editing that table.
+ramp and its seven tones, the seven hair colors, and the clothing schemes. Retuning the crowd's look is editing that table.
 
 **Skin tones are labeled by lightness only** -- Lightest, Light, Medium-Light, Medium, Medium-Deep,
 Deep, Deepest -- and **never with a racial, ethnic or regional label, anywhere**: code, data, UI or
@@ -1472,9 +1483,10 @@ variation moves them along it by up to 0.045 either side, never off it -- so not
 gray, green or otherwise not a person. `tests/js/wardrobe.test.ts` holds the names, the order and
 the warmth.
 
-**Hair** is black, dark brown, brown, light brown, blond or red, each a small range a roll lands
-in. Old shifts any of them 55-90% of the way toward a gray (one roll decides both, so the most
-grayed is the whitest); it is the only color age changes.
+**Hair** is black, dark brown, brown, light brown, blond, red or gray, each a small range a roll
+lands in. Gray runs from salt-and-pepper to silver and is how an adult has graying hair; nothing
+else changes anyone's hair, since age is the model's. Weighting hair by age class can wait until
+elder models exist.
 
 **Clothing is filled by clothing slot.** Every model's data file divides its texture into the same
 color slots (`colorSlots`): the clothing slots **`tops`, `bottoms`, `footwear` and `accessory`**
@@ -1498,9 +1510,9 @@ need it reworked:
   Neutrals, Earth Tones, Bold Primaries, Sporty, Denim & White, Park Merch. A person's clothing slots are
   filled from the pool by an arrangement that depends on the person (`Recipe.arrange`, a roll) and
   on the model (a salt from its file name), so the same person is arranged differently on each
-  model and two people differently on one: with Bright Tropical, seed 1's first person (Deepest
-  skin) is a deep-sea top, hot-pink bottoms and white shoes on `casual-man` and a coral top,
-  sunshine bottoms and lime shoes on `casual-man-low`. The accessory and the headwear come from the
+  model and two people differently on one: with Bright Tropical, seed 1's first person (Medium
+  skin) is a white top, deep-sea bottoms and hot-pink shoes on `casual-man` and a sunshine top with
+  the same bottoms and shoes on `casual-man-low`. The accessory and the headwear come from the
   pool too. A scheme may narrow a slot to part of its pool (`only`): Sporty's footwear is
   trainer-colored, Park Merch's caps are the park's green, navy or gold.
 - **Uniform** -- a fixed color per slot. Skin and hair still vary per person, and the rules comparing
@@ -1704,7 +1716,7 @@ into two vocabularies.
 
 - **People, individual and row** — the person turntable, **drawn from the model only**, walking
   (the walk clip is the default, as it is the game's normal gait). **A control for every choice a
-  person is made of**, in the order a person is described: Model, Age, Body Type, Skin tone, Hair,
+  person is made of**, in the order a person is described: Model, Body Type, Skin tone, Hair,
   Clothing scheme, Behavior and Equipment, each with **Seed** first -- what the seed rolls for agent
   N, exactly as the crowd rolls them (Model's Seed is the game's model for the class the person
   needs). Choices with more options than fit on a row are dropdowns, and every option shows its
@@ -1717,8 +1729,7 @@ into two vocabularies.
 
   **The card says what each choice contributes**: under **Choices**, each one with how it was
   chosen (rolled by the seed, or in the lab), its share of the default crowd, and what it does to
-  this figure -- the model's age class, build and triangles; the Age preset's height, width,
-  shoulders, head, legs and stoop (and Old graying the hair); the Body Type's width, shoulders,
+  this figure -- the model's age class, build and triangles; the Body Type's width, shoulders,
   limbs, fullness, face and neck; the skin tone's place on the ramp and the color it landed on; the
   hair color; the clothing scheme's kind (pooled or uniform) and the color each clothing slot got
   on this model; the behavior in a line, and whether the game walks or runs them at their speed;
@@ -1731,10 +1742,11 @@ into two vocabularies.
   with a note that it needs a child model, and the game's fallback is on any card it applies to.
 
   `compare=` chooses what the row stands side by side: `body-type` (the default: the five Body
-  Types exactly; `compare=build`, from before the rename, still opens it), `age` (Young, Normal,
-  Old) or `models` (every model chosen by its `cmp-<name>` switch, at the same recipe, presets, pose and camera, with what each costs); `crowd scale` fits
+  Types exactly; `compare=build`, from before the rename, still opens it, and an old `compare=age`
+  opens it too) or `models` (every model chosen by its `cmp-<name>` switch, at the same recipe,
+  presets, pose and camera, with what each costs); `crowd scale` fits
   the model as the model crowd does. The primitives' part gizmos and part origins are not offered
-  (`Inspectable.universal`). **Height** reads as its parts, `1.70 m = 1.75 base × 0.97 Old × 1.00
+  (`Inspectable.universal`). **Height** reads as its parts, `1.70 m = 1.75 base × 0.97
   recipe height`, and the **height ruler** (`ruler`, `E`, on by default, a shell overlay every lab
   has) stands beside each exhibit, ticked every 10 cm and labeled with its measured height. The
   card's **Data file** section shows the model's data file, its path and every fact in it, and
@@ -1923,7 +1935,8 @@ Two consequences worth knowing:
   and only the selection from rolls already in hand changes, so a person keeps everything else they
   rolled while one choice moves under them, which is the point. An address written before people
   were choices still opens what it opened: `Inspectable.legacy` reads `arch=dave` as
-  `behavior=weaver`, the old ages as the new, and `mob=` as `equipment=`.
+  `behavior=weaver`, `mob=` as `equipment=` and `build=` as `body-type=`, and drops `age=`, which
+  nothing reads since age presets went.
 - The part gizmos -- the **bounding boxes** (`gizmos`, `G`) and the **part origins** (`origins`, `X`),
   two switches since the labs -- read matrices back from a `PartPools` subclass that records what `put` writes and
   calls straight through to the real implementation, so nothing the inspector does can change what
@@ -2073,7 +2086,7 @@ neither hash can move, and nothing under `resources/js/game/sim/` imports it. Fi
   body runs (back to walking below 1.9); anyone with a mobility aid walks.
 - **Variation is the person's own colors and body**: skin and hair from the recipe, the clothing
   scheme arranged on the clothing slots this model has (`personColors`, salted by the model -- see
-  "Colors" above), and the recipe's age and Body Type shaped into the clone by `modelcrowd/body.ts` --
+  "Colors" above), and the recipe's Body Type shaped into the clone by `modelcrowd/body.ts` --
   see "Model bodies" below.
 - **Colour regions are found, not authored** (`regions.ts`). The mesh's UV triangles are rasterised
   to find the texels it uses, those are grouped by colour with a mean shift in Oklab, and a mask
@@ -2111,7 +2124,7 @@ neither hash can move, and nothing under `resources/js/game/sim/` imports it. Fi
 
 ### Model bodies
 
-`modelcrowd/body.ts` turns a recipe's **age** and **Body Type** into a body for a rigged model, for the
+`modelcrowd/body.ts` turns a recipe's **Body Type** into a body for a rigged model, for the
 `?people=model` crowd and the people lab alike. **Renderer only**: it reads the recipe and writes
 bones, bind matrices and two uniforms. Nothing rolls, nothing reaches the simulation, the collider
 is unchanged, and neither hash can move. Three mechanisms, chosen so nothing costs more per frame:
@@ -2122,10 +2135,9 @@ is unchanged, and neither hash can move. Three mechanisms, chosen so nothing cos
   per body, and nothing downstream of the bone moves. A clone's skeleton shares its source's inverse
   array, so `BodyRig` unshares it first.
 - **Spacing is a change of joint position**, rewritten after each animation update by
-  `BodyRig.pose()` (a dozen copies, nothing allocated): the clavicles and arms out by the shoulders,
-  the legs apart by the width, the knees and feet down by the leg length, with the figure lifted by
-  exactly what longer legs added. The stoop is composed onto the clip's own turn of the spine and
-  neck, and is never composed twice onto a bone no clip animates.
+  `BodyRig.pose()` (six copies, nothing allocated): the clavicles and arms out by the shoulders, the
+  legs apart by the width. Nothing lengthens a leg, lifts the figure, scales the head or bends the
+  spine: those were the age presets', and went with them.
 - **Fullness is a vertex displacement** along the skinned normal, in the material's own shader,
   wrapped around whatever `onBeforeCompile` it had (the region repaint, the ink's push), so the
   outline still stands proud of a fuller body. It is weighted per vertex by `bodyMask`, baked once
@@ -2136,7 +2148,7 @@ is unchanged, and neither hash can move. Three mechanisms, chosen so nothing cos
   seams swell as one surface rather than opening into cracks. One uniform per figure; the crowd's
   ink became a material per figure for it, all sharing one program.
 
-**The presets**, every number in `BODY_TYPE_PRESETS`, `AGE_PRESETS` and `LIMITS`:
+**The presets**, every number in `BODY_TYPE_PRESETS` and `LIMITS`:
 
 | Body Type | recipe width | width | shoulders | limbs | fullness | face | neck |
 |---|---|---|---|---|---|---|---|
@@ -2153,31 +2165,24 @@ by 32%, which is under the eyes -- so the cheeks, jaw and chin swell and the eye
 face never move, and the face texture is never stretched across them. The neck thickens across its
 own bone (`neck`), in its bind matrix like every other girth, so the head is not carried with it.
 
-| Age | height | width | shoulders | head | legs | stoop |
-|---|---|---|---|---|---|---|
-| Young | 0.96 | 0.96 | 0.96 | 1.03 | 1.02 | 0 |
-| Normal | 1 | 1 | 1 | 1 | 1 | 0 |
-| Old | 0.97 | 1 | 0.96 | 1 | 1 | 0.12 rad (about 7°: a quarter in Spine1, a third in Spine2, the rest in the neck) |
-
-Age is a small adjustment relative to the model, never a change of model: Young a bit shorter and
-slimmer with a slightly larger head and longer legs, Normal the model as authored, Old slightly
-shorter with a gentle stoop. Old also grays the hair, which is the recipe's (see "Colors").
+**There is no age here.** Age comes only from the model, by its data file's age class; a model is
+never adjusted into a younger or older person (see "A person").
 
 - **The Body Type is a choice, drawn exactly.** The crowd rolls one of the five presets (even fifths by
   default), a person's width is that preset's (`BODY_TYPE_WIDTH`, the scale the "recipe width" column is
   on), and the model wears the preset exactly; a width between two anchors would blend them, which
   only an explicit width does now.
-- **Age replaces the recipe's figure height** rather than stacking on it: a model is drawn at
-  `standingHeight / figureHeight(recipe) × preset height`, so the recipe's own height roll still
-  applies. `figureHeight` is a read-only export from `recipe.ts`; nothing there rolls differently.
+- **A model is drawn at the recipe's height, never shrunk into anyone**: `standingHeight /
+  figureHeight(recipe)`, which takes the primitives' child figure back out for a Darter shown on an
+  adult model and is the standing height itself for an adult. `figureHeight` is a read-only export
+  from `recipe.ts`; nothing there rolls differently.
 - **A child is not an age; it is a model class.** Only a Darter needs one, and an adult model cannot
   be made into a convincing child, so until there is a child model the game draws Darters as
   primitives and the lab shows the adult model with a note saying it needs a child model.
-- **Limits** keep every combination sane and are a safety net, not a style: no shipped preset
-  combination touches them, which the tests pin. Width 0.82 to 1.16, shoulders 0.88 to 1.10, limbs
-  0.86 to 1.14, fullness 0 to 2.6%, face 0 to 0.7%, neck 0.96 to 1.12, height 0.88 to 1.05, head
-  0.96 to 1.08, legs 0.97 to 1.05, stoop 0 to 0.22 rad. A value pushed past one is clamped, and the lab marks it "held back" with what was
-  asked.
+- **Limits** keep every Body Type sane and are a safety net, not a style: no shipped preset touches
+  them, which the tests pin. Width 0.82 to 1.16, shoulders 0.88 to 1.10, limbs 0.86 to 1.14,
+  fullness 0 to 2.6%, face 0 to 0.7%, neck 0.96 to 1.12. A value pushed past one is clamped, and the
+  lab marks it "held back" with what was asked.
 
 **What a model's data file says about its body** (`bodyOf` in `modelcrowd/body.ts`):
 
@@ -2185,8 +2190,9 @@ shorter with a gentle stoop. Old also grays the hair, which is the recipe's (see
 - `build` -- `average` or `heavy-set`: the figure as generated, before any preset. The lab shows it.
   Heavy-set models will cover the fullest end of the crowd later; nothing chooses models by build
   yet.
-- `bodyLimits` -- `{ "<key>": [min, max] }` for any of `height`, `width`, `shoulders`, `limbs`,
-  `fullness`, `face`, `neck`, `head`, `legs`, `stoop`, overriding the global limits for this model
+- `bodyLimits` -- `{ "<key>": [min, max] }` for any of `width`, `shoulders`, `limbs`, `fullness`,
+  `face`, `neck` (the Body Type's values, the spec's "Body Type limits"; `height`, `head`, `legs` and
+  `stoop` went with the age presets and are refused), overriding the global limits for this model
   only (some models stretch better than others); `{}` for none. The lab marks which limits came
   from the file.
 

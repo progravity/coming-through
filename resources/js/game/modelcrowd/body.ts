@@ -1,6 +1,7 @@
 /**
- * How one rigged model becomes many bodies: the recipe's age and Body Type, turned into bone changes
- * and a fullness displacement, for the `?people=model` crowd and the people lab alike.
+ * How one rigged model becomes many bodies: the recipe's Body Type, turned into bone changes and a
+ * fullness displacement, for the `?people=model` crowd and the people lab alike. Age is not here:
+ * it comes only from the model, by its data file's age class, and is never made by adjusting one.
  *
  * **Renderer only.** It reads a recipe and writes bones, bind matrices and two uniforms. Nothing
  * here rolls, nothing reaches the simulation, and a person's collider is whatever it always was --
@@ -14,8 +15,8 @@
  *   (`boneMatrix = boneWorld × scale × boneInverse`). It is set once per body, the skinning already
  *   multiplies by it, and nothing downstream of the bone moves.
  * - **Spacing is a change of joint position.** What *should* move its children -- the arms out
- *   with a wider chest, the legs apart with wider hips, the feet down with longer legs -- is a
- *   joint's local offset, rewritten after each animation update (`BodyRig.pose`), a dozen copies.
+ *   with a wider chest, the legs apart with wider hips -- is a joint's local offset, rewritten
+ *   after each animation update (`BodyRig.pose`), a handful of copies.
  * - **Fullness is a vertex displacement** along the skinned normal, in the material's shader,
  *   weighted per vertex by a mask baked once from the skin weights (`bodyMask`). Hands, feet, the
  *   head and the face carry no weight in it, so they never swell.
@@ -28,13 +29,13 @@ import { BEHAVIORS } from '../behaviors.ts';
 import type { ModelClass } from '../behaviors.ts';
 import { BODY_LIMIT_KEYS } from '../data/people.ts';
 import type { ModelBuild, PersonModel } from '../data/people.ts';
-import { AGES, BODY_TYPES, BODY_TYPE_WIDTH, figureHeight } from '../recipe.ts';
-import type { Age, BodyType, Recipe } from '../recipe.ts';
+import { BODY_TYPES, BODY_TYPE_WIDTH, figureHeight } from '../recipe.ts';
+import type { BodyType, Recipe } from '../recipe.ts';
 
 // ---------- the tables ----------
 
-export { AGES, BODY_TYPES };
-export type { Age, BodyType };
+export { BODY_TYPES };
+export type { BodyType };
 
 /** The body values one preset contributes. Every field is a factor on the model as authored, except `fullness`. */
 export interface BodyTypePreset {
@@ -69,38 +70,12 @@ export const BODY_TYPE_PRESETS: Readonly<Record<BodyType, BodyTypePreset>> = {
     broad: { w: BODY_TYPE_WIDTH.broad, width: 1.14, shoulders: 1.08, limbs: 1.12, fullness: 0.022, face: 0.0055, neck: 1.09 },
 };
 
-/**
- * Age is a small adjustment relative to the model, never a change of model: Young a little shorter
- * and slimmer, with a slightly larger head and longer legs for youth; Normal the model as authored;
- * Old slightly shorter with a gentle stoop. (Old also grays the hair, which is the recipe's.)
- */
-export interface AgePreset {
-    /** Uniform scale on the model, in place of the recipe's own figure height (the height roll stays). */
-    height: number;
-    /** Multiplies the Body Type's width and shoulders. */
-    width: number;
-    shoulders: number;
-    /** Uniform scale of the head about the neck. */
-    head: number;
-    /** Length of the thighs and shins. */
-    legs: number;
-    /** Forward bend, in radians, shared between the spine and the neck. */
-    stoop: number;
-}
-
-export const AGE_PRESETS: Readonly<Record<Age, AgePreset>> = {
-    young: { height: 0.96, width: 0.96, shoulders: 0.96, head: 1.03, legs: 1.02, stoop: 0 },
-    normal: { height: 1, width: 1, shoulders: 1, head: 1, legs: 1, stoop: 0 },
-    old: { height: 0.97, width: 1, shoulders: 0.96, head: 1, legs: 1, stoop: 0.12 },
-};
-
 /** What a person who needs a child model is drawn as on an adult one, and why. */
 export const CHILD_NOTE = 'A Darter is a child, and an adult model cannot be made into one convincingly: this is the adult model. The game draws Darters as primitives until there is a child model.';
 
-/** One body: every value the rig and the shader take. */
+/** One body: every value the rig and the shader take, all of them the Body Type's. */
 export interface Body {
-    height: number; width: number; shoulders: number; limbs: number;
-    fullness: number; face: number; neck: number; head: number; legs: number; stoop: number;
+    width: number; shoulders: number; limbs: number; fullness: number; face: number; neck: number;
 }
 /** The data files' own list (`BODY_LIMIT_KEYS`), so a limit a file may set and a body value are one vocabulary. */
 export const BODY_KEYS: readonly (keyof Body)[] = BODY_LIMIT_KEYS;
@@ -108,21 +83,17 @@ export const BODY_KEYS: readonly (keyof Body)[] = BODY_LIMIT_KEYS;
 export type Limits = Readonly<Record<keyof Body, readonly [number, number]>>;
 
 /**
- * The most any model is pushed, so no combination comes out grotesque: a Normal Broad is the
- * widest a body gets, a Young Slim the narrowest. A model's data file may override any of them in
- * `bodyLimits` -- some models stretch better than others.
+ * The most any model is pushed, so no Body Type comes out grotesque: Broad is the widest a body
+ * gets, Slim the narrowest. A model's data file may override any of them in `bodyLimits` -- some
+ * models stretch better than others.
  */
 export const LIMITS: Limits = {
-    height: [0.88, 1.05],
     width: [0.82, 1.16],
     shoulders: [0.88, 1.10],
     limbs: [0.86, 1.14],
     fullness: [0, 0.026],
     face: [0, 0.007],
     neck: [0.96, 1.12],
-    head: [0.96, 1.08],
-    legs: [0.97, 1.05],
-    stoop: [0, 0.22],
 };
 
 /** What a model's data file says about its body (`bodyOf`). */
@@ -163,20 +134,16 @@ export function bodyTypeAt(pos: number): BodyTypePreset {
 /** A body, and what the limits held back: the value asked for beside the value drawn. */
 export interface Shaped {
     body: Body;
-    /** What the presets asked for, before the limits. */
+    /** What the Body Type asked for, before the limits. */
     wanted: Body;
-    /** The age drawn: always the age asked for, kept so a readout can say which preset it was. */
-    shown: Age;
     held: { key: keyof Body; wanted: number; limit: number }[];
 }
 
-/** The body an age and a Body Type position ask for, inside `limits`. */
-export function shape(age: Age, pos: number, limits: Limits = LIMITS): Shaped {
-    const shown = age;
-    const a = AGE_PRESETS[shown], b = bodyTypeAt(pos);
+/** The body a Body Type position asks for, inside `limits`. */
+export function shape(pos: number, limits: Limits = LIMITS): Shaped {
+    const b = bodyTypeAt(pos);
     const wanted: Body = {
-        height: a.height, width: b.width * a.width, shoulders: b.shoulders * a.shoulders, limbs: b.limbs,
-        fullness: b.fullness, face: b.face, neck: b.neck, head: a.head, legs: a.legs, stoop: a.stoop,
+        width: b.width, shoulders: b.shoulders, limbs: b.limbs, fullness: b.fullness, face: b.face, neck: b.neck,
     };
     const body = { ...wanted };
     const held: Shaped['held'] = [];
@@ -186,18 +153,18 @@ export function shape(age: Age, pos: number, limits: Limits = LIMITS): Shaped {
         if (Math.abs(v - wanted[k]) > 1e-9) held.push({ key: k, wanted: wanted[k], limit: v });
         body[k] = v;
     }
-    return { body, wanted, shown, held };
+    return { body, wanted, held };
 }
 
-/** The body a recipe gets in the crowd: its Age preset and its Body Type, exactly. */
-export const shapeRecipe = (r: Recipe, limits: Limits = LIMITS): Shaped => shape(r.age, BODY_TYPES.indexOf(r.bodyType), limits);
+/** The body a recipe gets in the crowd: its Body Type, exactly. */
+export const shapeRecipe = (r: Recipe, limits: Limits = LIMITS): Shaped => shape(BODY_TYPES.indexOf(r.bodyType), limits);
 
 /**
- * How tall to draw a recipe on a model: its standing height with its figure's own height taken
- * back out and the model's Age height put in, so a model is never shrunk into anything and the
- * recipe's own height roll still applies on top.
+ * How tall to draw a recipe on a model: its standing height with its primitive figure's own height
+ * taken back out (a child's, for a Darter shown on an adult model), so a model is never shrunk into
+ * anything and the recipe's own height roll still applies.
  */
-export const drawnHeight = (standing: number, r: Recipe, body: Body): number => standing / figureHeight(r) * body.height;
+export const drawnHeight = (standing: number, r: Recipe): number => standing / figureHeight(r);
 
 // ---------- what models cannot draw yet ----------
 
@@ -408,43 +375,29 @@ export function patchFullness(material: THREE.Material): FullnessUniforms {
 
 /** The bones the body touches, found by name ending: Mixamo prefixes every bone. */
 const BONE = {
-    hips: /Hips$/i, spine: /Spine$/i, spine1: /Spine1$/i, spine2: /Spine2$/i, neck: /Neck$/i, head: /Head$/i,
+    hips: /Hips$/i, spine: /Spine$/i, spine1: /Spine1$/i, spine2: /Spine2$/i, neck: /Neck$/i,
     lShoulder: /LeftShoulder$/i, rShoulder: /RightShoulder$/i, lArm: /LeftArm$/i, rArm: /RightArm$/i,
     lFore: /LeftForeArm$/i, rFore: /RightForeArm$/i, lUpLeg: /LeftUpLeg$/i, rUpLeg: /RightUpLeg$/i,
-    lLeg: /LeftLeg$/i, rLeg: /RightLeg$/i, lFoot: /LeftFoot$/i, rFoot: /RightFoot$/i,
+    lLeg: /LeftLeg$/i, rLeg: /RightLeg$/i,
 } as const;
 type BoneId = keyof typeof BONE;
 
-/** Which share of the stoop each bone takes. */
-const STOOP: readonly (readonly [BoneId, number])[] = [['spine1', 0.25], ['spine2', 0.35], ['neck', 0.4]];
-
-const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _qi = new THREE.Quaternion(), _v = new THREE.Vector3();
+const _m = new THREE.Matrix4(), _q = new THREE.Quaternion(), _qi = new THREE.Quaternion();
 
 /** A joint whose offset the body rewrites, and what it is rewritten to. */
 interface Joint { bone: THREE.Object3D; rest: THREE.Vector3; target: THREE.Vector3 }
 
 /**
- * One figure's body: its bones, its bind matrices as authored, and the joint offsets and stoop
- * the current body asks for. Built once per figure, `apply` per body, `pose` after every animation
- * update. Allocates only when built.
+ * One figure's body: its bones, its bind matrices as authored, and the joint offsets the current
+ * body asks for. Built once per figure, `apply` per body, `pose` after every animation update.
+ * Allocates only when built.
  */
 export class BodyRig {
     readonly found: Readonly<Partial<Record<BoneId, THREE.Object3D>>>;
-    /** Hip to sole at rest, in the rig's own units: how far longer legs push the feet down. */
-    readonly legLength: number;
-    /** How far the figure has to be lifted for its feet to stay on the ground, in the rig's own units. */
-    lift = 0;
     private readonly skeletons: { skeleton: THREE.Skeleton; original: THREE.Matrix4[] }[] = [];
     private readonly joints: Joint[] = [];
     /** Per bone: the local axis that is the body's sideways direction at rest. */
     private readonly side = new Map<THREE.Object3D, THREE.Vector3>();
-    private readonly stoopAxis = new Map<THREE.Object3D, THREE.Vector3>();
-    /**
-     * Each stooped bone's turn: `q` the stoop itself, `base` the pose it is composed onto, and
-     * `written` what was last put on the bone -- so a bone no clip animates is stooped once, not
-     * once more on every update.
-     */
-    private readonly stoopQ: { bone: THREE.Object3D; q: THREE.Quaternion; base: THREE.Quaternion; written: THREE.Quaternion }[] = [];
 
     /**
      * @param root The figure's root, at rest -- the pose the file left it in -- and at the origin,
@@ -472,22 +425,10 @@ export class BodyRig {
             const b = found[id];
             if (b !== undefined) this.side.set(b, local(b, new THREE.Vector3(1, 0, 0)));
         }
-        for (const [id] of STOOP) {
-            const b = found[id];
-            // Turning about the body's own sideways axis by a positive angle tips +y toward +z: forward.
-            if (b !== undefined) {
-                this.stoopAxis.set(b, local(b, new THREE.Vector3(1, 0, 0)));
-                this.stoopQ.push({ bone: b, q: new THREE.Quaternion(), base: b.quaternion.clone(), written: new THREE.Quaternion(NaN, NaN, NaN, NaN) });
-            }
-        }
-        for (const id of ['lShoulder', 'rShoulder', 'lArm', 'rArm', 'lUpLeg', 'rUpLeg', 'lLeg', 'rLeg', 'lFoot', 'rFoot'] as const) {
+        for (const id of ['lShoulder', 'rShoulder', 'lArm', 'rArm', 'lUpLeg', 'rUpLeg'] as const) {
             const b = found[id];
             if (b !== undefined) this.joints.push({ bone: b, rest: b.position.clone(), target: b.position.clone() });
         }
-        const hip = found.lUpLeg, foot = found.lFoot;
-        const p = new THREE.Vector3(), q = new THREE.Vector3();
-        this.legLength = hip !== undefined && foot !== undefined
-            ? hip.getWorldPosition(p).applyMatrix4(rootInv).distanceTo(foot.getWorldPosition(q).applyMatrix4(rootInv)) : 0;
         meshes.forEach((mesh, i) => {
             // Unshared first: a cloned skeleton shares its source's inverse bind matrices, and a body
             // written into a shared one would land on every figure at once.
@@ -498,7 +439,7 @@ export class BodyRig {
         });
     }
 
-    /** Take a body: the bind matrices, the joint targets and the stoop. Per body, never per frame. */
+    /** Take a body: the bind matrices and the joint targets. Per body, never per frame. */
     apply(b: Body): void {
         const f = this.found;
         // Each bone's own scale, in its own frame, folded into its inverse bind matrix.
@@ -514,14 +455,13 @@ export class BodyRig {
             );
             scale.set(bone, m);
         };
-        // A limb's own axis is its local y, along the bone: girth across it, length along it.
-        const limb = (bone: THREE.Object3D | undefined, girth: number, length = 1): void => {
-            if (bone !== undefined) scale.set(bone, new THREE.Matrix4().makeScale(girth, length, girth));
+        // A limb's own axis is its local y, along the bone: girth across it, never its length.
+        const limb = (bone: THREE.Object3D | undefined, girth: number): void => {
+            if (bone !== undefined) scale.set(bone, new THREE.Matrix4().makeScale(girth, 1, girth));
         };
         for (const id of ['hips', 'spine', 'spine1', 'spine2'] as const) sideways(f[id], b.width);
         limb(f.lArm, b.limbs); limb(f.rArm, b.limbs); limb(f.lFore, b.limbs); limb(f.rFore, b.limbs);
-        limb(f.lUpLeg, b.limbs, b.legs); limb(f.rUpLeg, b.limbs, b.legs); limb(f.lLeg, b.limbs, b.legs); limb(f.rLeg, b.limbs, b.legs);
-        if (f.head !== undefined) scale.set(f.head, new THREE.Matrix4().makeScale(b.head, b.head, b.head));
+        limb(f.lUpLeg, b.limbs); limb(f.rUpLeg, b.limbs); limb(f.lLeg, b.limbs); limb(f.rLeg, b.limbs);
         // A thicker neck, across the bone: its own vertices only, so the head is not carried with it.
         limb(f.neck, b.neck);
         for (const { skeleton, original } of this.skeletons) {
@@ -532,7 +472,7 @@ export class BodyRig {
             });
         }
         // Joints that carry their children with them: the arms out with the chest and the
-        // shoulders, the legs apart with the hips, the knees and feet down with longer legs.
+        // shoulders, the legs apart with the hips.
         for (const j of this.joints) {
             j.target.copy(j.rest);
             const bone = j.bone;
@@ -541,28 +481,15 @@ export class BodyRig {
             if (bone === f.lShoulder || bone === f.rShoulder) j.target.x *= b.shoulders;
             else if (bone === f.lArm || bone === f.rArm) j.target.multiplyScalar(b.shoulders);
             else if (bone === f.lUpLeg || bone === f.rUpLeg) j.target.x *= b.width;
-            else if (bone === f.lLeg || bone === f.rLeg || bone === f.lFoot || bone === f.rFoot) j.target.multiplyScalar(b.legs);
         }
-        for (const s of this.stoopQ) {
-            const share = STOOP.find(([id]) => f[id] === s.bone)?.[1] ?? 0;
-            s.q.setFromAxisAngle(this.stoopAxis.get(s.bone) ?? _v.set(1, 0, 0), b.stoop * share);
-        }
-        this.lift = (b.legs - 1) * this.legLength;
     }
 
     /**
      * Put the body into the current pose. Call right after the animation has written the bones and
-     * before the rig's matrices are taken: the joints are rewritten, the stoop composed onto the
-     * clip's own turn. A dozen copies and three multiplies, nothing allocated.
+     * before the rig's matrices are taken: the joints are rewritten. Six copies, nothing allocated.
      */
     pose(): void {
         for (const j of this.joints) j.bone.position.copy(j.target);
-        for (const s of this.stoopQ) {
-            // A fresh pose from the clip is the base; an untouched bone keeps the base it had.
-            if (!s.bone.quaternion.equals(s.written)) s.base.copy(s.bone.quaternion);
-            s.bone.quaternion.multiplyQuaternions(s.base, s.q);
-            s.written.copy(s.bone.quaternion);
-        }
     }
 }
 

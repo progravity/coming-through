@@ -40,8 +40,8 @@ function recipeDraws(): number {
     return rng.draws;
 }
 
-/** Where the age roll sits: straight after the behavior roll, which has to stay first. */
-const AGE_ROLL = 1;
+/** Where the first appearance roll sits (the Body Type's): straight after the behavior roll, which has to stay first. */
+const FIRST_APPEARANCE_ROLL = 1;
 /** How many draws a recipe takes from the person's own fork; the motion fork's are not among them. */
 const RECIPE_DRAWS = recipeDraws();
 /**
@@ -200,12 +200,12 @@ test('the harness alone moves nothing', () => {
 });
 
 test('a recipe draws more than the behavior roll, so the dummy lands among the appearance rolls', () => {
-    assert.ok(LAST_ROLL > AGE_ROLL, `makeRecipe takes ${RECIPE_DRAWS} draws`);
+    assert.ok(LAST_ROLL > FIRST_APPEARANCE_ROLL, `makeRecipe takes ${RECIPE_DRAWS} draws`);
 });
 
-test('an appearance roll where the age roll is moves nothing that is not appearance', () => {
-    const report = leaks(AGE_ROLL);
-    assert.deepEqual(report, [], `a dummy roll at draw ${AGE_ROLL} of ${RECIPE_DRAWS} moved:\n${report.join('\n')}`);
+test('an appearance roll straight after the behavior roll moves nothing that is not appearance', () => {
+    const report = leaks(FIRST_APPEARANCE_ROLL);
+    assert.deepEqual(report, [], `a dummy roll at draw ${FIRST_APPEARANCE_ROLL} of ${RECIPE_DRAWS} moved:\n${report.join('\n')}`);
 });
 
 test('an appearance roll in front of the last recipe roll moves nothing that is not appearance', () => {

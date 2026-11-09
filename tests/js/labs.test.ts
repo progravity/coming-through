@@ -124,10 +124,12 @@ test('a row remembers which figure its card describes, and single mode has only 
     assert.equal(readState('single', '?sel=3', LABS.people).sel, 0);
     // Clamped to the row, whose length follows a control: the default Body Type row is five long...
     assert.equal(readState('row', '?sel=9', LABS.people).sel, 4);
-    // ...and the Age row three.
-    assert.equal(readState('row', '?compare=age&sel=9', LABS.people).sel, 2);
-    // An old Build row, from before the per-person preset was called the Body Type, is the Body Type row.
+    // An old Build row, from before the per-person preset was called the Body Type, is the Body Type row;
     assert.equal(readState('row', '?compare=build', LABS.people).controls.compare, 'body-type');
+    // and an old Age row, from before age presets went, loads as the default row, five long.
+    const aged = readState('row', '?compare=age&sel=9', LABS.people);
+    assert.equal(aged.controls.compare, 'body-type');
+    assert.equal(aged.sel, 4);
 });
 
 test('a view a lab does not offer opens its individual view', () => {
@@ -242,7 +244,7 @@ test('the model source lists what models cannot do yet, and an address cannot sw
 });
 
 test('a person shows each choice apart, the behavior with its settings, and a height its parts', () => {
-    const who = new Subject(7, 0, { behavior: 'sudden-stopper', age: 'old', equipment: 'none' });
+    const who = new Subject(7, 0, { behavior: 'sudden-stopper', equipment: 'none' });
     const sec = personBehavior(who);
     assert.equal(sec.title, 'Behavior: Sudden Stopper');
     const [behavior] = sec.tables ?? [];
@@ -252,21 +254,23 @@ test('a person shows each choice apart, the behavior with its settings, and a he
     assert.match(String(behavior.rows.find(r => r[0] === 'stops')?.[1]), /every 4–8 s, for 1.5–3 s/);
     // Every choice on the card, and only behavior's settings in the behavior section.
     const choices = personChoices(who).rows?.map(r => r.k) ?? [];
-    for (const k of ['behavior', 'age', 'body type', 'skin tone', 'hair', 'equipment']) assert.ok(choices.includes(k), `no ${k} choice`);
+    for (const k of ['behavior', 'body type', 'skin tone', 'hair', 'equipment']) assert.ok(choices.includes(k), `no ${k} choice`);
+    assert.ok(!choices.includes('age'), 'age is a choice again: it comes only from the model');
     assert.ok(!keys.includes('color family') && !keys.includes('height'), 'appearance crept into the behavior');
     // The height adds up: skeleton × height roll × the figure's share, to the standing height it states.
     const h = primitiveHeight(who.recipe);
     const nums = [...h.matchAll(/(\d+\.\d+)/g)].map(x => Number(x[1]));
     assert.ok(Math.abs(nums[1] * nums[2] * nums[3] - nums[0]) < 0.02, h);
-    assert.match(h, /Old$/);
+    assert.match(h, /Adult$/);
 });
 
 test("the Individual view offers every choice, in order, each with the seed's own roll first", () => {
     const m = ENTITIES.find(e => e.id === 'model');
     assert.ok(m !== undefined);
-    const choices = ['model', 'age', 'body-type', 'skin', 'hair', 'scheme', 'behavior', 'equipment'];
+    const choices = ['model', 'body-type', 'skin', 'hair', 'scheme', 'behavior', 'equipment'];
     const ids = m.controls.map(c => c.id).filter(id => choices.includes(id));
     assert.deepEqual(ids, choices);
+    assert.ok(!m.controls.some(c => c.id === 'age'), 'there is an age control: age comes only from the model');
     for (const id of choices) {
         const ctl: Control | undefined = m.controls.find(x => x.id === id);
         assert.ok(ctl?.kind === 'enum', `${id} is not a choice`);
@@ -282,9 +286,10 @@ test("the Individual view offers every choice, in order, each with the seed's ow
     assert.equal(scheme.titles?.['park-staff'], 'Park Staff (uniform)');
     assert.equal(scheme.titles?.['denim-white'], 'Denim & White');
     // And a choice in the address reaches the person: Seed is the seed's roll, anything else forced.
+    // An old `age` loads and is ignored.
     const s = readState('single', '?seed=5&behavior=darter&age=old&scheme=park-staff', LABS.people);
     assert.equal(s.controls.behavior, 'darter');
-    assert.equal(s.controls.age, 'old');
+    assert.equal(s.controls.age, undefined);
     assert.equal(s.controls.scheme, 'park-staff');
     // The people lab is the one with path mode.
     assert.equal(LABS.people.pathMode, true);

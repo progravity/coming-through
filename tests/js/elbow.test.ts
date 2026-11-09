@@ -99,7 +99,7 @@ const CASES: readonly Case[] = [
     { label: 'pushing a stroller', o: { equipment: 'stroller' } },
     { label: 'in a wheelchair', o: { behavior: 'typical', equipment: 'wheelchair' } },
     { label: 'on a scooter', o: { behavior: 'typical', equipment: 'scooter' } },
-    { label: 'older on a scooter', o: { ...NONE, age: 'old', equipment: 'scooter' } },
+    { label: 'slim Body Type on a scooter', o: { ...NONE, bodyType: 'slim', equipment: 'scooter' } },
 ];
 
 test('no elbow bends backwards, in any pose', () => {
@@ -120,7 +120,7 @@ test('a handle out in front of the body is reached with a bent arm', () => {
     // Only the poses that reach *forward* for a bar are in scope. A wheelchair's rims are down
     // beside the seat, and an arm hanging onto one is genuinely almost straight -- there is no bend
     // to insist on, which is why that pose carries no minimum here.
-    for (const label of ['pushing a stroller', 'on a scooter', 'older on a scooter']) {
+    for (const label of ['pushing a stroller', 'on a scooter', 'slim Body Type on a scooter']) {
         const c = CASES.find(x => x.label === label);
         assert.ok(c, `no case named ${label}`);
         const { value } = worstFlexion(c.o);

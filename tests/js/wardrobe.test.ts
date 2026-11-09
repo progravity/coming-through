@@ -6,7 +6,7 @@
  * contrast, footwear differs from the bottoms or is a neutral, the accessory differs from the top,
  * headwear from the hair, and nothing is close to the skin. That is checked here against every
  * pooled scheme, every model's own color slots (and the clothing slot sets people will be dressed in later), every skin
- * tone and hair color, young and old, and many seeds. A uniform's promise is the opposite one: the
+ * tone and hair color across its range, and many seeds. A uniform's promise is the opposite one: the
  * same clothing on everyone, whatever their skin and hair.
  */
 import assert from 'node:assert/strict';
@@ -45,7 +45,7 @@ test('the models in the repo have the standard clothing slots, with no accessory
     for (const m of got) assert.deepEqual(m.slots, ['tops', 'bottoms', 'footwear'], m.file);
 });
 
-test('every pooled scheme meets the rules on every model, at every skin tone and hair, young or old', () => {
+test('every pooled scheme meets the rules on every model, at every skin tone and hair color', () => {
     const models = [...modelSlots(), ...FUTURE];
     let checked = 0, worst = 0;
     for (const key of POOLED_KEYS) {
@@ -53,8 +53,8 @@ test('every pooled scheme meets the rules on every model, at every skin tone and
             for (const variation of [0, 0.5, 0.999]) {
                 const skin = skinColor(skinTone, variation);
                 for (const hairTone of HAIR_KEYS) {
-                    for (const gray of [null, 0, 0.999]) {
-                        const hair = hairColor(hairTone, 0.5, gray);
+                    for (const shade of [0, 0.5, 0.999]) {
+                        const hair = hairColor(hairTone, shade);
                         for (const m of models) {
                             for (let k = 0; k < 6; k++) {
                                 const d = dress(key, (k + 0.37) / 6, skin, hair, m.slots, saltOf(m.file));
@@ -93,7 +93,7 @@ test('a pooled scheme arranges differently by model and by person', () => {
     let byModel = 0, byPerson = 0;
     for (const key of POOLED_KEYS) {
         for (let k = 0; k < 20; k++) {
-            const roll = (k + 0.5) / 20, skin = skinColor('medium', 0.5), hair = hairColor('brown', 0.5, null);
+            const roll = (k + 0.5) / 20, skin = skinColor('medium', 0.5), hair = hairColor('brown', 0.5);
             const onA = dress(key, roll, skin, hair, a.slots, saltOf(a.file)).colors;
             const onB = dress(key, roll, skin, hair, b.slots, saltOf(b.file)).colors;
             if (onA.tops !== onB.tops || onA.bottoms !== onB.bottoms) byModel++;
@@ -108,7 +108,7 @@ test('a pooled scheme arranges differently by model and by person', () => {
     for (const key of POOLED_KEYS) {
         const s = schemeNamed(key);
         assert.ok(s.kind === 'pooled');
-        const d = dress(key, 0.3, skinColor('light', 0.5), hairColor('black', 0.5, null), FUTURE[0].slots, 1);
+        const d = dress(key, 0.3, skinColor('light', 0.5), hairColor('black', 0.5), FUTURE[0].slots, 1);
         for (const r of CLOTHING_SLOTS) assert.ok(s.pool.includes(d.colors[r] ?? -1), `${key} put ${d.colors[r]} on ${r}`);
     }
 });
@@ -120,9 +120,9 @@ test('a uniform is the same clothing on everyone, whatever their skin and hair, 
         assert.equal(s.kind, 'uniform');
         assert.equal(s.name, 'Park Staff');
         for (const m of [...modelSlots(), ...FUTURE, { file: 'primitives', slots: [...CLOTHING_SLOTS] }]) {
-            const first = dress(key, 0, skinColor('lightest', 0), hairColor('blond', 0, null), m.slots, saltOf(m.file)).colors;
+            const first = dress(key, 0, skinColor('lightest', 0), hairColor('blond', 0), m.slots, saltOf(m.file)).colors;
             for (const skinTone of SKIN_TONE_KEYS) for (const hairTone of HAIR_KEYS) for (const roll of [0, 0.4, 0.99]) {
-                const d = dress(key, roll, skinColor(skinTone, roll), hairColor(hairTone, roll, roll > 0.5 ? roll : null), m.slots, saltOf(m.file) + 1);
+                const d = dress(key, roll, skinColor(skinTone, roll), hairColor(hairTone, roll), m.slots, saltOf(m.file) + 1);
                 assert.deepEqual(d.colors, first, `${key} changed for ${skinTone} skin and ${hairTone} hair on ${m.file}`);
                 assert.deepEqual(d.broken, [], 'a uniform is never checked against a person');
             }
@@ -175,19 +175,23 @@ test('skin tones are named by lightness alone, and every tone is on the ramp of 
     assert.equal(skinRamp(0), COLORS.skin.ramp[0]);
 });
 
-test('Old shifts every hair color toward gray, and leaves every other color alone', () => {
+test('gray is a hair color of its own, rolled for about one adult in thirteen, and nothing else grays anyone', () => {
+    // Age comes only from a model, so graying hair is rolled like any other hair color, never applied.
     const chroma = (c: number): number => {
         const r = (c >> 16) & 255, g = (c >> 8) & 255, b = c & 255;
         return Math.max(r, g, b) - Math.min(r, g, b);
     };
-    for (const k of HAIR_KEYS) for (const roll of [0, 0.5, 0.999]) {
-        const young = hairColor(k, 0.5, null), old = hairColor(k, 0.5, roll);
-        // Grayer: as near neutral as a gray gets, or well on the way there from a colorful start.
-        assert.ok(chroma(old) <= Math.max(18, chroma(young) * 0.6), `${k} hair is not grayed when old: #${old.toString(16)}`);
-        assert.ok(apart(old, young) > 60, `${k} hair barely changed with age`);
-    }
-    const a = makeRecipe(makeStreams(3).recipe.fork('agent:0'), { age: 'normal', behavior: 'typical' });
-    const b = makeRecipe(makeStreams(3).recipe.fork('agent:0'), { age: 'old', behavior: 'typical' });
-    assert.notEqual(a.hairColor, b.hairColor);
-    for (const k of ['skin', 'shirt', 'pants', 'shoe'] as const) assert.equal(a[k], b[k], `age moved ${k}`);
+    assert.ok(HAIR_KEYS.includes('gray'));
+    // Near neutral at every shade, from salt-and-pepper to silver, and visibly a range.
+    for (const roll of [0, 0.5, 0.999]) assert.ok(chroma(hairColor('gray', roll)) <= 18, `gray hair at ${roll} is not gray`);
+    assert.ok(apart(hairColor('gray', 0), hairColor('gray', 0.999)) > 60, 'salt-and-pepper and silver are one shade');
+    // Its darkest is clearly lighter than black hair's lightest, so it reads as gray and not as dark hair.
+    assert.ok(apart(hairColor('gray', 0), hairColor('black', 0.999)) > 60, 'the darkest gray reads as black');
+    // A hair color is its own range and nothing more: the same roll lands the same color every time.
+    for (const k of HAIR_KEYS) assert.equal(hairColor(k, 0.3), hairColor(k, 0.3));
+    let gray = 0;
+    const n = 4000;
+    for (let seed = 1; seed <= n; seed++) if (makeRecipe(makeStreams(seed).recipe.fork('agent:0')).hairTone === 'gray') gray++;
+    const want = COMPOSITION.hair.gray / Object.values(COMPOSITION.hair).reduce((a, b) => a + b, 0);
+    assert.ok(Math.abs(gray / n - want) < 0.015, `${gray} of ${n} are gray, against ${(want * 100).toFixed(1)}%`);
 });

@@ -90,11 +90,11 @@ test('the person cast puts the crowd\'s own people on the stage', () => {
 
 test('an axis override reaches the cast and nothing else does', () => {
     const cast = PERSON.mount(new THREE.Scene());
-    const c = { ...defaultControls(PERSON), behavior: 'sudden-stopper', age: 'old' };
+    const c = { ...defaultControls(PERSON), behavior: 'sudden-stopper', 'body-type': 'broad' };
     cast.rebuild(3, 1, c);
     cast.draw(0, [0], 0);
     const out = cast.readout(0, 1.2);
-    assert.equal(new Map(out.rows).get('age'), 'old');
+    assert.equal(new Map(out.rows).get('body type'), 'broad');
     assert.equal(out.title, 'Sudden Stopper');
 });
 
@@ -162,15 +162,16 @@ test('a hypothetical entity is inspectable without the shell changing', () => {
 
 test('every person URL that worked before still works', () => {
     // Written when a person was an archetype: `arch` now arrives as the behavior profile that
-    // replaced it, the old ages as the adjustments that replaced them, `mob` as equipment, and
-    // `build` (the per-person preset, before it was called the Body Type) as `body-type`.
+    // replaced it, `mob` as equipment, and `build` (the per-person preset, before it was called the
+    // Body Type) as `body-type`. An age loads and is ignored: age comes only from the model now.
     const person = ENTITIES[0];
     const url = '?inspect=1&seed=3&arch=dave&age=older&build=broad&mob=cane&walk=1' +
         '&paused=1&yaw=45&phase=0.5&gizmos=1&ink=0';
     const s = stateFor(person, 'single', url);
     assert.equal(s.seed, 3);
     assert.equal(s.controls.behavior, 'weaver');
-    assert.equal(s.controls.age, 'old');
+    assert.equal(s.controls.age, undefined);
+    assert.equal(stateFor(person, 'single', '?age=old').controls.age, undefined);
     assert.equal(s.controls['body-type'], 'broad');
     assert.equal(s.controls.build, undefined);
     // A key already in the new form wins over its old name.

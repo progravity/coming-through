@@ -38,7 +38,7 @@ import { INK } from '../inspectable.ts';
 import type { Cast, Controls, DrawnPart, InfoRow, InfoSection, Inspectable, OverlayDef, Readout } from '../inspectable.ts';
 import { MARK, arrow, ring } from '../markers.ts';
 import {
-    AGE_OPTIONS, BEHAVIOR_OPTIONS, BODY_TYPE_OPTIONS, EQUIPMENT_OPTIONS, HAIR_OPTIONS, SCHEME_OPTIONS, SKIN_OPTIONS, Subject,
+    BEHAVIOR_OPTIONS, BODY_TYPE_OPTIONS, EQUIPMENT_OPTIONS, HAIR_OPTIONS, SCHEME_OPTIONS, SKIN_OPTIONS, Subject,
 } from '../subject.ts';
 import type { Overrides } from '../subject.ts';
 
@@ -153,7 +153,7 @@ export function behaviorLine(B: Behavior): string {
 }
 
 /**
- * Every choice this person is made of -- model, age, Body Type, skin tone, hair, clothing scheme,
+ * Every choice this person is made of -- model, Body Type, skin tone, hair, clothing scheme,
  * behavior, equipment -- how it was chosen, how often the default crowd makes the same one, and what
  * it contributes to the figure on stage.
  */
@@ -165,10 +165,9 @@ export function personChoices(w: Who, o: ChoicesOptions = {}): InfoSection {
     const rows: InfoRow[] = [
         ...(o.model === undefined ? [] : [{ k: 'model', v: `${o.model.name} · ${o.model.by}${more('model')}` }]),
         { k: 'model class', v: r.modelClass === 'adult' ? 'adult' : `${r.modelClass}: a ${B.name} needs a ${r.modelClass} model` },
-        { k: 'age', v: `${title(r.age)} · ${by('age')} · ${shareOf(COMPOSITION.age, r.age)}${r.age === 'old' ? ' · grays the hair' : ''}${more('age')}` },
         { k: 'body type', v: `${title(r.bodyType)} · ${by('bodyType')} · ${shareOf(COMPOSITION.bodyType, r.bodyType)} · width ${n2(r.w)}${more('bodyType')}` },
         { k: 'skin tone', color: r.skin, v: `${tone.name} · ${by('skinTone')} · ${shareOf(COMPOSITION.skinTone, r.skinTone)} · ${n2(skinAt(r.skinTone, 0.5))} on the ramp, this one ${hexOf(r.skin)}${more('skinTone')}` },
-        { k: 'hair', color: r.hairColor, v: `${hair.name}${r.age === 'old' ? ', grayed with age' : ''} · ${by('hairTone')} · ${shareOf(COMPOSITION.hair, r.hairTone)}${more('hairTone')}` },
+        { k: 'hair', color: r.hairColor, v: `${hair.name} · ${by('hairTone')} · ${shareOf(COMPOSITION.hair, r.hairTone)}${more('hairTone')}` },
         { k: 'clothing scheme', v: `${schemeLine(r, by('scheme'))}${more('scheme')}` },
         { k: 'behavior', v: `${B.name} · ${by('behavior')} · ${shareOf(COMPOSITION.behavior, r.behavior)} of the crowd · ${behaviorLine(B)}${more('behavior')}` },
         { k: 'equipment', v: (r.equipment === 'none' ? `none · ${by('equipment')}`
@@ -248,7 +247,7 @@ export function personBehavior(w: Who): InfoSection {
 
 /**
  * A primitive person's height, and what it is made of: the skeleton with this head on it, the
- * height roll, and the figure's own share (a child's, or the age's).
+ * height roll, and the figure's own share (a child's, or an adult's, which is all of it).
  */
 export function primitiveHeight(r: Recipe): string {
     const unit = standingHeight(r) / r.h, fig = figureHeight(r), roll = r.h / fig;
@@ -268,7 +267,6 @@ export function personRecipe(w: Who, note = '', figure: 'primitives' | 'model' =
     const rows: InfoRow[] = [
         { k: 'seed', v: String(w.seed), mono: true },
         { k: 'fork', v: `recipe · agent:${w.index}`, mono: true },
-        { k: 'age', v: r.age },
         { k: 'scheme', v: `${schemeNamed(r.scheme).name} · arrangement roll ${n2(r.arrange, 3)}` },
         colorRow('skin', r.skin),
         colorRow('tops', r.shirt),
@@ -419,21 +417,19 @@ export class PersonMarks {
 const WAS: Readonly<Record<string, BehaviorKey>> = Object.fromEntries(
     BEHAVIOR_KEYS.map(k => [BEHAVIORS[k].was.toLowerCase().replace(/^the /, ''), k]),
 );
-/** The old ages, which were stages of life, as the ages that are now adjustments to a model. */
-const OLD_AGES: Readonly<Record<string, string>> = { child: 'young', teen: 'young', adult: 'normal', older: 'old' };
 
 /**
- * Read an address written before people were choices: `arch` (an archetype) as `behavior`, the old
- * ages as the new ones, `mob` (a mobility aid) as `equipment`, and `build` (the per-person preset,
- * before it was called the Body Type) as `body-type`. A key already in the new form wins over its
- * old name.
+ * Read an old address: `arch` (an archetype) as `behavior`, `mob` (a mobility aid) as `equipment`,
+ * and `build` (the per-person preset, before it was called the Body Type) as `body-type`. A key
+ * already in the new form wins over its old name. `age` is dropped, whatever it says: age presets
+ * are gone, and age comes only from a model's age class, so an old link opens the same person with
+ * the age it asked for ignored.
  */
 export function personLegacy(q: URLSearchParams): void {
     const arch = q.get('arch');
     if (arch !== null && q.get('behavior') === null) q.set('behavior', arch === 'seed' ? 'seed' : WAS[arch] ?? arch);
     q.delete('arch');
-    const age = q.get('age');
-    if (age !== null && OLD_AGES[age] !== undefined) q.set('age', OLD_AGES[age]);
+    q.delete('age');
     const mob = q.get('mob');
     if (mob !== null && q.get('equipment') === null) q.set('equipment', mob);
     q.delete('mob');
@@ -446,7 +442,6 @@ export function personLegacy(q: URLSearchParams): void {
 export function overridesOf(c: Controls): Partial<Overrides> {
     return {
         behavior: (c.behavior ?? 'seed') as Overrides['behavior'],
-        age: (c.age ?? 'seed') as Overrides['age'],
         bodyType: (c['body-type'] ?? 'seed') as Overrides['bodyType'],
         skinTone: (c.skin ?? 'seed') as Overrides['skinTone'],
         hairTone: (c.hair ?? 'seed') as Overrides['hairTone'],
@@ -591,7 +586,7 @@ class PersonCast implements Cast {
             title: s.profile.name,
             sub: `seed ${s.seed} · agent:${s.index}`,
             rows: [
-                ['age', `${r.age}${r.modelClass === 'child' ? ' · a child' : ''}`],
+                ['model class', r.modelClass],
                 ['body type', r.bodyType],
                 ['scheme', scheme],
                 ['height', primitiveHeight(r)],
@@ -600,7 +595,7 @@ class PersonCast implements Cast {
                 ['parts', on.join(', ')],
             ],
             swatches: sw.map(([k, c]) => [k + paletteIndex(c), c] as const),
-            line: `${scheme} · ${r.age}${aid} · ${top.toFixed(2)}m`,
+            line: `${scheme} · ${r.bodyType}${aid} · ${top.toFixed(2)}m`,
             sections: [
                 personIdentity(s),
                 personChoices(s, { forced: chosenBy(overridesOf(this.c)) }),
@@ -630,7 +625,6 @@ const words = (k: string): string => k.split('-').map(w => w.charAt(0).toUpperCa
 export const PERSON_CONTROLS = {
     behavior: { kind: 'enum', id: 'behavior', label: 'behavior', options: BEHAVIOR_OPTIONS, value: 'seed', key: 't', rebuilds: true,
         titles: titled(BEHAVIOR_OPTIONS, k => BEHAVIORS[k as BehaviorKey].name) },
-    age: { kind: 'enum', id: 'age', label: 'age', options: AGE_OPTIONS, value: 'seed', key: 'a', rebuilds: true, titles: titled(AGE_OPTIONS, words) },
     bodyType: { kind: 'enum', id: 'body-type', label: 'body type', options: BODY_TYPE_OPTIONS, value: 'seed', key: 'b', rebuilds: true, titles: titled(BODY_TYPE_OPTIONS, words) },
     skin: { kind: 'enum', id: 'skin', label: 'skin tone', options: SKIN_OPTIONS, value: 'seed', rebuilds: true,
         titles: titled(SKIN_OPTIONS, k => skinToneNamed(k as Parameters<typeof skinToneNamed>[0]).name) },
@@ -648,7 +642,7 @@ export const PERSON: Inspectable = {
     family: 'person',
     title: 'Person',
     controls: [
-        PERSON_CONTROLS.behavior, PERSON_CONTROLS.age, PERSON_CONTROLS.bodyType, PERSON_CONTROLS.skin, PERSON_CONTROLS.hair,
+        PERSON_CONTROLS.behavior, PERSON_CONTROLS.bodyType, PERSON_CONTROLS.skin, PERSON_CONTROLS.hair,
         PERSON_CONTROLS.scheme, PERSON_CONTROLS.equipment,
         { kind: 'toggle', id: 'walk', label: 'walk', value: false, key: 'w' },
         { kind: 'toggle', id: 'run', label: 'run', value: false, key: 'u' },

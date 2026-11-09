@@ -109,7 +109,7 @@ export async function startCrowd(lab: Lab): Promise<void> {
             const knobs: Knobs = { ink: false, throttle: false, far: 15, every: 3 };
             const body = bodyOf(model);
             models = new ModelCrowd(world.scene, got, knobs, regions.slots?.usable === true ? regions.paint : null, body);
-            modelNote = `${state.model} · ${count(models.trisPerModel)} triangles and ${models.bones} bones each · ${regions.summary} · a ${body.build} model, age and Body Type from each recipe`;
+            modelNote = `${state.model} · ${count(models.trisPerModel)} triangles and ${models.bones} bones each · ${regions.summary} · a ${body.build} ${body.ageClass} model, Body Type from each recipe`;
         } catch (e) {
             modelNote = `the model did not load, so the crowd is primitives: ${e instanceof Error ? e.message : String(e)}`;
         }

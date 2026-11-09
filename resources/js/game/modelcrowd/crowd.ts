@@ -65,7 +65,7 @@ interface Slot {
     readonly material: THREE.MeshToonMaterial;
     /** This clone's repaint, when the model's regions can be painted. */
     readonly regions: RegionUniforms | null;
-    /** Age and Body Type: the bones' bind matrices and joints, and the fullness on the body and its ink. */
+    /** The Body Type: the bones' bind matrices and joints, and the fullness on the body and its ink. */
     readonly shape: BodyRig;
     readonly full: FullnessUniforms;
     readonly inkFull: FullnessUniforms;
@@ -278,8 +278,7 @@ export class ModelCrowd {
             if (s.recipe !== a.recipe) this.dress(s, a.recipe);
             const g = s.group;
             g.visible = true;
-            // Lifted by however much longer legs pushed the feet down, at the clone's own scale.
-            g.position.set(view.x, PATH.surfaceY(view.x, view.z) + s.shape.lift * g.scale.y, view.z);
+            g.position.set(view.x, PATH.surfaceY(view.x, view.z), view.z);
             g.rotation.y = view.yaw;
             const dx = view.x - from.x, dz = view.z - from.z;
             if (k.throttle && !s.fresh && dx * dx + dz * dz > far2 && (frame + a.slot) % every !== 0) continue;
@@ -295,7 +294,7 @@ export class ModelCrowd {
             const action = run && s.run !== null ? s.run : s.walk;
             action.time = wrap01(view.phase / TAU) * action.getClip().duration;
             s.mixer.update(0);
-            // The body's joints and stoop, onto the pose the clip just wrote.
+            // The body's joints, onto the pose the clip just wrote.
             s.shape.pose();
             s.rig.updateMatrixWorld(true);
             s.dirty = true;
@@ -310,8 +309,8 @@ export class ModelCrowd {
     }
 
     /**
-     * Fit a clone to whoever now occupies its slot: colors, height, and the body their age and
-     * Body Type ask for (`modelcrowd/body.ts`). Once per occupant, never per frame.
+     * Fit a clone to whoever now occupies its slot: colors, height, and the body their
+     * Body Type asks for (`modelcrowd/body.ts`). Once per occupant, never per frame.
      */
     private dress(s: Slot, r: Recipe): void {
         s.recipe = r;
@@ -322,7 +321,7 @@ export class ModelCrowd {
         // Fullness is a fraction of height; the skinned vertices come out in the model's own units.
         s.full.bodyFull.value = s.inkFull.bodyFull.value = body.fullness * this.height;
         s.full.bodyFace.value = s.inkFull.bodyFace.value = body.face * this.height;
-        s.group.scale.setScalar(drawnHeight(standingHeight(r), r, body) / this.height);
+        s.group.scale.setScalar(drawnHeight(standingHeight(r), r) / this.height);
     }
 }
 

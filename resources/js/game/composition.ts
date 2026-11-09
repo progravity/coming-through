@@ -2,8 +2,8 @@
  * What the crowd is made of: the default weight of every choice a person is rolled from, in one
  * table.
  *
- * A person is a set of independent choices -- behavior, age, Body Type, skin tone, hair, clothing
- * scheme and equipment, plus the model they are drawn from -- and `makeRecipe` rolls each one from
+ * A person is a set of independent choices -- behavior, Body Type, skin tone, hair, clothing scheme
+ * and equipment, plus the model they are drawn from -- and `makeRecipe` rolls each one from
  * the person's own fork of the `recipe` stream, in a fixed order, selecting against these weights.
  * Retuning the crowd is editing numbers here. A weight is relative within its own choice; a zero
  * takes an option out of the crowd without taking it out of the game (the people lab can still ask
@@ -15,18 +15,22 @@
  * Walker, and a Group Walker's family can share the leader's clothing scheme.
  */
 import type { BehaviorKey } from './behaviors.ts';
-import type { Age, BodyType, Equipment } from './recipe.ts';
+import type { BodyType, Equipment } from './recipe.ts';
 import type { HairKey, PooledKey, SkinToneKey } from './wardrobe.ts';
 
 export const COMPOSITION = {
     /** Tourist 6, Dave 2, Mary 2, Kyle 2, Linda 2, the Johnsons 1, Timmy 2: the archetypes' weights. */
     behavior: { typical: 6, weaver: 2, 'slow-walker': 2, distracted: 2, 'sudden-stopper': 2, 'group-walker': 1, darter: 2 } as Readonly<Record<BehaviorKey, number>>,
-    /** Mostly the model's own age, a fifth either side. */
-    age: { young: 2, normal: 6, old: 2 } as Readonly<Record<Age, number>>,
     /** Even fifths, as the old continuous width roll was cut into the five presets. */
     bodyType: { slim: 1, trim: 1, average: 1, solid: 1, broad: 1 } as Readonly<Record<BodyType, number>>,
     skinTone: { lightest: 1, light: 1, 'medium-light': 1, medium: 1, 'medium-deep': 1, deep: 1, deepest: 1 } as Readonly<Record<SkinToneKey, number>>,
-    hair: { black: 3, 'dark-brown': 3, brown: 2.5, 'light-brown': 1.5, blond: 1.2, red: 0.5 } as Readonly<Record<HairKey, number>>,
+    /**
+     * Gray is about one person in thirteen (7.9%): the adults whose hair reads gray from the walkway,
+     * late forties on. Old used to gray a fifth of the crowd, but elders will be models of their own
+     * and bring their own gray; until they exist, and until hair can be weighted by age class, this
+     * is the adult crowd's share alone.
+     */
+    hair: { black: 3, 'dark-brown': 3, brown: 2.5, 'light-brown': 1.5, blond: 1.2, red: 0.5, gray: 1 } as Readonly<Record<HairKey, number>>,
     /**
      * The pooled clothing schemes. Uniforms are not here and are never rolled: they are assigned
      * deliberately (staff at vendors, later), so the crowd cannot come out in one by chance.

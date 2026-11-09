@@ -47,7 +47,7 @@ const cycle = (options: readonly string[], current: string, step: number): strin
  * What a control means in another entity: the same id, the same kind, and a value it accepts.
  *
  * The source toggle and the picker carry these across, so switching a person to their model keeps
- * the archetype, the age and the seed -- the two are one thing drawn two ways, and losing the
+ * the behavior, the Body Type and the seed -- the two are one thing drawn two ways, and losing the
  * person on the way over would make the comparison the toggle exists for impossible.
  */
 function carried(from: Controls, to: Inspectable): Controls {

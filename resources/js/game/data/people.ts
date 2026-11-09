@@ -80,8 +80,8 @@ const NOT_COLORED_YET: Readonly<Partial<Record<ColorSlot, string>>> = {
 /** The names the first region files (`.regions.json`) gave their color slots, and what each became. */
 const RENAMED_SLOTS: Readonly<Record<string, ColorSlot>> = { top: 'tops', trousers: 'bottoms', shoes: 'footwear' };
 
-/** The body values a model may set its own limits for (`LIMITS` in `modelcrowd/body.ts`). */
-export const BODY_LIMIT_KEYS = ['height', 'width', 'shoulders', 'limbs', 'fullness', 'face', 'neck', 'head', 'legs', 'stoop'] as const;
+/** The Body Type values a model may set its own limits for (`LIMITS` in `modelcrowd/body.ts`): the spec's Body Type limits. */
+export const BODY_LIMIT_KEYS = ['width', 'shoulders', 'limbs', 'fullness', 'face', 'neck'] as const;
 export type BodyLimitKey = (typeof BODY_LIMIT_KEYS)[number];
 
 /** What a provenance field holds when nobody knows it yet. The lab shows it as missing. */

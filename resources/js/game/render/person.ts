@@ -55,7 +55,7 @@ const CHEST_BOT = 0.2435;
  * collar sits anyway. Negative is the normal working range, not an abuse of it. The hard limit is
  * -0.09, where the neck cylinder's two burials meet and it inverts.
  *
- * It scales with `limb`, the age axis, for the reason a child's arms are short: a child is not an
+ * It scales with `limb`, the child figure's shorter limbs, for the reason a child's arms are short: a child is not an
  * adult scaled down, and a long neck is one of the first things that gives a small adult away.
  */
 const NECK = -0.015;

@@ -6,14 +6,13 @@
  * bench for an asset the game does not use yet, so there is no assembler for it to go through. The
  * rule it keeps instead is the next best one: **the game's half of the stage is still the game's.**
  * It is drawn *as a person* -- the controls choose a person exactly as the crowd rolls one -- painted
- * in that person's recipe, and shaped by their age and Body Type through the same `modelcrowd/body.ts`
+ * in that person's recipe, and shaped by their Body Type through the same `modelcrowd/body.ts`
  * the game's crowd is shaped by. The primitive people are not shown here at all: they are the
  * game's fallback, and the people lab is for the way people are drawn.
  *
  * What the row compares is a control of its own (`compare`):
  *
  * - `body-type` (the default) -- the five Body Types on the same model and recipe, each exactly as the table has it.
- * - `age` -- Young, Normal and Old, the recipe's Body Type held.
  * - `models` -- every chosen model at the same recipe, presets, pose and camera, with what each one
  *   costs: triangles, bones, file size, textures, texture memory and load time.
  *
@@ -32,9 +31,7 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { SIM_DT } from '../../core/time.ts';
-import { figureHeight } from '../../recipe.ts';
 import { hairNamed, schemeNamed, skinToneNamed } from '../../wardrobe.ts';
-import type { Age } from '../../recipe.ts';
 import type { Look } from '../../render/look.ts';
 import { makeToonGradient } from '../../render/materials.ts';
 import { DATA_DIR, DATA_FILES, PERSON_MODELS, UNKNOWN } from '../../data/people.ts';
@@ -42,7 +39,7 @@ import type { DataFile } from '../../data/people.ts';
 import { CROWD_MODEL, fetchModel } from '../../render/model-file.ts';
 import { standingHeight } from '../../render/person.ts';
 import {
-    AGES, AGE_PRESETS, BODY_KEYS, BODY_TYPES, BODY_TYPE_PRESETS, BodyRig, CHILD_NOTE, LIMITS, NOT_ON_MODELS, bakeMask,
+    BODY_KEYS, BODY_TYPES, BODY_TYPE_PRESETS, BodyRig, CHILD_NOTE, LIMITS, NOT_ON_MODELS, bakeMask,
     NO_MODEL_BODY, bodyOf, drawnHeight, modelFallback, patchFullness, shape, skinSpace,
 } from '../../modelcrowd/body.ts';
 import type { Body, FullnessUniforms, Limits, ModelBody, Shaped } from '../../modelcrowd/body.ts';
@@ -63,7 +60,7 @@ import {
 export const POSE = 'pose';
 
 /** What the row compares. See the file comment. */
-export const COMPARE = ['body-type', 'age', 'models'] as const;
+export const COMPARE = ['body-type', 'models'] as const;
 export type Compare = (typeof COMPARE)[number];
 
 /** What stands on the stage when a file did not arrive: a person-sized box, so the frame still fits. */
@@ -345,7 +342,7 @@ const _q = new THREE.Quaternion();
 const _local = new THREE.Matrix4();
 
 /** What one figure is asked to be: which model, and the body it wears. */
-interface Spec { name: string; age: Age; pos: number; exact: 'body-type' | 'age' | null; label: string }
+interface Spec { name: string; pos: number; exact: 'body-type' | null; label: string }
 
 /**
  * One model standing on the stage: the file's own root the first time a model is asked for in a
@@ -361,10 +358,8 @@ class Figure {
     readonly action: THREE.AnimationAction | null;
     readonly rig: BodyRig | null;
     readonly shaped: Shaped;
-    /** Uniform scale on the root: the age height, or the crowd's own fitting with `fit` on. */
+    /** Uniform scale on the root: the recipe's own height against the model's under `fit` (crowd scale), and 1 without. */
     readonly scale: number;
-    /** The recipe's own height against the model's, applied under `fit` (crowd scale) and 1 without. */
-    readonly recipeHeight: number;
     /** The torso's half width as drawn, girth and fullness both, in meters; undefined when not measurable. */
     readonly torso: number | undefined;
     readonly marks: PersonMarks;
@@ -381,10 +376,10 @@ class Figure {
         this.model = model;
         scene.add(this.anchor, this.dots);
         const limits: Limits = model?.body.limits ?? LIMITS;
-        this.shaped = shape(spec.age, spec.pos, limits);
+        this.shaped = shape(spec.pos, limits);
         const body = this.shaped.body;
         if (model === null) {
-            this.root = null; this.mixer = null; this.action = null; this.rig = null; this.scale = 1; this.recipeHeight = 1; this.torso = undefined;
+            this.root = null; this.mixer = null; this.action = null; this.rig = null; this.scale = 1; this.torso = undefined;
             this.missing = new THREE.LineSegments(
                 new THREE.EdgesGeometry(new THREE.BoxGeometry(MISSING.x, MISSING.y, MISSING.z)),
                 new THREE.LineBasicMaterial({ color: 0x8a8790 }),
@@ -405,11 +400,7 @@ class Figure {
         this.rig = new BodyRig(root, skinned, model.pristine);
         this.rig.apply(body);
         this.rig.pose();
-        this.recipeHeight = c.fit === true && model.restHeight > 0
-            ? standingHeight(who.recipe) / figureHeight(who.recipe) / model.restHeight : 1;
-        this.scale = c.fit === true && model.restHeight > 0
-            ? drawnHeight(standingHeight(who.recipe), who.recipe, body) / model.restHeight
-            : body.height;
+        this.scale = c.fit === true && model.restHeight > 0 ? drawnHeight(standingHeight(who.recipe), who.recipe) / model.restHeight : 1;
         const mixer = new THREE.AnimationMixer(root);
         const clip = model.clips.find(k => k.name === c.clip);
         this.action = clip === undefined ? null : mixer.clipAction(clip).play();
@@ -519,7 +510,6 @@ const chosen = (c: Controls): string[] => names.filter(n => c[comparing(n)] !== 
 /** How many stand in the row, by what it compares. */
 function rowFor(c: Controls): number {
     const mode = (c.compare ?? 'body-type') as Compare;
-    if (mode === 'age') return AGES.length;
     if (mode === 'models') return Math.max(1, chosen(c).length);
     return BODY_TYPES.length;
 }
@@ -560,10 +550,9 @@ class ModelCast implements Cast {
         // The Body Type exactly, as the crowd shapes it: the choice is the preset.
         const pos = BODY_TYPES.indexOf(r.bodyType);
         const specs: Spec[] =
-            mode === 'body-type' ? BODY_TYPES.map((b, i) => ({ name, age: r.age, pos: i, exact: 'body-type' as const, label: title(b) }))
-            : mode === 'age' ? AGES.map(a => ({ name, age: a, pos, exact: 'age' as const, label: title(a) }))
-            : mode === 'models' ? chosen(c).map(n => ({ name: n, age: r.age, pos, exact: null, label: n }))
-            : [{ name, age: r.age, pos, exact: null, label: name }];
+            mode === 'body-type' ? BODY_TYPES.map((b, i) => ({ name, pos: i, exact: 'body-type' as const, label: title(b) }))
+            : mode === 'models' ? chosen(c).map(n => ({ name: n, pos, exact: null, label: n }))
+            : [{ name, pos, exact: null, label: name }];
         const used = new Set<string>();
         for (const spec of specs) {
             const model = models.get(spec.name) ?? null;
@@ -597,7 +586,7 @@ class ModelCast implements Cast {
                 paint.showFalse(u, c.regions === true);
             }
             const x = xs[i] ?? 0;
-            f.anchor.position.set(x, (f.rig?.lift ?? 0) * f.scale, 0);
+            f.anchor.position.set(x, 0, 0);
             f.anchor.rotation.set(0, yaw, 0);
             f.anchor.scale.setScalar(f.scale);
             f.anchor.updateMatrixWorld(true);
@@ -649,8 +638,8 @@ class ModelCast implements Cast {
             : `${asked} is not in this file · rest pose`;
         const body = f.shaped.body;
         const fitted = this.c.fit === true
-            ? `crowd scale ×${n2(f.scale, 3)}: the recipe's height, at the ${f.shaped.shown} height`
-            : `as authored × the ${f.shaped.shown} height ${n2(body.height)} · ${n2(m.restHeight)} m at rest`;
+            ? `crowd scale ×${n2(f.scale, 3)}: the recipe's height`
+            : `as authored · ${n2(m.restHeight)} m at rest`;
         const model: InfoSection = {
             id: 'model',
             rows: [
@@ -664,20 +653,19 @@ class ModelCast implements Cast {
         };
         const child = who.recipe.modelClass !== (m.body.ageClass);
         const childNote = child ? ' · needs a child model' : '';
-        // The height, and what it is made of: the model as authored, the age, and the recipe's own.
-        const height = `${n2(m.restHeight * body.height * f.recipeHeight)} m = ${n2(m.restHeight)} base × ${n2(body.height)} ${title(f.shaped.shown)}`
-            + ` × ${n2(f.recipeHeight)} recipe height${this.c.fit === true ? '' : ' (crowd scale off)'}`;
+        // The height, and what it is made of: the model as authored, and the recipe's own. Age is the
+        // model's, by its age class: nothing adjusts it.
+        const height = `${n2(m.restHeight * f.scale)} m = ${n2(m.restHeight)} base × ${n2(f.scale)} recipe height${this.c.fit === true ? '' : ' (crowd scale off)'}`;
         const fallback = modelFallback(who.recipe, m.body.ageClass);
         const r = who.recipe;
         // The person's scheme arranged on this model's own clothing slots, as the crowd paints it.
         const paint = m.regions?.paint ?? null;
         const slots = paint?.clothing ?? [];
         const dressed = dressOn(r, slots, paint?.salt ?? 0);
-        const a = AGE_PRESETS[r.age], b = BODY_TYPE_PRESETS[r.bodyType];
+        const b = BODY_TYPE_PRESETS[r.bodyType];
         const pace = who.speed;
         const contributes = {
             model: `age class ${m.body.ageClass} · ${m.body.build} build · ${count(m.triangles)} triangles`,
-            age: `height ×${n2(a.height)}, width ×${n2(a.width)}, shoulders ×${n2(a.shoulders)}, head ×${n2(a.head)}, legs ×${n2(a.legs)}, stoop ${n2(a.stoop * 180 / Math.PI, 0)}°`,
             bodyType: `width ×${n2(b.width)}, shoulders ×${n2(b.shoulders)}, limbs ×${n2(b.limbs)}, fullness ${n2(b.fullness * 100, 1)}%, face ${n2(b.face * 100, 2)}%, neck ×${n2(b.neck)}`,
             scheme: slots.length === 0 ? 'this model has no clothing slots to paint'
                 : slots.map(slot => `${slot} #${(dressed.colors[slot] ?? 0).toString(16).padStart(6, '0')}`).join(', '),
@@ -688,9 +676,9 @@ class ModelCast implements Cast {
             title: f.spec.exact === null ? name : `${f.spec.label}`,
             sub: `${name} · as ${who.profile.name} · seed ${who.seed} · agent:${who.index}`,
             rows: [
-                ['person', [who.profile.name, title(r.age), title(r.bodyType), skinToneNamed(r.skinTone).name, `${hairNamed(r.hairTone).name} hair`, schemeNamed(r.scheme).name].join(' · ')],
+                ['person', [who.profile.name, title(r.bodyType), skinToneNamed(r.skinTone).name, `${hairNamed(r.hairTone).name} hair`, schemeNamed(r.scheme).name].join(' · ')],
                 ['height', height],
-                ['body', `${title(f.shaped.shown)}${child ? ' (a child, on an adult model)' : ''} · ${bodyTypeLabel(f.spec)}`],
+                ['body', `${m.body.ageClass} model${child ? ` (a ${r.modelClass}, on an ${m.body.ageClass} model)` : ''} · ${bodyTypeLabel(f.spec)}`],
                 ...(fallback === null ? [] : [['in the game', `${fallback}${r.equipment !== 'none' ? '; its collider is sized for the equipment' : ''}`] as const]),
                 ['clip', playing],
                 ['mesh', `${count(m.triangles)} triangles · ${m.bones} bones`],
@@ -701,7 +689,7 @@ class ModelCast implements Cast {
                 const c = dressed.colors[slot];
                 return c === undefined ? [] : [[slot, c] as const];
             })],
-            line: `${f.spec.label} · ${n2(m.restHeight * body.height * f.recipeHeight)} m · w ${n2(body.width)} · full ${n2(body.fullness * 100, 1)}%${f.shaped.held.length > 0 ? ' · held' : ''}${childNote}`,
+            line: `${f.spec.label} · ${n2(m.restHeight * f.scale)} m · w ${n2(body.width)} · full ${n2(body.fullness * 100, 1)}%${f.shaped.held.length > 0 ? ' · held' : ''}${childNote}`,
             sections: [
                 personIdentity(who),
                 personChoices(who, { forced: chosenBy(overridesOf(this.pc)), model: this.chosenModel, contributes }),
@@ -752,7 +740,6 @@ function bodyTypeLabel(spec: Spec): string {
 
 const fmt = (k: keyof Body, v: number, height: number): string =>
     k === 'fullness' || k === 'face' ? `${n2(v * 100, k === 'face' ? 2 : 1)}% · ${n2(v * height * 1000, 0)} mm`
-    : k === 'stoop' ? `${n2(v * 180 / Math.PI, 1)}°`
     : `×${n2(v)}`;
 
 /** The body this figure wears: what the presets asked for, what the limits allowed, and where it came from. */
@@ -773,7 +760,7 @@ function bodySection(f: Figure, who: Subject, top: number): InfoSection {
     });
     const out: InfoRow[] = [
         { k: 'model build', v: `${m.body.build} · ${m.body.path === '' ? 'no data file' : m.body.path}` },
-        { k: 'age', v: `${title(f.shaped.shown)}${f.spec.exact === 'age' ? ', exactly' : ` (the recipe is ${who.recipe.age})`}` },
+        { k: 'age class', v: `${m.body.ageClass}, the model's own: age comes only from the model` },
         { k: 'body type', v: `${bodyTypeLabel(f.spec)}${f.spec.exact === null ? ` · recipe width ${n2(who.recipe.w, 3)}` : ''}` },
         { k: 'limits', v: m.body.overridden.length === 0 ? 'the global limits' : `the global limits, with ${m.body.overridden.join(', ')} from this model's data file` },
     ];
@@ -925,7 +912,7 @@ function modelProvenance(name: string, m: Model | null): InfoSection {
     const d = PERSON_MODELS[name];
     const rows: InfoRow[] = [
         { k: 'size', v: m === null || m.bytes === 0 ? 'not loaded' : `${n2(m.bytes / 1e6, 1)} MB` },
-        { k: 'body table', v: 'resources/js/game/modelcrowd/body.ts · BODY_TYPE_PRESETS, AGE_PRESETS, LIMITS', mono: true },
+        { k: 'body table', v: 'resources/js/game/modelcrowd/body.ts · BODY_TYPE_PRESETS, LIMITS', mono: true },
         ...(d === undefined ? [{ k: 'source', v: 'no data file' }] : [
             recorded('Meshy plan', d.source.plan),
             recorded('generator version', d.source.generatorVersion),
@@ -949,12 +936,15 @@ const MODEL_OVERLAYS: readonly OverlayDef[] = [
 ];
 
 /**
- * Read an old address: the person's old keys (`personLegacy`), and `compare=build`, the Body Type
- * row from before the per-person preset was called the Body Type.
+ * Read an old address: the person's old keys (`personLegacy`), `compare=build`, the Body Type row
+ * from before the per-person preset was called the Body Type, and `compare=age`, the Age row from
+ * before the age presets were removed, which now opens the default row.
  */
 function modelLegacy(q: URLSearchParams): void {
     personLegacy(q);
-    if (q.get('compare') === 'build') q.set('compare', 'body-type');
+    const compare = q.get('compare');
+    if (compare === 'build') q.set('compare', 'body-type');
+    else if (compare === 'age') q.delete('compare');
 }
 
 /** The person's equipment control, without the key `M` already chooses the model by. */
@@ -968,10 +958,10 @@ export const MODEL: Inspectable = {
     // The panel prints this over the seed box. The seed chooses the person the model is drawn as.
     title: 'Person',
     controls: [
-        // Every choice a person is made of, in the order a person is described: model, age, Body Type,
+        // Every choice a person is made of, in the order a person is described: model, Body Type,
         // skin tone, hair, clothing scheme, behavior, equipment -- each with Seed for what the seed rolls.
         modelControl,
-        PERSON_CONTROLS.age, PERSON_CONTROLS.bodyType, PERSON_CONTROLS.skin, PERSON_CONTROLS.hair, PERSON_CONTROLS.scheme,
+        PERSON_CONTROLS.bodyType, PERSON_CONTROLS.skin, PERSON_CONTROLS.hair, PERSON_CONTROLS.scheme,
         PERSON_CONTROLS.behavior,
         // Listed and greyed rather than hidden: the panel is also the list of what models still lack.
         { ...equipment, disabled: `strollers, wheelchairs, scooters and canes: ${NOT_ON_MODELS}; the game draws their users as primitives` },

@@ -11,7 +11,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BEHAVIOR_KEYS } from '../../resources/js/game/behaviors.ts';
 import { makeStreams } from '../../resources/js/game/core/rng.ts';
-import { AGES, EQUIPMENT, behaviorAhead } from '../../resources/js/game/recipe.ts';
+import { BODY_TYPES, EQUIPMENT, behaviorAhead } from '../../resources/js/game/recipe.ts';
 import { Agent } from '../../resources/js/game/sim/agent.ts';
 import { Subject } from '../../resources/js/game/inspect/subject.ts';
 
@@ -73,34 +73,31 @@ test('a group member on the turntable wears the scheme the spawner handed the gr
 });
 
 test('a choice moves only itself: the rest of the person keeps their rolls', () => {
-    // Typical, since a Darter's figure is a child's whatever their age says.
-    const base = new Subject(3, 0, { age: 'normal', behavior: 'typical' });
-    const old = new Subject(3, 0, { age: 'old', behavior: 'typical' });
-    // hairColor is left out on purpose: Old shifts hair toward gray, the one color age changes.
-    for (const k of ['skin', 'shirt', 'pants', 'shoe', 'hatColor', 'bagColor', 'accColor', 'skinTone', 'hairTone', 'bodyType'] as const) {
-        assert.equal(old.recipe[k], base.recipe[k], `the age override changed ${k}`);
+    // A Body Type moves the body's proportions and nothing else the person rolled.
+    const base = new Subject(3, 0, { bodyType: 'average', behavior: 'typical' });
+    const broad = new Subject(3, 0, { bodyType: 'broad', behavior: 'typical' });
+    for (const k of ['skin', 'hairColor', 'shirt', 'pants', 'shoe', 'hatColor', 'bagColor', 'accColor', 'skinTone', 'hairTone', 'hat', 'stoop'] as const) {
+        assert.equal(broad.recipe[k], base.recipe[k], `the Body Type override changed ${k}`);
     }
-    assert.notEqual(old.recipe.hairColor, base.recipe.hairColor, 'Old did not gray the hair');
-    assert.equal(old.recipe.hat, base.recipe.hat, 'the age override changed which hat is worn');
-    assert.ok(old.recipe.stoop > base.recipe.stoop, 'Old should stoop');
-    // Age no longer changes how anyone moves: that is the behavior's.
-    assert.equal(old.speed, base.speed, 'the age override changed the speed');
-    assert.deepEqual(old.recipe.gait, base.recipe.gait, 'the age override changed the gait');
+    assert.ok(broad.recipe.w > base.recipe.w, 'Broad is no wider');
+    // Nor how anyone moves: that is the behavior's.
+    assert.equal(broad.speed, base.speed, 'the Body Type override changed the speed');
+    assert.deepEqual(broad.recipe.gait, base.recipe.gait, 'the Body Type override changed the gait');
 
     const weaver = new Subject(3, 0, { behavior: 'weaver' });
     const typical = new Subject(3, 0, { behavior: 'typical' });
-    for (const k of ['skin', 'hairColor', 'shirt', 'pants', 'age', 'bodyType', 'skinTone'] as const) {
+    for (const k of ['skin', 'hairColor', 'shirt', 'pants', 'bodyType', 'skinTone'] as const) {
         assert.equal(weaver.recipe[k], typical.recipe[k], `the behavior override changed ${k}`);
     }
     assert.ok(weaver.speed > typical.speed);
 });
 
-test('every equipment override lands, at every age, and a stroller brings a Slow Walker', () => {
+test('every equipment override lands, on every Body Type, and a stroller brings a Slow Walker', () => {
     for (const equipment of EQUIPMENT) {
-        for (const age of AGES) {
-            const s = new Subject(3, 0, { age, equipment, behavior: 'typical' });
-            assert.equal(s.recipe.age, age);
-            assert.equal(s.recipe.equipment, equipment, `${equipment} did not take at age ${age}`);
+        for (const bodyType of BODY_TYPES) {
+            const s = new Subject(3, 0, { bodyType, equipment, behavior: 'typical' });
+            assert.equal(s.recipe.bodyType, bodyType);
+            assert.equal(s.recipe.equipment, equipment, `${equipment} did not take on ${bodyType}`);
             assert.equal(s.recipe.seated, equipment === 'wheelchair' || equipment === 'scooter');
             assert.equal(s.recipe.acc === 'stroller', equipment === 'stroller');
             // The pairing that stays tied on purpose: nobody but a Slow Walker pushes a stroller.

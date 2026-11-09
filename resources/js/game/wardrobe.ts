@@ -66,7 +66,7 @@ export interface UniformScheme {
 export type Scheme = PooledScheme | UniformScheme;
 
 export type SkinToneKey = 'lightest' | 'light' | 'medium-light' | 'medium' | 'medium-deep' | 'deep' | 'deepest';
-export type HairKey = 'black' | 'dark-brown' | 'brown' | 'light-brown' | 'blond' | 'red';
+export type HairKey = 'black' | 'dark-brown' | 'brown' | 'light-brown' | 'blond' | 'red' | 'gray';
 
 export interface SkinTone {
     readonly key: SkinToneKey;
@@ -110,13 +110,11 @@ export const COLORS = {
             { key: 'light-brown', name: 'Light brown', dark: 0x7a5434, light: 0x96693f },
             { key: 'blond', name: 'Blond', dark: 0xc19656, light: 0xe2c286 },
             { key: 'red', name: 'Red', dark: 0x8e3b1c, light: 0xb4562c },
+            // Graying hair on an adult, from salt-and-pepper to silver, a little warm like the rest.
+            // Age is a model's (its age class), so nothing else grays anyone: an elder model's own
+            // hair will be where white hair comes from.
+            { key: 'gray', name: 'Gray', dark: 0x6a6661, light: 0xbcb7b0 },
         ] as readonly HairColor[],
-        /**
-         * Where Old takes any hair color: toward gray, by between `shift[0]` and `shift[1]` of the
-         * way, and to a gray between `dark` and `light`. One roll decides both, so the most grayed
-         * is also the whitest. Hair is the only color age changes.
-         */
-        gray: { dark: 0x8a8682, light: 0xd8d4ce, shift: [0.55, 0.9] as const },
     },
     schemes: [
         { key: 'bright-tropical', name: 'Bright Tropical', kind: 'pooled',
@@ -194,16 +192,10 @@ export function skinAt(k: SkinToneKey, roll: number): number {
 /** A person's skin color: their tone's place on the ramp, moved by their variation roll. */
 export const skinColor = (k: SkinToneKey, roll: number): number => skinRamp(skinAt(k, roll));
 
-/**
- * A person's hair color: their hair color's own range at `roll`, and, for someone Old, shifted
- * toward gray by `gray` (a roll in [0, 1)). `gray` null leaves it as it grew.
- */
-export function hairColor(k: HairKey, roll: number, gray: number | null): number {
+/** A person's hair color: their hair color's own range at `roll`. */
+export function hairColor(k: HairKey, roll: number): number {
     const h = hairNamed(k);
-    const own = mix(h.dark, h.light, roll);
-    if (gray === null) return own;
-    const g = COLORS.hair.gray;
-    return mix(own, mix(g.dark, g.light, gray), g.shift[0] + (g.shift[1] - g.shift[0]) * gray);
+    return mix(h.dark, h.light, roll);
 }
 
 export const SCHEME_KEYS: readonly SchemeKey[] = COLORS.schemes.map(s => s.key);

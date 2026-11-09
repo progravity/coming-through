@@ -5,17 +5,18 @@ import type { Range } from './util.ts';
 
 // ---------- behavior profiles: how a person moves, and nothing about how they look ----------
 //
-// A person is a set of independent choices -- model, age, Body Type, colors, behavior, equipment --
+// A person is a set of independent choices -- model, Body Type, colors, behavior, equipment --
 // rolled one after another by `makeRecipe` (see `recipe.ts`), with the default weights of each in
 // `composition.ts`. This file is one of those choices: a **behavior profile** is speed, steering,
 // stops and grouping, read by the simulation. It says nothing about appearance, which is the
-// taxonomy's independent-axes rule applied to people: a Weaver can be any age, any Body Type and any
+// taxonomy's independent-axes rule applied to people: a Weaver can be on any model, any Body Type and any
 // colors, exactly as a shop assistant is the same person stationed or walking.
 //
 // The seven profiles replace the old archetypes one for one (`was` names each), carrying only the
 // half of each archetype that was behavior. What an archetype bundled with it has gone to its own
 // choice: Mary's stroller is equipment (`recipe.ts`), Linda's camera and Kyle's phone are gone,
-// and every look constraint -- color family, age mix, height, width, hats -- is the composition's.
+// and every look constraint -- color family, height, width, hats -- is the composition's, and age
+// the model's.
 //
 // Each profile also declares what kind of thing it is -- see entity.ts. For a person the taxonomy's
 // type is the behavior profile: it is what the simulation asks about.

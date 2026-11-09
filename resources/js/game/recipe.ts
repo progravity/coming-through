@@ -1,11 +1,12 @@
 /**
  * Who one person is, rolled from that person's own fork of the `recipe` stream.
  *
- * A person is a set of **independent choices**: the behavior profile they move by, their age and
- * Body Type, their skin tone, hair and clothing, the equipment they use, and the class of model they
+ * A person is a set of **independent choices**: the behavior profile they move by, their Body
+ * Type, their skin tone, hair and clothing, the equipment they use, and the class of model they
  * have to be drawn from. Each is rolled against its default weight in `composition.ts`, one after
  * another, and none of them is decided by another -- except the two pairings that are tied on
- * purpose: a stroller only ever comes with a Slow Walker, and a Darter needs a child model.
+ * purpose: a stroller only ever comes with a Slow Walker, and a Darter needs a child model. Age is
+ * not a choice: it comes only from a model, by its age class (`data/people.ts`).
  *
  * Three rules hold this file together, all from CLAUDE.md's determinism rules:
  *
@@ -34,10 +35,6 @@ import { FRAME, fromFamily, fromList } from './palette.ts';
 import type { Range } from './util.ts';
 import { HAIR_KEYS, POOLED_KEYS, PRIMITIVE_SALT, SKIN_TONE_KEYS, dress, hairColor, skinColor } from './wardrobe.ts';
 import type { ClothingSlot, HairKey, SchemeKey, SkinToneKey } from './wardrobe.ts';
-
-/** Small adjustments relative to the model: a little younger, the model's own age, or older. */
-export type Age = 'young' | 'normal' | 'old';
-export const AGES: readonly Age[] = ['young', 'normal', 'old'];
 
 /**
  * The five Body Types, slim to broad: the preset rolled per person. Not a model's build, which is
@@ -70,7 +67,6 @@ export type BeardType = 'none' | 'stubble' | 'full';
 /** The choices a person is made of. Every one has a default weight in `composition.ts`. */
 export interface Choices {
     behavior: BehaviorKey;
-    age: Age;
     bodyType: BodyType;
     skinTone: SkinToneKey;
     hairTone: HairKey;
@@ -115,7 +111,7 @@ export interface Recipe extends Choices {
     headR: number;
     /** Half the shoulder width in unit-height space; also where the arms hang from. */
     shoulder: number;
-    /** Forward stoop of the torso in radians: Old's gentle stoop, and a cane's. */
+    /** Forward stoop of the torso in radians: a cane user's. */
     stoop: number;
     /**
      * Limb-length multiplier. A child is not a scaled-down adult: their legs and arms are
@@ -168,9 +164,9 @@ export interface Recipe extends Choices {
 
 /**
  * The proportions a primitive figure is drawn with: a child's for anyone who needs a child model,
- * and otherwise their age's. Nothing here changes speed or gait -- that is the behavior's.
+ * and an adult's for everyone else. Nothing here changes speed or gait -- that is the behavior's.
  */
-type FigureKey = 'child' | Age;
+type FigureKey = 'child' | 'adult';
 interface FigureProfile {
     /** Multiplies the height roll. */
     height: number;
@@ -182,21 +178,19 @@ interface FigureProfile {
     stoop: number;
 }
 const FIGURE: Record<FigureKey, FigureProfile> = {
-    child:  { height: 0.62, head: 1.24, shoulder: 0.88, limb: 0.85, stoop: 0 },
-    young:  { height: 0.96, head: 1.04, shoulder: 0.96, limb: 0.98, stoop: 0 },
-    normal: { height: 1,    head: 1,    shoulder: 1,    limb: 1,    stoop: 0 },
-    old:    { height: 0.97, head: 1,    shoulder: 0.97, limb: 0.98, stoop: 0.12 },
+    child: { height: 0.62, head: 1.24, shoulder: 0.88, limb: 0.85, stoop: 0 },
+    adult: { height: 1,    head: 1,    shoulder: 1,    limb: 1,    stoop: 0 },
 };
-const figureOf = (r: Pick<Recipe, 'modelClass' | 'age'>): FigureKey => (r.modelClass === 'child' ? 'child' : r.age);
+const figureOf = (r: Pick<Recipe, 'modelClass'>): FigureKey => (r.modelClass === 'child' ? 'child' : 'adult');
 
 /**
- * How much of a person's height their figure takes away: a child's, or their age's. Read-only, for
- * the model renderer, which replaces it with a model's own age heights rather than shrinking a model
- * into anything (`modelcrowd/body.ts`). Nothing here rolls.
+ * How much of a person's height their figure takes away: a child's, or none. Read-only, for the
+ * model renderer, which takes it back out rather than shrinking a model into anything
+ * (`modelcrowd/body.ts`): a model's age is its own. Nothing here rolls.
  */
-export const figureHeight = (r: Pick<Recipe, 'modelClass' | 'age'>): number => FIGURE[figureOf(r)].height;
+export const figureHeight = (r: Pick<Recipe, 'modelClass'>): number => FIGURE[figureOf(r)].height;
 /** The figure a recipe is drawn as on the primitives, for the lab's readouts. */
-export const figureName = (r: Pick<Recipe, 'modelClass' | 'age'>): string => figureOf(r);
+export const figureName = (r: Pick<Recipe, 'modelClass'>): string => figureOf(r);
 
 interface EquipmentProfile extends MotionProfile {
     seated: boolean;
@@ -271,8 +265,8 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
     const behavior0 = rng.next();
     const motion = rng.fork('motion');
     const stroller0 = motion.next(), equip0 = motion.next(), pace0 = motion.next();
-    const age0 = rng.next(), bodyType0 = rng.next();
-    const skin0 = rng.next(), skinVar0 = rng.next(), hair0 = rng.next(), hairVar0 = rng.next(), gray0 = rng.next();
+    const bodyType0 = rng.next();
+    const skin0 = rng.next(), skinVar0 = rng.next(), hair0 = rng.next(), hairVar0 = rng.next();
     const scheme0 = rng.next(), arrange0 = rng.next(), share0 = rng.next();
     const height0 = rng.next(), headR0 = rng.next();
     const hat0 = rng.next(), hatType0 = rng.next(), hairStyle0 = rng.next(), ponytail0 = rng.next();
@@ -285,7 +279,6 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
     const behavior = opts.equipment === 'stroller' ? 'slow-walker'
         : opts.behavior ?? pick(behaviorWeights(opts.mix), BEHAVIOR_KEYS, behavior0);
     const B = BEHAVIORS[behavior];
-    const age = opts.age ?? pick(COMPOSITION.age, AGES, age0);
     const bodyType = opts.bodyType ?? pick(COMPOSITION.bodyType, BODY_TYPES, bodyType0);
     const skinTone = opts.skinTone ?? pick(COMPOSITION.skinTone, SKIN_TONE_KEYS, skin0);
     const hairTone = opts.hairTone ?? pick(COMPOSITION.hair, HAIR_KEYS, hair0);
@@ -299,7 +292,7 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
     const equipment: Equipment = opts.equipment
         ?? (rolledStroller ? 'stroller' : modelClass === 'child' && rolledAid === 'scooter' ? 'none' : rolledAid);
     const ep = EQUIP[equipment];
-    const fig = FIGURE[figureOf({ modelClass, age })];
+    const fig = FIGURE[figureOf({ modelClass })];
     const child = modelClass === 'child';
 
     // ---- proportions: one height axis, the Body Type's width ----
@@ -310,18 +303,21 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
     const headR = ((0.179 - 0.025 * height0) * fig.head * (1 + 0.06 * (w - 1))) + 0.004 * headR0;
 
     // ---- the primitives' parts ----
-    const acc: Accessory = equipment === 'stroller' ? 'stroller' : fromList(CARRIED[child ? 'child' : 'grown'], carry0);
+    // A seated rider's back is against the seat, where a backpack would be drawn inside the backrest,
+    // so they carry none -- as someone pushing a stroller carries no bag. The roll is taken either way.
+    const carried = fromList(CARRIED[child ? 'child' : 'grown'], carry0);
+    const acc: Accessory = equipment === 'stroller' ? 'stroller' : ep.seated && carried === 'backpack' ? 'none' : carried;
     const hat: HatType = hat0 < PARTS.hat ? fromList(HAT_TYPES[child ? 'child' : 'grown'], hatType0) : 'none';
     const hair: HairType = hat === 'none' ? fromList(HAIR_TYPES, hairStyle0) : 'none';
-    const beardP = PARTS.beard * (child ? 0 : age === 'young' ? 0.15 : 1);
-    const glassesP = PARTS.glasses * (child ? 0.5 : age === 'old' ? 1.6 : 1);
+    const beardP = PARTS.beard * (child ? 0 : 1);
+    const glassesP = PARTS.glasses * (child ? 0.5 : 1);
     const mobility: Mobility = equipment === 'stroller' ? 'none' : equipment;
     const jacket = jacket0 < PARTS.jacket;
     const bag = bag0 < PARTS.bag && equipment !== 'stroller';
 
     // ---- colors: skin and hair, then the scheme arranged on the primitive figure's clothing slots ----
     const skin = skinColor(skinTone, skinVar0);
-    const hairCol = hairColor(hairTone, hairVar0, age === 'old' ? gray0 : null);
+    const hairCol = hairColor(hairTone, hairVar0);
     // The primitives wear every clothing slot, but a hat or a bag only when they have one: an empty slot
     // is not a constraint on the others.
     const carries = bag || acc === 'backpack' || acc === 'balloon';
@@ -332,7 +328,7 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
     const top = worn.tops ?? 0xffffff, bottom = worn.bottoms ?? top, accessory = worn.accessory ?? bottom;
 
     return {
-        behavior, age, bodyType, skinTone, hairTone, scheme, equipment,
+        behavior, bodyType, skinTone, hairTone, scheme, equipment,
         modelClass,
         sharesScheme: share0 < COMPOSITION.groupSharesScheme,
 

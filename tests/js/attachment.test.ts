@@ -69,7 +69,7 @@ const CASES: readonly Case[] = [
     { label: 'stroller', o: { equipment: 'stroller' }, grounded: true },
     { label: 'child in a wheelchair', o: { behavior: 'darter', equipment: 'wheelchair' }, grounded: true },
     { label: 'broad Body Type with a cane', o: { ...NONE, bodyType: 'broad', equipment: 'cane' }, grounded: true },
-    { label: 'older on a scooter', o: { ...NONE, age: 'old', equipment: 'scooter' }, grounded: true },
+    { label: 'slim Body Type on a scooter', o: { ...NONE, bodyType: 'slim', equipment: 'scooter' }, grounded: true },
 ];
 
 test('nothing a person stands or rides on sinks through the ground', () => {
@@ -138,6 +138,23 @@ function bounds(m: THREE.Matrix4): { lo: number[]; hi: number[] } {
     }
     return { lo, hi };
 }
+
+test('a seated rider carries no backpack, which would be drawn inside the seat back', () => {
+    // Their backpack roll is still taken: the same person on foot carries one.
+    let walkers = 0;
+    for (let seed = 1; seed <= 300; seed++) {
+        const onFoot = new Subject(seed, 0, { behavior: 'typical', equipment: 'none' });
+        for (const equipment of ['wheelchair', 'scooter'] as const) {
+            const seated = new Subject(seed, 0, { behavior: 'typical', equipment });
+            assert.notEqual(seated.recipe.acc, 'backpack', `seed ${seed} rides a ${equipment} with a backpack`);
+            if (onFoot.recipe.acc === 'backpack') assert.equal(seated.recipe.acc, 'none');
+            else assert.equal(seated.recipe.acc, onFoot.recipe.acc, `seed ${seed}: the ${equipment} changed what is carried`);
+            assert.equal(seated.recipe.skin, onFoot.recipe.skin, `seed ${seed}: the ${equipment} moved another roll`);
+        }
+        if (onFoot.recipe.acc === 'backpack') walkers++;
+    }
+    assert.ok(walkers > 30, `only ${walkers} of 300 carry a backpack on foot, so this checks nothing`);
+});
 
 test('overlapping boxes are buried inside each other, never flush', () => {
     // Boxes only. A sphere or a cylinder shares a *bounding* face with its neighbour long before it
