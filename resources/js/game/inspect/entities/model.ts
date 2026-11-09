@@ -43,7 +43,8 @@ import {
     NO_MODEL_BODY, bodyOf, drawnHeight, modelFallback, patchFullness, shape, skinSpace,
 } from '../../modelcrowd/body.ts';
 import type { Body, FullnessUniforms, Limits, ModelBody, Shaped } from '../../modelcrowd/body.ts';
-import { RUN_ON } from '../../modelcrowd/crowd.ts';
+import { RUN_ON, STAND_IN, prepareClips, reportClips, speedText } from '../../modelcrowd/clips.ts';
+import type { ModelClips } from '../../modelcrowd/clips.ts';
 import { dressOn, falseHex, personColors, prepareRegions } from '../../modelcrowd/regions.ts';
 import type { RegionUniforms, Regions } from '../../modelcrowd/regions.ts';
 import { count, n2 } from '../describe.ts';
@@ -102,6 +103,8 @@ interface Model {
     /** Fetching and parsing the file, in milliseconds; 0 when it did not come from a fetch. */
     readonly loadMs: number;
     readonly body: ModelBody;
+    /** Its clips by role, as the game plays them (`prepareClips`); null for a figure with no data file. */
+    readonly roles: ModelClips | null;
 }
 
 /**
@@ -236,18 +239,24 @@ const comparing = (name: string): string => `cmp-${name}`;
 const compareControls: Control[] = names.map(n => ({ kind: 'toggle', id: comparing(n), label: `compare ${n}`, value: true, rebuilds: true }));
 
 /**
- * Every clip any loaded file has, in the order they arrived, then the rest pose. The walk is the
- * default, as it is the normal gait in the game: a person runs only when their speed calls for it.
+ * Every clip any loaded file has, in the order they arrived, then the stand-in pose when a model is
+ * using one, then the rest pose. The walk role's clip is the default, as it is the normal gait in the
+ * game: a person runs only when their speed calls for it, and stands only when they stop.
  */
 function refreshClips(): void {
     const seen: string[] = [];
     for (const m of models.values()) for (const k of m.clips) if (!seen.includes(k.name)) seen.push(k.name);
-    clipControl.options = [...seen, POSE];
-    clipControl.value = seen.find(n => /walk/i.test(n)) ?? clipControl.options[0];
+    const standing = [...models.values()].some(m => m.roles?.standIn === true);
+    clipControl.options = [...seen, ...(standing ? [STAND_IN] : []), POSE];
+    const walk = [...models.values()].map(m => m.roles?.walk?.clip.name).find(n => n !== undefined);
+    clipControl.value = walk ?? clipControl.options[0];
 }
 
-/** What a loaded file brings beside its scene: its body, from its data file, and how long it took to arrive. */
-export interface Arrival { body?: ModelBody; loadMs?: number }
+/**
+ * What a loaded file brings beside its scene: its body, from its data file, its clips by role, and
+ * how long it took to arrive.
+ */
+export interface Arrival { body?: ModelBody; clips?: ModelClips; loadMs?: number }
 
 /**
  * Take a loaded figure into the bench under `name`. What `load` does with each file that arrives,
@@ -285,7 +294,7 @@ export function adopt(name: string, root: THREE.Object3D, clips: readonly THREE.
     models.set(name, {
         name, root, clips, meshes, shipped, rest, pristine, verts, bones: bones.size, bytes, regions, triangles, restHeight,
         textures: texturesOf(meshes), loadMs: arrival.loadMs ?? 0,
-        body: arrival.body ?? NO_MODEL_BODY,
+        body: arrival.body ?? NO_MODEL_BODY, roles: arrival.clips ?? null,
     });
     failures.delete(name);
     refreshClips();
@@ -302,7 +311,8 @@ async function load(): Promise<void> {
             const got = await fetchModel(model);
             const loadMs = performance.now() - t0;
             const regions = prepareRegions(model, got.scene);
-            adopt(name, got.scene, got.animations, got.bytes, regions, { body: bodyOf(model), loadMs });
+            const clips = reportClips(prepareClips(model, got.scene, got.animations));
+            adopt(name, got.scene, got.animations, got.bytes, regions, { body: bodyOf(model), clips, loadMs });
         } catch (e) {
             failures.set(name, e instanceof Error ? e.message : String(e));
         }
@@ -402,7 +412,8 @@ class Figure {
         this.rig.pose();
         this.scale = c.fit === true && model.restHeight > 0 ? drawnHeight(standingHeight(who.recipe), who.recipe) / model.restHeight : 1;
         const mixer = new THREE.AnimationMixer(root);
-        const clip = model.clips.find(k => k.name === c.clip);
+        const clip = model.clips.find(k => k.name === c.clip)
+            ?? (c.clip === STAND_IN && model.roles?.standIn === true ? model.roles.idle ?? undefined : undefined);
         this.action = clip === undefined ? null : mixer.clipAction(clip).play();
         // Apply the first frame now: the shell's probe draw follows straight on and frames what it
         // measures, and it should measure the walk rather than the T it starts from.
@@ -651,6 +662,7 @@ class ModelCast implements Cast {
             ],
             tables: [comparisonTable(name), clipTable(m), ...regionTables(m.regions), anchorTable(f.root)],
         };
+        const roles = clipRoles(m);
         const child = who.recipe.modelClass !== (m.body.ageClass);
         const childNote = child ? ' · needs a child model' : '';
         // The height, and what it is made of: the model as authored, and the recipe's own. Age is the
@@ -681,6 +693,7 @@ class ModelCast implements Cast {
                 ['body', `${m.body.ageClass} model${child ? ` (a ${r.modelClass}, on an ${m.body.ageClass} model)` : ''} · ${bodyTypeLabel(f.spec)}`],
                 ...(fallback === null ? [] : [['in the game', `${fallback}${r.equipment !== 'none' ? '; its collider is sized for the equipment' : ''}`] as const]),
                 ['clip', playing],
+                ...(roles === null ? [] : [['clip roles', roles.summary] as const]),
                 ['mesh', `${count(m.triangles)} triangles · ${m.bones} bones`],
                 ...(f.shaped.held.length > 0 ? [['held back', f.shaped.held.map(h => h.key).join(', ')] as const] : []),
                 ...failed,
@@ -700,6 +713,7 @@ class ModelCast implements Cast {
                 personGeometry(who, { top, height, ...(f.torso === undefined ? {} : { torso: f.torso }) }),
                 ...(problems === null ? [] : [problems.section]),
                 dataFile,
+                ...(roles === null ? [] : [roles.section]),
                 model,
                 provenance,
                 {
@@ -709,7 +723,7 @@ class ModelCast implements Cast {
                         { k: 'triangles', v: `${count(m.triangles)} per figure` },
                         { k: 'materials', v: `${m.meshes.length} per figure, made by the bench; the file's own are never disposed` },
                         { k: 'skinning', v: `${m.bones} bones, uploaded per figure per frame` },
-                        { k: 'body', v: 'girth in the bind matrices, set once per body; a dozen joint copies after each animation update; fullness one uniform and one vertex attribute' },
+                        { k: 'body', v: 'girth in the bind matrices, set once per body; six joint copies after each animation update; fullness one uniform and one vertex attribute' },
                     ],
                     note: 'three.js has no instanced skinning, so a crowd of these is a draw call per person; ?people=model on /play measures that.',
                 },
@@ -801,6 +815,46 @@ function comparisonTable(current: string): InfoTable {
 }
 
 const share = (v: number): string => `${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%`;
+
+/**
+ * Each clip role, present with the clip that fills it or missing, as the card's own section, and a
+ * line for the card's head. Missing walk, run or idle is an error, as is a clip the GLB does not
+ * have, a speed the clip no longer measures, or a prop after its clip ends; any other role missing
+ * is just listed.
+ */
+function clipRoles(m: Model): { section: InfoSection; summary: string } | null {
+    const c = m.roles;
+    if (c === null) return null;
+    const rows = c.rows.map(r => {
+        const status: InfoCell = r.status === 'ok' ? 'present'
+            : r.status === 'not in file' ? { text: 'error: not in the GLB', strong: true }
+            : r.required ? { text: 'error: missing', strong: true } : 'missing';
+        const clip = r.entry === null ? '' : `${r.entry.clip}${r.duration === null ? '' : ` · ${n2(r.duration)} s`}`;
+        const props = (r.entry?.props ?? []).map(p => `${p.prop} ${p.appears}–${p.disappears} s`).join(', ');
+        return [r.required ? { text: r.role, strong: true } : r.role, clip, r.entry === null ? '' : r.entry.loop ? 'loops' : 'once', speedText(r) || props, status] as const;
+    });
+    const present = c.rows.filter(r => r.status === 'ok').map(r => r.role);
+    const missing = c.rows.filter(r => r.required && r.status !== 'ok').map(r => r.role);
+    const summary = `${present.join(', ') || 'none'}`
+        + (missing.length > 0 ? ` · error: ${missing.join(', ')} missing` : '')
+        + (c.problems.length > missing.length ? ` · ${c.problems.length - missing.length} more error${c.problems.length - missing.length === 1 ? '' : 's'}` : '');
+    const out: InfoRow[] = [
+        { k: 'roles', v: `${present.length} of ${c.rows.length} mapped; walk, run and idle are required` },
+        ...(c.problems.length === 0 ? [] : [{ k: 'errors', v: c.problems.join('; '), tags: ['error'] }]),
+        ...(c.standIn ? [{ k: 'standing', v: `no idle clip, so people standing still hold the walk's average pose ("${STAND_IN}" in the clip control)` }] : []),
+        ...(c.walk === null ? [] : [{ k: 'walk plays', v: `one cycle per ${n2(c.walk.stride)} m at the model's size: true at ${c.walk.speed} m/s` }]),
+        ...(c.run === null ? [] : [{ k: 'run plays', v: `one cycle per ${n2(c.run.stride)} m: true at ${c.run.speed} m/s; the game runs people above ${RUN_ON} m/s` }]),
+    ];
+    return {
+        summary,
+        section: {
+            id: 'model', title: 'Clip roles',
+            rows: out,
+            tables: [{ caption: 'every clip role the spec names', columns: ['role', 'clip', 'loop', 'speed or props', 'status'], rows }],
+            note: 'Walk and run play by the ground covered, one cycle per stride at the size a person is drawn, so a planted foot stays put at any speed. Speeds are read off the clip as authored: how fast a planted foot moves back under the hips.',
+        },
+    };
+}
 
 function clipTable(m: Model): InfoTable {
     return {

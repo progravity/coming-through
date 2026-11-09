@@ -18,6 +18,10 @@
         { "color": "#86817b", "slot": "footwear" },
         { "color": "#a58a67", "slot": "bottoms" }
     ],
+    "clips": {
+        "walk": { "clip": "Walking", "loop": true, "speed": { "measured": 1.42 } },
+        "run": { "clip": "Running", "loop": true, "speed": { "measured": 4.7 } }
+    },
     "bodyLimits": {},
     "source": {
         "plan": "unknown",

@@ -19,6 +19,10 @@
         { "color": "#a58a67", "slot": "bottoms" },
         { "color": "#1f0700", "slot": "keep" }
     ],
+    "clips": {
+        "walk": { "clip": "Walking", "loop": true, "speed": { "measured": 1.41 } },
+        "run": { "clip": "Running", "loop": true, "speed": { "measured": 4.7 } }
+    },
     "bodyLimits": {},
     "source": {
         "plan": "unknown",

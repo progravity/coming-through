@@ -11,7 +11,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 import {
-    BODY_LIMIT_KEYS, DATA_DIR, DATA_FILES, PERSON_MODELS, UNKNOWN, personModel, readAll, readFolder, readPersonModel,
+    BODY_LIMIT_KEYS, DATA_DIR, DATA_FILES, PERSON_MODELS, UNKNOWN, authoredSpeed, personModel, readAll, readFolder, readPersonModel,
 } from '../../resources/js/game/data/people.ts';
 import { LIMITS } from '../../resources/js/game/modelcrowd/body.ts';
 
@@ -65,7 +65,7 @@ test('the two legacy models are adult men of average build, in a t-shirt, shorts
 });
 
 test('a missing required field fails, naming the file and the field', () => {
-    for (const field of ['id', 'label', 'description', 'version', 'modelFile', 'ageClass', 'sex', 'build', 'occupation', 'garments', 'accessories', 'colorSlots', 'bodyLimits', 'source', 'license']) {
+    for (const field of ['id', 'label', 'description', 'version', 'modelFile', 'ageClass', 'sex', 'build', 'occupation', 'garments', 'accessories', 'colorSlots', 'clips', 'bodyLimits', 'source', 'license']) {
         const errors = check({ [field]: undefined });
         one(errors, field, /is missing/);
     }
@@ -90,7 +90,49 @@ test('a value outside its list fails, naming the file, the field and what it may
     one(check({ modelFile: '/models/Meshy.glb' }), 'modelFile', /\/models\/people\//);
     one(check({ source: { ...(read('casual-man').source as object), date: 'last week' } }), 'source.date', /YYYY-MM-DD/);
     one(check({ eyeColor: 'black' }), 'eyeColor', /not a field of a person data file/);
-    one(check({ clips: {} }), 'clips', /in the spec, but clip roles are not mapped yet/);
+    one(check({ clipRoles: ['walk'] }), 'clipRoles', /derived from "clips"/);
+});
+
+test('the two legacy models map walk and run to the clips their GLBs have, by name, with the speed each was authored at', () => {
+    for (const id of ['casual-man', 'casual-man-low']) {
+        const m = personModel(id);
+        assert.deepEqual(m.clipRoles, ['walk', 'run']);
+        assert.equal(m.clips.walk?.clip, 'Walking');
+        assert.equal(m.clips.run?.clip, 'Running');
+        assert.equal(m.clips.walk?.loop, true);
+        // Measured off the clips (tests/js/clips.test.ts holds that the GLBs still measure this).
+        assert.ok((m.clips.walk?.speed?.measured ?? 0) > 1.3 && (m.clips.walk?.speed?.measured ?? 0) < 1.5);
+        assert.ok((m.clips.run?.speed?.measured ?? 0) > 4 && (m.clips.run?.speed?.measured ?? 0) < 5.5);
+        assert.equal(m.clips.idle, undefined, 'neither GLB has an idle clip');
+    }
+});
+
+test('a clip map names roles the spec has, clips that loop when the role does, a speed for walk and run only, and props on a timeline', () => {
+    const walk = { clip: 'Walking', loop: true, speed: { measured: 1.41 } };
+    const clips = (more: Record<string, unknown>): Record<string, unknown> => ({ clips: { walk, ...more } });
+    one(check(clips({ jog: { clip: 'Running', loop: true } })), 'clips.jog', /not a clip role; use walk, run, idle/);
+    one(check(clips({ idle: { clip: 'Idle' } })), 'clips.idle.loop', /is missing/);
+    one(check(clips({ idle: { clip: 'Idle', loop: false } })), 'clips.idle.loop', /idle always loops/);
+    one(check(clips({ idle: { clip: '', loop: true } })), 'clips.idle.clip', /non-empty string/);
+    one(check(clips({ run: { clip: 'Running', loop: true } })), 'clips.run.speed', /is missing; run records the speed it was authored at/);
+    one(check(clips({ run: { clip: 'Running', loop: true, speed: { measured: 0 } } })), 'clips.run.speed.measured', /positive number/);
+    one(check(clips({ run: { clip: 'Running', loop: true, speed: { measured: 4.7, guess: 3 } } })), 'clips.run.speed.guess', /not a speed field/);
+    one(check(clips({ idle: { clip: 'Idle', loop: true, speed: { measured: 1 } } })), 'clips.idle.speed', /walk, run only/);
+    one(check(clips({ wave: { clip: 'Wave', loop: false, take: 2 } })), 'clips.wave.take', /not a clip field/);
+    one(check(clips({ phone: { clip: 'Phone', loop: false, props: [{ prop: 'tablet', appears: 0.5, disappears: 3 }] } })), 'clips.phone.props[0].prop', /"tablet"; use one of phone/);
+    one(check(clips({ phone: { clip: 'Phone', loop: false, props: [{ prop: 'phone', appears: 3, disappears: 1 }] } })), 'clips.phone.props[0].disappears', /after "appears"/);
+    // A role that may play once, a prop on a timeline, and walk with a hand-set speed: all fine.
+    const ok = readPersonModel({ ...read('casual-man'), clips: {
+        walk: { ...walk, speed: { measured: 1.41, override: 1.3 } }, run: { clip: 'Running', loop: true, speed: { measured: 4.7 } },
+        'look-around': { clip: 'Look', loop: false }, phone: { clip: 'Phone', loop: true, props: [{ prop: 'phone', appears: 0.4, disappears: 3.6 }] },
+    } }, `${DATA_DIR}casual-man.json`);
+    assert.deepEqual(ok.errors, []);
+    assert.deepEqual(ok.model?.clipRoles, ['walk', 'run', 'look-around', 'phone']);
+    // The override is the speed the game plays it true at; the measurement stays on record beside it.
+    assert.equal(authoredSpeed(ok.model?.clips.walk ?? walk), 1.3);
+    assert.equal(authoredSpeed(ok.model?.clips.run ?? walk), 4.7);
+    // Required roles missing is the lab's error, not the file's: a model with no idle still loads.
+    assert.deepEqual(check(clips({})), []);
 });
 
 test('the color slots are the spec\'s, an old slot name says what it became, and a slot the game cannot color is refused', () => {

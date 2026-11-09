@@ -6,14 +6,15 @@
  * scale is what the rest-pose restore exists for. Checked: that a missing file still stands
  * something the stage can frame and says why, that a skinned figure is measured in its pose rather
  * than its bind pose, that the rest pose comes back at its own size after a clip, that the file's
- * materials come back by identity and only what the bench made is ever disposed, and that the row's
- * second exhibit is the game's own person.
+ * materials come back by identity and only what the bench made is ever disposed, that the row's
+ * second exhibit is the game's own person, and that the card lists every clip role, present or missing.
  */
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import * as THREE from 'three';
-import { DATA_DIR, readAll } from '../../resources/js/game/data/people.ts';
+import { DATA_DIR, PERSON_MODELS, readAll } from '../../resources/js/game/data/people.ts';
+import { prepareClips } from '../../resources/js/game/modelcrowd/clips.ts';
 import { MODEL, POSE, adopt, dataProblems } from '../../resources/js/game/inspect/entities/model.ts';
 import { measure, newBounds } from '../../resources/js/game/inspect/gizmos.ts';
 import { controlOf, defaultControls } from '../../resources/js/game/inspect/inspectable.ts';
@@ -162,4 +163,41 @@ test('the model card lists every data file that failed its check, by file and fi
         ['adult-man-02.json', '"sex" is missing; use one of male, female'],
         ['adult-man-02.json', '"build" is "chunky"; use one of average, heavy-set'],
     ]);
+});
+
+test('the model card lists every clip role, present with its clip or missing, and a missing walk, run or idle as an error', () => {
+    const { root, clip } = figure();
+    const m = { ...PERSON_MODELS['casual-man'], id: NAME, clips: {
+        walk: { clip: 'Hop', loop: true, speed: { measured: 1.4 } },
+        wave: { clip: 'Wave', loop: false },
+    } };
+    const quiet = console.error;
+    console.error = () => {};
+    adopt(NAME, root, [clip], 0, null, { clips: prepareClips(m, root, [clip]) });
+    console.error = quiet;
+    const cast = MODEL.mount(new THREE.Scene());
+    cast.rebuild(1, 1, { ...defaultControls(MODEL), model: NAME, clip: 'Hop' });
+    cast.draw(0, [0], 0);
+    const r = cast.readout(0, 1.8);
+    const roles = r.sections?.find(s => s.title === 'Clip roles');
+    assert.ok(roles !== undefined, 'no clip roles section');
+    const rows = roles.tables?.[0].rows ?? [];
+    const text = (c: unknown): string => (typeof c === 'string' ? c : (c as { text: string }).text);
+    const status = new Map(rows.map(row => [text(row[0]), text(row[4])]));
+    // Every role the spec names, each present or missing.
+    assert.deepEqual([...status.keys()], ['walk', 'run', 'idle', 'look-around', 'think', 'phone', 'photo', 'point', 'wave', 'push', 'sit']);
+    assert.equal(status.get('walk'), 'present');
+    assert.equal(text(rows[0][1]), 'Hop · 1.00 s');
+    assert.equal(status.get('run'), 'error: missing');
+    assert.equal(status.get('idle'), 'error: missing');
+    assert.equal(status.get('look-around'), 'missing');
+    assert.equal(status.get('wave'), 'error: not in the GLB');
+    const errors = roles.rows?.find(x => x.k === 'errors')?.v ?? '';
+    assert.match(errors, /"run" is missing/);
+    assert.match(errors, /"idle" is missing/);
+    assert.doesNotMatch(errors, /look-around/);
+    // The head of the card says so too.
+    assert.match(String(new Map(r.rows).get('clip roles')), /walk · error: run, idle missing/);
+    // A stand-in to stand people in, offered in the clip control.
+    assert.ok((controlOf(MODEL, 'clip') as { options: readonly string[] }).options.some(o => /average pose/.test(o)));
 });

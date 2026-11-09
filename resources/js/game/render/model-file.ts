@@ -75,12 +75,21 @@ export const modelFileName = (m: PersonModel): string => m.modelFile.slice(m.mod
  * under `node`.
  */
 export async function fetchModel(m: PersonModel): Promise<ModelFile> {
-    const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
     const res = await fetch(`${m.modelFile}?v=${m.version}`);
     if (!res.ok || (res.headers.get('content-type') ?? '').includes('text/html')) {
         throw new Error(`${m.id}: its model file is not at public${m.modelFile} (named in ${m.path})`);
     }
-    const buf = await res.arrayBuffer();
+    return parseModel(await res.arrayBuffer(), m);
+}
+
+/**
+ * Parse a person model's GLB from its bytes. `fetchModel` is the game's way in; a script or a test
+ * reading the file off disk comes in here, so all three parse it the same way. Under node, the
+ * loader needs a `self` and cannot decode the texture (it says so on the console and goes on): the
+ * clips and the skeleton come through whole, which is what anything there reads.
+ */
+export async function parseModel(buf: ArrayBuffer, m: PersonModel): Promise<ModelFile> {
+    const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
     const gltf = await new GLTFLoader().parseAsync(buf, m.modelFile.slice(0, m.modelFile.lastIndexOf('/') + 1));
     return { scene: gltf.scene, animations: gltf.animations, bytes: buf.byteLength };
 }

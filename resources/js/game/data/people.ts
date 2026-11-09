@@ -84,6 +84,51 @@ const RENAMED_SLOTS: Readonly<Record<string, ColorSlot>> = { top: 'tops', trouse
 export const BODY_LIMIT_KEYS = ['width', 'shoulders', 'limbs', 'fullness', 'face', 'neck'] as const;
 export type BodyLimitKey = (typeof BODY_LIMIT_KEYS)[number];
 
+/**
+ * The clip roles the spec names: what the game asks a model to play, each mapped in its data file to
+ * a clip inside its GLB. In the spec's order, which is roughly the order they are needed in.
+ */
+export const CLIP_ROLES = ['walk', 'run', 'idle', 'look-around', 'think', 'phone', 'photo', 'point', 'wave', 'push', 'sit'] as const;
+export type ClipRole = (typeof CLIP_ROLES)[number];
+/**
+ * The roles every model must have: without them a person cannot walk, run or stand. A model missing
+ * one still loads; the lab lists it as an error, and the game stands in for it where it can.
+ */
+export const REQUIRED_CLIP_ROLES: readonly ClipRole[] = ['walk', 'run', 'idle'];
+/** The roles a person covers ground in: each records the speed it was authored at, so stride matches speed. */
+export const SPEED_CLIP_ROLES: readonly ClipRole[] = ['walk', 'run'];
+/** The roles the spec says always loop. The rest are the data file's call (a phone's looking part loops; a wave does not). */
+const LOOPING_ROLES: readonly ClipRole[] = ['walk', 'run', 'idle', 'push', 'sit'];
+/**
+ * The props a clip can show, from the item spec's prop list. The list there is the whole of it; a
+ * new prop is a line here, as an item.
+ */
+export const PROPS = [
+    'phone', 'camera', 'selfie-stick', 'ice-cream-cone', 'drink-cup', 'water-bottle', 'cotton-candy', 'popcorn-bucket',
+    'hot-dog', 'churro', 'pretzel', 'balloon', 'pinwheel', 'plush-toy', 'souvenir-wand', 'light-up-toy', 'map', 'brochure',
+    'shopping-bag', 'gift-bag', 'handbag', 'clutch', 'umbrella', 'parasol', 'handheld-fan', 'clipboard', 'broom', 'tray', 'scanner',
+] as const;
+export type Prop = (typeof PROPS)[number];
+const CLIP_FIELDS = ['clip', 'loop', 'speed', 'props'] as const;
+
+/** One clip role's clip, as a data file maps it. */
+export interface ClipEntry {
+    /** The clip's name inside the GLB, exactly as Meshy named it: clips are never renamed. */
+    readonly clip: string;
+    readonly loop: boolean;
+    /**
+     * Walk and run only: the speed the clip was authored at, in m/s at the model's authored size --
+     * how fast the body would have to travel for a planted foot to stay put. `measured` is read off
+     * the clip (`scripts/measure-clips.mjs`); `override` is set by hand, and wins when it is there.
+     */
+    readonly speed?: { readonly measured: number; readonly override?: number };
+    /** When a prop shows during the clip, in seconds from its start: a phone leaving and returning to a pocket. */
+    readonly props?: readonly { readonly prop: Prop; readonly appears: number; readonly disappears: number }[];
+}
+
+/** The speed a walk or run plays true at: the hand-set override when there is one, else the measurement. */
+export const authoredSpeed = (e: ClipEntry): number | null => e.speed?.override ?? e.speed?.measured ?? null;
+
 /** What a provenance field holds when nobody knows it yet. The lab shows it as missing. */
 export const UNKNOWN = 'unknown';
 
@@ -113,6 +158,10 @@ export interface PersonModel {
     readonly colorSlots: readonly { readonly color: string; readonly slot: ColorSlot }[];
     /** Overrides the region detector's width for this model: lower splits near colors, higher merges them. */
     readonly regionBandwidth?: number;
+    /** Each clip role this model has, mapped to the clip in its GLB that fills it. */
+    readonly clips: Readonly<Partial<Record<ClipRole, ClipEntry>>>;
+    /** The roles `clips` maps, in the spec's order. Derived when the file loads, never written. */
+    readonly clipRoles: readonly ClipRole[];
     /** Overrides for the global body limits, for a model that stretches poorly. */
     readonly bodyLimits: Readonly<Partial<Record<BodyLimitKey, readonly [number, number]>>>;
     readonly source: {
@@ -132,12 +181,11 @@ export interface PersonModel {
 const FIELDS = [
     'id', 'label', 'description', 'version', 'modelFile',
     'ageClass', 'sex', 'build', 'occupation', 'garments', 'accessories',
-    'colorSlots', 'regionBandwidth', 'bodyLimits', 'source', 'license',
+    'colorSlots', 'regionBandwidth', 'clips', 'bodyLimits', 'source', 'license',
 ] as const;
 /** Fields the spec describes that the game does not read yet, and so a file may not carry yet. */
 const NOT_READ_YET: Readonly<Record<string, string>> = {
-    clips: 'clip roles are not mapped yet; the clips are read from the GLB as they are',
-    clipRoles: 'clip roles are derived from the clip map, which is not built yet',
+    clipRoles: 'the clip roles are derived from "clips" when the file loads, and never written down',
     anchors: 'anchor overrides are not read yet',
     colliderWidth: 'the collider width is not measured yet',
     stats: 'stats are computed when the model loads, never written down',
@@ -261,6 +309,60 @@ export function readPersonModel(raw: unknown, path: string): { model: PersonMode
         else regionBandwidth = raw.regionBandwidth;
     }
 
+    const positive = (field: string, v: unknown): number | null => {
+        if (typeof v !== 'number' || !Number.isFinite(v) || !(v > 0)) { bad(field, `is ${JSON.stringify(v)}; it must be a positive number`); return null; }
+        return v;
+    };
+    const clips: Partial<Record<ClipRole, ClipEntry>> = {};
+    const cl = object('clips', raw.clips);
+    if (cl !== null) {
+        for (const [role, e] of Object.entries(cl)) {
+            const at = `clips.${role}`;
+            if (!(CLIP_ROLES as readonly string[]).includes(role)) { bad(at, `is not a clip role; use ${list(CLIP_ROLES)}`); continue; }
+            const r = role as ClipRole;
+            if (!isObject(e)) { bad(at, 'must be an object with "clip" and "loop"'); continue; }
+            for (const k of Object.keys(e)) if (!(CLIP_FIELDS as readonly string[]).includes(k)) bad(`${at}.${k}`, `is not a clip field; use ${list(CLIP_FIELDS)}`);
+            const clip = text(`${at}.clip`, e.clip);
+            let loop: boolean | null = null;
+            if (e.loop === undefined) bad(`${at}.loop`, 'is missing; true or false');
+            else if (typeof e.loop !== 'boolean') bad(`${at}.loop`, `is ${JSON.stringify(e.loop)}; true or false`);
+            else if (!e.loop && LOOPING_ROLES.includes(r)) bad(`${at}.loop`, `is false, but ${r} always loops`);
+            else loop = e.loop;
+            let speed: ClipEntry['speed'] | null = null, ok = true;
+            if (SPEED_CLIP_ROLES.includes(r)) {
+                const sp = e.speed;
+                if (sp === undefined) { bad(`${at}.speed`, `is missing; ${r} records the speed it was authored at, as { "measured": <m/s> } (scripts/measure-clips.mjs measures it)`); ok = false; }
+                else if (!isObject(sp)) { bad(`${at}.speed`, 'must be { "measured": <m/s> }, with an optional "override"'); ok = false; }
+                else {
+                    for (const k of Object.keys(sp)) if (k !== 'measured' && k !== 'override') bad(`${at}.speed.${k}`, 'is not a speed field; use measured, override');
+                    const measured = sp.measured === undefined ? (bad(`${at}.speed.measured`, 'is missing'), null) : positive(`${at}.speed.measured`, sp.measured);
+                    const override = sp.override === undefined ? undefined : positive(`${at}.speed.override`, sp.override);
+                    if (measured === null || override === null) ok = false;
+                    else speed = override === undefined ? { measured } : { measured, override };
+                }
+            } else if (e.speed !== undefined) { bad(`${at}.speed`, `is recorded for ${list(SPEED_CLIP_ROLES)} only: ${r} covers no ground`); ok = false; }
+            const props: { prop: Prop; appears: number; disappears: number }[] = [];
+            if (e.props !== undefined) {
+                if (!Array.isArray(e.props)) { bad(`${at}.props`, 'must be a list of { "prop", "appears", "disappears" }'); ok = false; }
+                else for (const [i, p] of e.props.entries()) {
+                    const pat = `${at}.props[${i}]`;
+                    if (!isObject(p)) { bad(pat, 'must be an object with "prop", "appears" and "disappears"'); ok = false; continue; }
+                    const prop = oneOf(`${pat}.prop`, p.prop, PROPS);
+                    const appears = typeof p.appears === 'number' && p.appears >= 0 ? p.appears : null;
+                    if (appears === null) bad(`${pat}.appears`, `is ${JSON.stringify(p.appears)}; it must be seconds from the clip's start, 0 or more`);
+                    const disappears = typeof p.disappears === 'number' && appears !== null && p.disappears > appears ? p.disappears : null;
+                    if (disappears === null) bad(`${pat}.disappears`, `is ${JSON.stringify(p.disappears)}; it must be seconds from the clip's start, after "appears"`);
+                    if (prop === null || appears === null || disappears === null) ok = false;
+                    else props.push({ prop, appears, disappears });
+                }
+            }
+            if (clip !== null && loop !== null && ok) {
+                clips[r] = { clip, loop, ...(speed === null ? {} : { speed }), ...(props.length === 0 ? {} : { props }) };
+            }
+        }
+    }
+    const clipRoles = CLIP_ROLES.filter(r => clips[r] !== undefined);
+
     const bodyLimits: Partial<Record<BodyLimitKey, readonly [number, number]>> = {};
     const bl = object('bodyLimits', raw.bodyLimits);
     if (bl !== null) {
@@ -314,7 +416,7 @@ export function readPersonModel(raw: unknown, path: string): { model: PersonMode
     const model: PersonModel = {
         id, label, description, version, modelFile, ageClass, sex, build, occupation, garments, accessories, colorSlots,
         ...(regionBandwidth === undefined ? {} : { regionBandwidth }),
-        bodyLimits, source: source as PersonModel['source'], license: license as PersonModel['license'], path,
+        clips, clipRoles, bodyLimits, source: source as PersonModel['source'], license: license as PersonModel['license'], path,
     };
     return { model, errors };
 }
