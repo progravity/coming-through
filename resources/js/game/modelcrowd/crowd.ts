@@ -26,17 +26,17 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { SIM_DT } from '../core/time.ts';
+import { standingHeight } from '../recipe.ts';
 import type { Recipe } from '../recipe.ts';
 import { SHELL_OVER } from '../render/look.ts';
 import { INK_LINE, makeToonGradient } from '../render/materials.ts';
 import type { ModelFile } from '../render/model-file.ts';
-import { standingHeight } from '../render/person.ts';
 import type { Agent } from '../sim/agent.ts';
 import { lerpPose, newPose } from '../sim/pose.ts';
 import type { Pose } from '../sim/pose.ts';
 import { MAX, PLAYER_SLOT } from '../world/layout.ts';
 import { PATH } from '../world/path.ts';
-import { BodyRig, LIMITS, bakeMask, drawnHeight, drawsAsPrimitive, eyeLevel, patchFullness, shapeRecipe } from './body.ts';
+import { BodyRig, LIMITS, bakeMask, drawnHeight, eyeLevel, patchFullness, shapeRecipe } from './body.ts';
 import type { FullnessUniforms, Limits, ModelBody } from './body.ts';
 import type { ModelClass } from '../behaviors.ts';
 import { GaitState, newMix } from './clips.ts';
@@ -147,22 +147,8 @@ export class ModelCrowd {
     readonly clips: string;
     /** People whose skeleton was evaluated in the last `draw`. */
     animated = 0;
-    /**
-     * People in the last `draw` this renderer left to the primitives: anyone with equipment, which
-     * models cannot carry yet, and anyone who needs a model class this one is not (`modelFallback`).
-     * The caller draws them.
-     */
-    fallback = 0;
-    /** Equipment users, out of `fallback`; the rest need another model class (a Darter, a child). */
-    fallbackEquipment = 0;
     /** The class of person this model draws, from its data file: an adult unless it says otherwise. */
     readonly drawable: ModelClass;
-    /**
-     * Draw everyone from the model, the fallback's people included -- without their equipment, and an
-     * adult model for a Darter. The people lab's path mode does, since the lab shows people only as
-     * models; the game never does, because there what you see has to match what you collide with.
-     */
-    everyone = false;
     /** People drawn in the last frame, and ink shells drawn, counted by the renderer as it drew them. */
     bodyDraws = 0;
     inkDraws = 0;
@@ -183,7 +169,7 @@ export class ModelCrowd {
 
     /**
      * `clips` are the model's clips by role (`prepareClips`); a model with no walk cannot be drawn
-     * walking, and throws so the caller falls back to the primitives. `paint` repaints each clone's
+     * walking, and throws, so the game says so and does not start. `paint` repaints each clone's
      * regions in its recipe's colours; null draws the texture as authored. `body` is the model's own
      * body (`bodyOf` its data file), whose limits every clone is shaped inside.
      */
@@ -298,22 +284,17 @@ export class ModelCrowd {
         this.bodyDraws = 0; this.inkDraws = 0;
         const k = this.knobs, view = this.view, frame = this.frame++, go = this.going;
         const far2 = k.far * k.far, every = Math.max(1, Math.round(k.every));
-        let animated = 0, fallback = 0, equipment = 0;
+        let animated = 0;
         for (const s of this.slots) s.used = false;
         for (const a of agents) {
             const s = this.slots[a.slot];
             if (s === undefined) continue;
             // Someone of another age class is drawn by that class's model.
-            if (a.recipe.modelClass !== this.drawable && !this.everyone) continue;
-            if (drawsAsPrimitive(a.recipe, this.drawable)) {
-                fallback++;
-                if (a.recipe.equipment !== 'none') equipment++;
-                if (!this.everyone) continue;
-            }
+            if (a.recipe.modelClass !== this.drawable) continue;
             lerpPose(view, a.prev, a, alpha);
             const dx = view.x - from.x, dz = view.z - from.z;
             const throttled = k.throttle && dx * dx + dz * dz > far2 && (frame + a.slot) % every !== 0;
-            // A mobility aid is out of scope here, so its user walks rather than running past.
+            // A mobility aid's user walks rather than running past (nobody has one while no item exists).
             go.distance = view.phase / a.recipe.gait.cadence; go.time = a.t - (1 - alpha) * SIM_DT;
             go.speed = Math.hypot(a.vx, a.vz); go.mayRun = a.recipe.mobility === 'none';
             if (this.place(s, a.recipe, view, go, throttled)) animated++;
@@ -328,8 +309,6 @@ export class ModelCrowd {
             if (!s.used && s.group.visible) { s.group.visible = false; s.recipe = null; }
         }
         this.animated = animated;
-        this.fallback = fallback;
-        this.fallbackEquipment = equipment;
     }
 
     /**

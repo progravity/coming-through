@@ -14,11 +14,10 @@ import { test } from 'node:test';
 import * as THREE from 'three';
 import { makeStreams } from '../../resources/js/game/core/rng.ts';
 import {
-    BODY_KEYS, BODY_TYPES, BODY_TYPE_PRESETS, BodyRig, CHILD_NOTE, LIMITS, bakeMask, bodyTypeAt, bodyTypePosition, drawnHeight,
-    bodyOf, drawsAsPrimitive, modelFallback, patchFullness, shape,
+    BODY_KEYS, BODY_TYPES, BODY_TYPE_PRESETS, BodyRig, LIMITS, bakeMask, bodyTypeAt, bodyTypePosition, drawnHeight,
+    bodyOf, patchFullness, shape,
 } from '../../resources/js/game/modelcrowd/body.ts';
 import { personModel } from '../../resources/js/game/data/people.ts';
-import { Subject } from '../../resources/js/game/inspect/subject.ts';
 import type { Body } from '../../resources/js/game/modelcrowd/body.ts';
 import { BODY_TYPE_WIDTH, figureHeight, makeRecipe } from '../../resources/js/game/recipe.ts';
 
@@ -86,12 +85,11 @@ test('a body is its Body Type and nothing else: no age in it, and an adult drawn
     assert.equal(drawnHeight(1.7, r), 1.7);
 });
 
-test('a Darter is drawn at an adult model\'s size, never shrunk, and the lab says it needs a child model', () => {
+test('a Darter is drawn at an adult model\'s size, never shrunk', () => {
     const r = makeRecipe(makeStreams(3).recipe.fork('agent:0'), { behavior: 'darter' });
     assert.equal(r.modelClass, 'child');
     // The primitives' child height comes back out: no model is ever scaled into a child.
     assert.ok(Math.abs(drawnHeight(1, r) - 1 / figureHeight(r)) < 1e-12);
-    assert.match(CHILD_NOTE, /child model/);
 });
 
 test('a model\'s body is its data file\'s: its age class, its build, and any limits it narrows', () => {
@@ -236,24 +234,6 @@ test('a thicker neck thickens the neck and carries nothing with it', () => {
     root.updateMatrixWorld(true);
     close(vertex(mesh, v.Neck).x - neckBone.x, (neck.x - neckBone.x) * 1.09, 'the neck thickens');
     assert.ok(world(bone.Head).equals(head), 'the head moved');
-});
-
-test('models leave equipment and Darters to the primitives, and say why', () => {
-    const plain = new Subject(1, 0, { behavior: 'typical', equipment: 'none' }).recipe;
-    const chair = new Subject(1, 0, { behavior: 'typical', equipment: 'wheelchair' }).recipe;
-    const pram = new Subject(1, 0, { equipment: 'stroller' }).recipe;
-    const darter = new Subject(1, 0, { behavior: 'darter', equipment: 'none' }).recipe;
-    assert.equal(pram.acc, 'stroller');
-    assert.equal(pram.behavior, 'slow-walker');
-    assert.equal(drawsAsPrimitive(plain), false);
-    assert.equal(modelFallback(plain), null);
-    assert.ok(drawsAsPrimitive(chair) && drawsAsPrimitive(pram) && drawsAsPrimitive(darter));
-    assert.match(modelFallback(chair) ?? '', /wheelchair.*not yet supported on models/);
-    assert.match(modelFallback(pram) ?? '', /stroller.*not yet supported on models/);
-    assert.match(modelFallback(darter) ?? '', /Darter needs a child model/);
-    // A child model, when there is one, takes the Darters back from the primitives.
-    assert.equal(drawsAsPrimitive(darter, 'child'), false);
-    assert.equal(drawsAsPrimitive(plain, 'child'), true);
 });
 
 test('a seam swells as one surface: coincident vertices share the direction they are pushed', () => {

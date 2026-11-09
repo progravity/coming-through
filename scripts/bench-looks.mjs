@@ -1,12 +1,11 @@
 // What each look costs in the real game: ?stress=1&look=<slug> at a full crowd, swept over all six,
-// printed as a table. This is the half the comparator cannot measure -- fill cost scales with the
-// pixels people cover, and a comparison panel covers almost none.
+// printed as a table. Fill cost scales with the pixels on screen, so it is only real here, in the game.
 //
 // Usage: npm run dev & node scripts/bench-looks.mjs [https://coming-through.test/play] [seconds]
 //        node scripts/bench-looks.mjs https://coming-through.test/play 30 --gpu
-//        node scripts/bench-looks.mjs https://coming-through.test/play 30 --prim   (primitive people)
 //
-// People are drawn with models, as the game draws them by default; --prim benches the primitives.
+// People are drawn with models, as the game draws every person. A look reaches the world and the ink;
+// the models keep their own toon shading whatever the look, so most of what moves here is the world.
 //
 // `seconds` is a cap per look, not a duration: each one is read as soon as its ring holds only
 // settled frames, and the cap is what stops a slow machine running forever. Headless SwiftShader
@@ -14,7 +13,7 @@
 // ring; a real GPU gets there in a couple of seconds. A look that hits the cap early says so.
 //
 // Read the columns knowing where each comes from:
-//   pose   CPU only, no GL. Trustworthy headless -- it is what scripts/bench-pose.mjs measures.
+//   pose   CPU only, no GL: placing and animating the model clones. Trustworthy headless.
 //   render pose plus everything the driver did. Under headless SwiftShader that is software
 //          rasterisation and says nothing about a real GPU, so it is printed without a comparison
 //          column: a first run of this had matcap at +640% there, when on real hardware it is one
@@ -31,7 +30,6 @@ import { spawn } from 'node:child_process';
 
 const args = process.argv.slice(2);
 const gpu = args.includes('--gpu');
-const prim = args.includes('--prim');
 const [base = 'https://coming-through.test/play', secs = gpu ? '20' : '120'] = args.filter(a => !a.startsWith('--'));
 // The game page with this query: a bare origin means its /play page, and a trailing slash is dropped.
 const gamePage = (base, query) => { const u = new URL(base); u.pathname = u.pathname === '/' ? '/play' : u.pathname.replace(/\/$/, ''); u.search = query; return u.href; };
@@ -66,7 +64,7 @@ const send = (method, params = {}, sessionId) => new Promise(r => {
 const rows = [];
 for (const look of LOOKS) {
     // A fresh target per look, so nothing a previous look left on the pools can carry over.
-    const url = gamePage(base, `stress=1&tier=high&look=${look}${prim ? '&people=prim' : ''}`);
+    const url = gamePage(base, `stress=1&tier=high&look=${look}`);
     const { result: { targetId } } = await send('Target.createTarget', { url: 'about:blank' });
     const { result: { sessionId } } = await send('Target.attachToTarget', { targetId, flatten: true });
     await send('Runtime.enable', {}, sessionId);

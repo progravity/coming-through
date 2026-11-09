@@ -1,14 +1,14 @@
 /**
  * A figure from a `.glb` file: how the people lab draws a person, and the only way it does.
  *
- * **The one exhibit not drawn by the game's assembler**, and the exception is the point of it. Every
- * other cast in `entities/` is a driver for game code and must never be a copy of it; this one is a
- * bench for an asset the game does not use yet, so there is no assembler for it to go through. The
- * rule it keeps instead is the next best one: **the game's half of the stage is still the game's.**
- * It is drawn *as a person* -- the controls choose a person exactly as the crowd rolls one -- painted
- * in that person's recipe, and shaped by their Body Type through the same `modelcrowd/body.ts`
- * the game's crowd is shaped by. The primitive people are not shown here at all: they are the
- * game's fallback, and the people lab is for the way people are drawn.
+ * **The one exhibit not drawn by the game's assembler.** Every other cast in `entities/` is a
+ * driver for game code and must never be a copy of it; this one stands a model file on the stage
+ * itself, so it can show what the crowd's clones cannot -- the rest pose, any clip, the file's own
+ * materials, the regions in false color. The rule it keeps instead is the next best one: **the
+ * game's half of the stage is still the game's.** It is drawn *as a person* -- the controls choose a
+ * person exactly as the crowd rolls one -- painted in that person's recipe, and shaped by their Body
+ * Type through the same `modelcrowd/body.ts` the game's crowd is shaped by. Every person in the game
+ * is a model, so this is how a person is drawn.
  *
  * What the row compares is a control of its own (`compare`):
  *
@@ -38,10 +38,10 @@ import { DATA_DIR, DATA_FILES, PERSON_MODELS, UNKNOWN } from '../../data/people.
 import type { DataFile } from '../../data/people.ts';
 import { CROWD_MODEL, crowdModels } from '../../composition.ts';
 import { fetchModel } from '../../render/model-file.ts';
-import { standingHeight } from '../../render/person.ts';
+import { standingHeight } from '../../recipe.ts';
 import {
-    BODY_KEYS, BODY_TYPES, BODY_TYPE_PRESETS, BodyRig, CHILD_NOTE, LIMITS, NOT_ON_MODELS, bakeMask,
-    NO_MODEL_BODY, bodyOf, drawnHeight, modelFallback, patchFullness, shape, skinSpace,
+    BODY_KEYS, BODY_TYPES, BODY_TYPE_PRESETS, BodyRig, LIMITS, NOT_ON_MODELS, bakeMask,
+    NO_MODEL_BODY, bodyOf, drawnHeight, patchFullness, shape, skinSpace,
 } from '../../modelcrowd/body.ts';
 import type { Body, FullnessUniforms, Limits, ModelBody, Shaped } from '../../modelcrowd/body.ts';
 import { RUN_ON, STAND_IN, prepareClips, reportClips, speedText } from '../../modelcrowd/clips.ts';
@@ -52,12 +52,12 @@ import type { CheckStatus, SpecCheck } from './spec-checks.ts';
 import { dressOn, falseHex, personColors, prepareRegions } from '../../modelcrowd/regions.ts';
 import type { RegionUniforms, Regions } from '../../modelcrowd/regions.ts';
 import { count, n2 } from '../describe.ts';
-import { RULER, defaultControls } from '../inspectable.ts';
+import { RULER } from '../inspectable.ts';
 import type { Cast, Control, Controls, DrawnPart, InfoCell, InfoRow, InfoSection, InfoTable, Inspectable, OverlayDef, Readout } from '../inspectable.ts';
 import { disposeMarks, dot } from '../markers.ts';
 import type { Subject } from '../subject.ts';
 import {
-    COLLIDER, FACING, PERSON, PERSON_CONTROLS, PersonMarks, chosenBy, clothingSection, overridesOf, personLegacy, personBehavior, personChoices,
+    COLLIDER, FACING, PERSON_CONTROLS, PERSON_DEFAULTS, PersonMarks, chosenBy, clothingSection, overridesOf, personLegacy, personBehavior, personChoices,
     personGeometry, personIdentity, personRecipe, subjectFor,
 } from './person.ts';
 
@@ -114,11 +114,10 @@ interface Model {
 }
 
 /**
- * Where each accessory the primitive people carry would hang on a rigged model: a proposal, by bone
+ * Where each item a person may wear, carry or use would hang on a rigged model: a proposal, by bone
  * name, drawn as a marker so a model can be judged for whether the place exists and is where it
  * should be. Nothing attaches anything to a model yet; this is the question asked before it does.
- * `prim` is where `drawPerson` puts the same thing on the primitive person, so the two can be held
- * side by side.
+ * `where` says where on the body the item goes.
  */
 export interface AnchorDef {
     readonly what: string;
@@ -126,17 +125,17 @@ export interface AnchorDef {
     readonly bones: readonly RegExp[];
     readonly all?: boolean;
     readonly color: number;
-    readonly prim: string;
+    readonly where: string;
 }
 export const ANCHORS: readonly AnchorDef[] = [
-    { what: 'hat', bones: [/HeadTop_End$/i, /Head$/i], color: 0xe8c34a, prim: 'on the crown, sized off the head radius' },
-    { what: 'phone', bones: [/LeftHand$/i], color: 0x7fd0ff, prim: 'left hand, forearm raised to read it' },
-    { what: 'cane', bones: [/RightHand$/i], color: 0xd17a9c, prim: 'right hand, reaching down to the grip' },
-    { what: 'balloon', bones: [/RightHand$/i], color: 0xab47bc, prim: 'the string hangs from the hand the arm chain ends at' },
-    { what: 'camera', bones: [/Neck$/i], color: 0xd9d4ca, prim: 'on a strap from the neck, just clear of the chest' },
-    { what: 'backpack', bones: [/Spine2$/i, /Spine1$/i], color: 0x59b25f, prim: 'sunk into the back of the chest' },
-    { what: 'bag', bones: [/Hips$/i], color: 0xff8c2b, prim: 'at one hip, its strap over the other shoulder' },
-    { what: 'stroller, wheelchair, scooter', bones: [/LeftHand$/i, /RightHand$/i], all: true, color: 0x59e0d0, prim: 'both hands, on a handle, rims or a tiller' },
+    { what: 'hat', bones: [/HeadTop_End$/i, /Head$/i], color: 0xe8c34a, where: 'on the crown' },
+    { what: 'phone', bones: [/LeftHand$/i], color: 0x7fd0ff, where: 'left hand, forearm raised to read it' },
+    { what: 'cane', bones: [/RightHand$/i], color: 0xd17a9c, where: 'right hand, reaching down to the grip' },
+    { what: 'balloon', bones: [/RightHand$/i], color: 0xab47bc, where: 'the string hangs from the hand' },
+    { what: 'camera', bones: [/Neck$/i], color: 0xd9d4ca, where: 'on a strap from the neck, just clear of the chest' },
+    { what: 'backpack', bones: [/Spine2$/i, /Spine1$/i], color: 0x59b25f, where: 'against the back of the chest' },
+    { what: 'bag', bones: [/Hips$/i], color: 0xff8c2b, where: 'at one hip, its strap over the other shoulder' },
+    { what: 'stroller, wheelchair, scooter', bones: [/LeftHand$/i, /RightHand$/i], all: true, color: 0x59e0d0, where: 'both hands, on a handle, rims or a tiller' },
 ];
 
 /** The first node whose name matches, matched by its ending because Mixamo prefixes every bone. */
@@ -539,7 +538,7 @@ function rowFor(c: Controls): number {
 class ModelCast implements Cast {
     private readonly scene: THREE.Scene;
     /** The person controls, copied across on every rebuild: which person the model is drawn as. */
-    private readonly pc: Controls = { ...defaultControls(PERSON) };
+    private readonly pc: Controls = { ...PERSON_DEFAULTS };
     private figures: Figure[] = [];
     private c: Controls = {};
     /** The person the model is drawn as: rolled exactly as the crowd rolls agent N of the seed. */
@@ -680,7 +679,6 @@ class ModelCast implements Cast {
         // The height, and what it is made of: the model as authored, and the recipe's own. Age is the
         // model's, by its age class: nothing adjusts it.
         const height = `${n2(m.restHeight * f.scale)} m = ${n2(m.restHeight)} base × ${n2(f.scale)} recipe height${this.c.fit === true ? '' : ' (crowd scale off)'}`;
-        const fallback = modelFallback(who.recipe, m.body.ageClass);
         const r = who.recipe;
         // The person's scheme arranged on this model's own clothing slots, as the crowd paints it.
         const paint = m.regions?.paint ?? null;
@@ -694,7 +692,6 @@ class ModelCast implements Cast {
             scheme: slots.length === 0 ? 'this model has no clothing slots to paint'
                 : slots.map(slot => `${slot} #${(dressed.colors[slot] ?? 0).toString(16).padStart(6, '0')}`).join(', '),
             behavior: pace > RUN_ON ? `at ${n2(pace)} m/s the game runs them (above ${RUN_ON} m/s)` : `at ${n2(pace)} m/s the game walks them`,
-            ...(r.equipment === 'none' ? {} : { equipment: `${NOT_ON_MODELS}: the game draws this person as primitives` }),
         };
         return {
             title: f.spec.exact === null ? name : `${f.spec.label}`,
@@ -703,7 +700,6 @@ class ModelCast implements Cast {
                 ['person', [who.profile.name, title(r.bodyType), skinToneNamed(r.skinTone).name, `${hairNamed(r.hairTone).name} hair`, schemeNamed(r.scheme).name].join(' · ')],
                 ['height', height],
                 ['body', `${m.body.ageClass} model${child ? ` (a ${r.modelClass}, on an ${m.body.ageClass} model)` : ''} · ${bodyTypeLabel(f.spec)}`],
-                ...(fallback === null ? [] : [['in the game', `${fallback}${r.equipment !== 'none' ? '; its collider is sized for the equipment' : ''}`] as const]),
                 ['clip', playing],
                 ['spec checks', spec.summary],
                 ...(roles === null ? [] : [['clip roles', roles.summary] as const]),
@@ -722,7 +718,7 @@ class ModelCast implements Cast {
                 personBehavior(who),
                 clothingSection(r, dressed, slots, name, this.c.recolour === true ? '' : 'Recipe colors are off: the model shows its own texture.'),
                 bodySection(f, who, top),
-                personRecipe(who, '', 'model'),
+                personRecipe(who),
                 personGeometry(who, { top, height, ...(f.torso === undefined ? {} : { torso: f.torso }) }),
                 ...(problems === null ? [] : [problems.section]),
                 spec.section,
@@ -792,7 +788,6 @@ function bodySection(f: Figure, who: Subject, top: number): InfoSection {
         { k: 'body type', v: `${bodyTypeLabel(f.spec)}${f.spec.exact === null ? ` · recipe width ${n2(who.recipe.w, 3)}` : ''}` },
         { k: 'limits', v: m.body.overridden.length === 0 ? 'the global limits' : `the global limits, with ${m.body.overridden.join(', ')} from this model's data file` },
     ];
-    if (who.recipe.modelClass !== m.body.ageClass) out.push({ k: 'child', v: CHILD_NOTE });
     if (held.size > 0) out.push({ k: 'held back', v: f.shaped.held.map(h => `${h.key} asked ${fmt(h.key, h.wanted, top)}, drawn ${fmt(h.key, h.limit, top)}`).join('; ') });
     return {
         id: 'model', title: 'Body',
@@ -953,11 +948,11 @@ function regionTables(rg: Regions | null): InfoTable[] {
 function anchorTable(root: THREE.Object3D | null): InfoTable {
     return {
         caption: 'accessory anchors (proposed, by bone name)',
-        columns: ['accessory', 'bone', 'on the primitive person'],
+        columns: ['item', 'bone', 'where it goes'],
         rows: (root === null ? [] : anchorsOf(root)).map(a => [
             { text: a.def.what, color: a.def.color },
             a.bones.length === 0 ? 'not found' : a.bones.map(b => b.name).join(' + '),
-            a.def.prim,
+            a.def.where,
         ]),
     };
 }
@@ -1067,8 +1062,6 @@ const { key: _equipKey, ...equipment } = PERSON_CONTROLS.equipment;
 export const MODEL: Inspectable = {
     id: 'model',
     family: 'person',
-    // The people lab's model source: the same person, drawn from a file.
-    modelOf: 'person',
     // The panel prints this over the seed box. The seed chooses the person the model is drawn as.
     title: 'Person',
     controls: [
@@ -1099,8 +1092,8 @@ export const MODEL: Inspectable = {
     ],
     overlays: MODEL_OVERLAYS,
     legacy: modelLegacy,
-    // A model has meshes, not the primitives' parts: no part gizmos, no part origins, and no ink
-    // shell on the stage to switch.
+    // A model has meshes, not instanced parts: no part gizmos, no part origins, and no ink shell on
+    // the stage to switch.
     universal: [RULER],
     // Seeds browse the game's people; `C` already cycles the clips.
     stepping: 'seed',

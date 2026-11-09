@@ -1,7 +1,7 @@
 /**
  * How anything the path's frame places gets onto the inspection stage.
  *
- * A person turns through `drawPerson`'s own `yaw`, which is the game's parameter. An edge object
+ * A person turns by the yaw the game draws them at. An edge object
  * has no such parameter -- it is placed by `frameAt` and by nothing else -- so it is **built where
  * the game builds it**, on the real `PATH`, at its real offset from the real edge, and then only
  * *staged* somewhere else: an inner group brings its own place to the origin and an outer group

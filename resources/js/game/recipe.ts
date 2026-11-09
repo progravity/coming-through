@@ -219,6 +219,15 @@ const EQUIP: Record<Equipment, EquipmentProfile> = {
     scooter:    { speed: 1.12, turn: 0.5,  accel: 0.45, radius: 1.8,   colOffset: 0.28, seated: true,  stride: 0,    cadence: 1,    bob: 0.1,  limp: 0 },
 };
 
+/**
+ * How tall a person stands, in meters: what a model is drawn at (`drawnHeight` in
+ * `modelcrowd/body.ts`) and what the camera stands on. The formula is the one the primitive figure's
+ * skeleton gave -- the base of its head 1.52 units up, the head's diameter on top, all times the
+ * height roll -- kept as it was so nobody's height changed when the primitive people went.
+ */
+export const standingHeight = (r: Pick<Recipe, 'h' | 'headR'>): number => (HEAD_BASE + 2 * r.headR) * r.h;
+const HEAD_BASE = 1.52;
+
 /** The adult height roll's range, as a multiple of the 1.86-unit skeleton: about 1.56 m to 1.90 m. */
 export const HEIGHT_RANGE: Range = [0.84, 1.02];
 

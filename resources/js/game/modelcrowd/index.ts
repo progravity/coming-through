@@ -56,10 +56,6 @@ export interface PeopleStats {
     colours: string;
     /** The model's build and age class, from its data file; every clone's Body Type comes from its recipe. */
     body: string;
-    /** People the model renderer left to the primitives last frame: mobility aids and strollers. */
-    fallback: number;
-    /** Equipment users, out of `fallback`; the rest are Darters, who need a child model. */
-    fallbackEquipment: number;
     /** Last frame. */
     animated: number;
     bodyDraws: number;
@@ -163,7 +159,7 @@ export async function startPeople(scene: THREE.Scene, params: URLSearchParams, t
         trisPerModel: adults.crowd.trisPerModel, bones: adults.crowd.bones, clips: loaded.map(l => l.crowd.clips).join(' | '),
         colours: loaded.map(l => l.regions.summary).join(' | '),
         body: loaded.map(l => `${l.body.build} ${l.body.ageClass} model`).join(', ') + '; Body Type from each recipe',
-        fallback: 0, fallbackEquipment: 0, animated: 0, bodyDraws: 0, inkDraws: 0, calls: 0, triangles: 0, people: 0,
+        animated: 0, bodyDraws: 0, inkDraws: 0, calls: 0, triangles: 0, people: 0,
         fps: 0, frameMs: 0, simMs: 0, poseMs: 0, renderMs: 0,
     };
     const panel = readout ? new Panel(stats, toggleInk, () => setThrottle(!knobs.throttle), (far, every) => {
@@ -190,8 +186,6 @@ export async function startPeople(scene: THREE.Scene, params: URLSearchParams, t
             stats.calls = f.calls; stats.triangles = f.triangles; stats.people = f.people;
             stats.ink = knobs.ink;
             stats.animated = sum(m => m.animated); stats.bodyDraws = sum(m => m.bodyDraws); stats.inkDraws = sum(m => m.inkDraws);
-            stats.fallback = sum(m => m.fallback);
-            stats.fallbackEquipment = sum(m => m.fallbackEquipment);
             if (time < 0.5) return;
             stats.fps = frames / time; stats.frameMs = (time / frames) * 1000;
             stats.simMs = sim / frames; stats.poseMs = pose / frames; stats.renderMs = render / frames;
@@ -259,7 +253,6 @@ class Panel {
             `animated ${s.animated} · drawn ${s.bodyDraws} bodies + ${s.inkDraws} ink`,
             `colours: ${s.colours}`,
             `bodies: ${s.body}`,
-            `as primitives: ${s.fallback} (${s.fallbackEquipment} with equipment, not yet supported on models; ${s.fallback - s.fallbackEquipment} Darters, who need a child model)`,
         ];
         this.text.textContent = lines.join('\n');
     }

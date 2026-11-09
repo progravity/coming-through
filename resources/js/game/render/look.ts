@@ -1,33 +1,28 @@
 /**
  * A **look**: one rendering direction, as data.
  *
- * These used to live in `compare/treatments.ts` as functions that did surgery on a `PartPools`,
- * which was the right shape while a treatment was a question about *people*. It is the wrong shape
- * now the question is about the game: `?look=soft` used to play a run in which the crowd was
- * soft-shaded and the benches, the carts, the shopfronts and the ground were still toon-shaded --
- * which is not a rendering direction, it is two at once, and is exactly what `world/material.ts`
- * says two shading models on screen always look like.
+ * A look is four values, and **every world surface knows how to take them**: see `dress` on
+ * `EdgeLayer`, `Props` and `Ground`. Six looks meet three surfaces without a table of cases,
+ * adding a surface never touches a look, and adding a look never touches a surface. They used to be
+ * functions in the render-direction comparator, doing surgery on the primitive people's instanced
+ * pools; the comparator went with the primitive people, and the six looks stayed, as data.
  *
- * So a look is four values, and **every surface knows how to take them**: see `dress` on
- * `PartPools`, `EdgeLayer`, `Props` and `Ground`. Six looks meet four surfaces without a
- * twenty-four-cell matrix, adding a fifth surface never touches a look, and adding a look never
- * touches a surface.
+ * **The people do not wear a look.** Every person is a model, drawn by `modelcrowd/crowd.ts` in its
+ * own toon material on the shipped ramp, whatever the look; the ink switch a look sets is the one
+ * thing that reaches them. The people lab's model figure is the exception: it wears the look's body
+ * on the stage, so a model can be judged under each.
  *
- * This file belongs to none of the three tools that read it. The game plays under a look, the
- * inspector switches between them and the comparator shows all six at once -- and **nothing
- * outside `resources/js/game/compare/` may depend on anything inside it**, which is what moving these out of
- * there was for. `tests/js/look.test.ts` holds that.
- *
- * A look reaches materials and matrices at render time, draws no random numbers, and is not
- * reachable from `sim/`. It cannot move either determinism hash.
+ * Two things read it: the game plays under a look (`?look=`), and the inspector switches between
+ * them (`L`). A look reaches materials and matrices at render time, draws no random numbers, and is
+ * not reachable from `sim/`. It cannot move either determinism hash.
  */
 import * as THREE from 'three';
 
 /**
  * What a surface needs of the material it is handed.
  *
- * Two fields because the four surfaces differ in exactly two ways. The crowd and the edge layer
- * colour themselves per instance, so they want white and multiply it; a prop carries its colour in
+ * Two fields because the surfaces differ in exactly two ways. The edge layer (and the lab's model
+ * figure, which brings its texture) colour themselves, so they want white and multiply it; a prop carries its colour in
  * the material, because `worldToon` is keyed by colour and shared; and the ground carries its bands
  * per vertex. A look answers all three from one function rather than knowing which caller it has.
  */
@@ -38,14 +33,14 @@ export interface MaterialNeeds {
 
 export interface Look {
     readonly name: string;
-    /** The name it answers to as `?look=<slug>`, and the one its panel prints. Published. */
+    /** The name it answers to as `?look=<slug>`, and in the labs. Published. */
     readonly slug: string;
     /** One line under the label: what was changed, and whether this is the real thing. */
     readonly note: string;
     /**
      * How the body shader is paid for, described rather than measured. Fill scales with the pixels
-     * people cover and a comparator panel covers almost none, so the card says what the shader does
-     * and leaves the milliseconds to a real run.
+     * on screen, so this says what the shader does and leaves the milliseconds to a real run
+     * (`scripts/bench-looks.mjs`).
      */
     readonly fill: string;
     /** A fresh body material. Absent means "the material this surface ships with". */
@@ -79,11 +74,9 @@ export const SHELL_FLOOR = 0.7;
 /**
  * A look's ink weight folded into a shipped clearance, without letting it invert the shell.
  *
- * **The edge layer's rule, not everyone's.** `kit.ts` grows a piece by a clearance capped at a
- * fraction of each axis, so flooring the clearance itself is the right place for it there. The
- * crowd deliberately does not call this: `PartPools.shellGrowth` floors the whole *grown length*
- * instead, which is what the per-frame sweep it replaced used to do, and flooring both would thin
- * the line by less than a look asked for. A third surface with shells has to decide which it is.
+ * **The edge layer's rule.** `kit.ts` grows a piece by a clearance capped at a fraction of each
+ * axis, so flooring the clearance itself is the right place for it there. Another surface with
+ * shells has to decide whether to floor the clearance or the whole grown length.
  */
 export const inkClearance = (shipped: number, weight: number): number =>
     Math.max(shipped + weight, shipped * SHELL_FLOOR);

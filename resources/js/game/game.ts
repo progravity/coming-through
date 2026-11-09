@@ -15,7 +15,6 @@ import { TouchAdapter } from './input/touch.ts';
 import { startPeople } from './modelcrowd/index.ts';
 import type { People } from './modelcrowd/index.ts';
 import type { PlayerFigure } from './modelcrowd/crowd.ts';
-import { PartPools } from './render/pools.ts';
 import { createPlayer, staminaFraction, staminaState } from './sim/player.ts';
 import { lerpPose, newPose } from './sim/pose.ts';
 import { MAX_CROWD, Simulation, clampCrowd } from './sim/simulation.ts';
@@ -34,8 +33,8 @@ const stress = params.get('stress') === '1';
  *
  * A look rather than an ink toggle, and the distinction is load-bearing. `current` still means
  * *as shipped* -- outline and all -- so `?look=current` is a working way back, and every other look
- * keeps meaning exactly what its comparator panel says. What has changed is only which of the six
- * a run with no `?look=` starts in.
+ * keeps meaning what `render/look.ts` says it does. What has changed is only which of the six a run
+ * with no `?look=` starts in.
  */
 const DEFAULT_LOOK = 'toon-bare';
 /** The rendering direction asked for, if any; `DEFAULT_LOOK` is used when there is none. */
@@ -51,7 +50,8 @@ renderer.setSize(innerWidth, innerHeight);
 document.body.appendChild(renderer.domElement);
 
 const rig = new CameraRig();
-const pools = new PartPools(world.scene);
+/** The game's ink switch: the world's line and the people's shells, always together. */
+let inkOn = true;
 const debug = new DebugOverlay(ui.debugCanvas);
 /**
  * Every person is drawn with a person model, the player included (`modelcrowd/`, `?model=` choosing
@@ -158,7 +158,6 @@ function startRun(nextSeed: number): void {
     acc = 0;
     finished = false;
     rig.reset();
-    pools.freeAll();
     ui.setSeed(seed);
     ui.hud(0, 0);
     ui.stamina(1, 'ok');
@@ -177,8 +176,9 @@ function setCount(n: number): void {
     // starts has to re-prime; changing it mid-run just moves the target populate() tops up to.
     if (!running) startRun(seed);
 }
-// The world carries the same line the people do, so both switch together.
-function setInk(on: boolean): void { pools.setInk(on); world.setInk(on); ui.setInk(on); }
+// The world carries the same line the people do, so both switch together: the model crowd reads
+// `inkOn` every frame.
+function setInk(on: boolean): void { inkOn = on; world.setInk(on); ui.setInk(on); }
 function applyTier(t: Tier): void {
     tier = t;
     const s = TIER_SETTINGS[t];
@@ -223,15 +223,14 @@ function readBobParam(text: string): void {
 }
 
 /**
- * `?look=<name>` plays an ordinary run under one rendering direction applied to the whole world,
- * named by the slug its comparator panel prints (`current`, `toon-bare`, `soft-ink`, `soft`,
- * `soft-thin`, `matcap`).
+ * `?look=<name>` plays an ordinary run under one rendering direction applied to the world, named by
+ * its slug (`current`, `toon-bare`, `soft-ink`, `soft`, `soft-thin`, `matcap`; see `render/look.ts`).
  *
- * Six still turntables cannot answer how a direction holds up in motion, at crowd distance, from
- * the game's own camera under the game's own lights -- and that is where it has to hold up. This
- * costs nothing to find out: a look is data in `render/look.ts`, and every surface already knows
- * how to wear one, so playing a real run under it is `world.dress(look)` and `pools.dress(look)`
- * and nothing else.
+ * It reaches the ground, the edge layer and the props, and the ink switch the people share with
+ * them -- **not the people's own shading**: the model crowd is drawn in its toon material whatever
+ * the look, so `?look=soft` is a soft world with toon people in it. A look is data in
+ * `render/look.ts`, and every world surface already knows how to wear one, so playing a run under
+ * it is `world.dress(look)` and the ink it asks for.
  *
  * Applied after `applyTier`, so the look has the last word on the ink either way. **That relationship is
  * bidirectional now that a look reaches every surface**: `toon-bare` takes the line off a `high`
@@ -250,11 +249,9 @@ async function applyLook(name: string): Promise<void> {
         console.warn(`?look=${name} is not a rendering look. Try one of: ${LOOK_NAMES.join(', ')}`);
     }
     world.dress(look);
-    pools.dress(look);
-    // dress() may have turned the shells off; the world's line and the button both have to agree
-    // with what is actually drawn, and toggling afterwards works from there.
-    world.setInk(pools.inkOn);
-    ui.setInk(pools.inkOn);
+    // An absent `inkOn` means the shipped ink, which is on. The world's line, the people's shells
+    // and the button all agree with what is drawn, and toggling afterwards works from there.
+    setInk(look.inkOn ?? true);
 }
 
 function finish(): void {
@@ -277,7 +274,7 @@ input.add(new KeyboardAdapter(input));
 input.onAction((a: Action) => {
     switch (a) {
         case 'cycleCamera': cycleCamera(); break;
-        case 'toggleInk': setInk(!pools.inkOn); break;
+        case 'toggleInk': setInk(!inkOn); break;
         case 'toggleDebug': toggleDebug(); break;
         case 'toggleBob': toggleBob(); break;
         case 'cycleTier': { const t = nextTier(tier); saveTier(t); applyTier(t); break; }
@@ -355,7 +352,6 @@ function frame(now: number): void {
             sim.step(buildCommand());
             recorder.record(cmd);
             acc -= SIM_DT; steps++;
-            for (const slot of sim.crowd.released) pools.freeSlot(slot);
             if (sim.finished) { finish(); break; }
         }
     } else {
@@ -381,7 +377,7 @@ function frame(now: number): void {
     // not drawn; in the other two views it walks at the speed it is really travelling, shove and all.
     playerFigure.speed = Math.hypot(p.vx + p.kx, p.vz + p.kz);
     playerFigure.time = sim.steps * SIM_DT;
-    people.draw(sim.crowd.agents, alpha, p, pools.inkOn, rig.mode === 'first' ? null : playerFigure);
+    people.draw(sim.crowd.agents, alpha, p, inkOn, rig.mode === 'first' ? null : playerFigure);
     const poseMs = performance.now() - renderStart;
     world.animate(t);
     renderer.render(world.scene, rig.update(frameDt, playerView));

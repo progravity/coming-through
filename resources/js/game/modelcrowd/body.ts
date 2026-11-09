@@ -1,6 +1,6 @@
 /**
  * How one rigged model becomes many bodies: the recipe's Body Type, turned into bone changes and a
- * fullness displacement, for the `?people=model` crowd and the people lab alike. Age is not here:
+ * fullness displacement, for the game's crowd and the people lab alike. Age is not here:
  * it comes only from the model, by its data file's age class, and is never made by adjusting one.
  *
  * **Renderer only.** It reads a recipe and writes bones, bind matrices and two uniforms. Nothing
@@ -25,7 +25,6 @@
  * its data file's `bodyLimits` (`resources/js/game/data/people/<id>.json`).
  */
 import * as THREE from 'three';
-import { BEHAVIORS } from '../behaviors.ts';
 import type { ModelClass } from '../behaviors.ts';
 import { BODY_LIMIT_KEYS } from '../data/people.ts';
 import type { ModelBuild, PersonModel } from '../data/people.ts';
@@ -40,8 +39,8 @@ export type { BodyType };
 /** The body values one preset contributes. Every field is a factor on the model as authored, except `fullness`. */
 export interface BodyTypePreset {
     /**
-     * Where this preset sits on the width scale the primitive people are drawn with (`Recipe.w`,
-     * which is `BODY_TYPE_WIDTH` of the person's Body Type): a width between two presets blends them.
+     * Where this preset sits on the recipe's width scale (`Recipe.w`, which is `BODY_TYPE_WIDTH` of
+     * the person's Body Type): a width between two presets blends them.
      */
     w: number;
     /** Sideways girth of the hips, spine and chest, and how far apart the legs stand. */
@@ -69,9 +68,6 @@ export const BODY_TYPE_PRESETS: Readonly<Record<BodyType, BodyTypePreset>> = {
     solid: { w: BODY_TYPE_WIDTH.solid, width: 1.07, shoulders: 1.04, limbs: 1.06, fullness: 0.012, face: 0.003, neck: 1.05 },
     broad: { w: BODY_TYPE_WIDTH.broad, width: 1.14, shoulders: 1.08, limbs: 1.12, fullness: 0.022, face: 0.0055, neck: 1.09 },
 };
-
-/** What a person who needs a child model is drawn as on an adult one, and why. */
-export const CHILD_NOTE = 'A Darter is a child, and an adult model cannot be made into one convincingly: this is the adult model. The game draws Darters as primitives until there is a child model.';
 
 /** One body: every value the rig and the shader take, all of them the Body Type's. */
 export interface Body {
@@ -170,31 +166,6 @@ export const drawnHeight = (standing: number, r: Recipe): number => standing / f
 
 /** The reason the labs give for anything a model cannot do yet. */
 export const NOT_ON_MODELS = 'not yet supported on models';
-
-/**
- * Why this person cannot be drawn as a model yet, or null when they can.
- *
- * Two reasons, both flagged rather than hidden:
- *
- * - **Equipment** -- a stroller, a wheelchair, a scooter, a cane -- is not on the models yet, and
- *   its collider is sized for the equipment: a model drawn without it would be a person you bump
- *   into half a meter before you reach them. Until models carry it, these people are primitives.
- * - **A Darter is a child**, and the crowd's model is an adult one (`drawable`, from its data
- *   file's age class). An adult model cannot be made into a child, so until a child model exists
- *   Darters are primitives too.
- *
- * The crowd's readout counts them; the lab notes it when one is shown or selected.
- */
-export function modelFallback(r: Recipe, drawable: ModelClass = 'adult'): string | null {
-    if (!drawsAsPrimitive(r, drawable)) return null;
-    if (r.equipment === 'stroller') return `a stroller: ${NOT_ON_MODELS}, so this person is drawn as primitives`;
-    if (r.equipment !== 'none') return `a ${r.equipment}: mobility aids are ${NOT_ON_MODELS}, so this person is drawn as primitives`;
-    return `a ${BEHAVIORS[r.behavior].name} needs a ${r.modelClass} model and there is none yet, so this person is drawn as primitives`;
-}
-
-/** The same question without the reason: two comparisons, asked of every person on every frame. */
-export const drawsAsPrimitive = (r: Recipe, drawable: ModelClass = 'adult'): boolean =>
-    r.equipment !== 'none' || r.modelClass !== drawable;
 
 // ---------- the model's own body, from its data file ----------
 

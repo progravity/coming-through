@@ -4,9 +4,8 @@
  *
  * `resources/js/game/sim/` is pure by design -- no three.js, no DOM -- which is what lets `tests/js/determinism.test.ts`
  * run a full crowd for thousands of steps under `node --test` with no canvas anywhere. Two other
- * boundaries are already checked by reading the source this way: `tests/js/look.test.ts` pins that
- * nothing outside the comparator depends on it, and `tests/js/inspectable.test.ts` that no file in the
- * inspector's shell reaches an entity. This is the third, and it is the one that most needs
+ * boundary is already checked by reading the source this way: `tests/js/inspectable.test.ts` pins
+ * that no file in the inspector's shell reaches an entity. This is the second, and it is the one that most needs
  * checking rather than trusting, because **a breach here fails nothing.** Importing three.js under
  * node works: it builds a scene graph quite happily with no GL context, and these tests import it
  * themselves. A renderer dragged into the simulation would go green all the way, and would be found

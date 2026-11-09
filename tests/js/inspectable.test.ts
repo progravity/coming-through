@@ -17,10 +17,6 @@ import { measure, newBounds } from '../../resources/js/game/inspect/gizmos.ts';
 import { REST, clampView, frameFor, placeCamera, zoomAt } from '../../resources/js/game/inspect/stage.ts';
 import type { Extent, View } from '../../resources/js/game/inspect/stage.ts';
 import type { DrawnPart } from '../../resources/js/game/inspect/inspectable.ts';
-import { PERSON } from '../../resources/js/game/inspect/entities/person.ts';
-import { Subject } from '../../resources/js/game/inspect/subject.ts';
-import { BEHAVIOR_KEYS } from '../../resources/js/game/behaviors.ts';
-import { behaviorUnavailable } from '../../resources/js/game/composition.ts';
 import { INK, controlOf, defaultControls, findKey, overlaysOf } from '../../resources/js/game/inspect/inspectable.ts';
 import type { Cast, Inspectable } from '../../resources/js/game/inspect/inspectable.ts';
 import { ENTITIES, resolve } from '../../resources/js/game/inspect/registry.ts';
@@ -66,38 +62,6 @@ test('a lamp post casts its shadow under itself and not at the stage origin', ()
     const b = measure(parts, 0, parts.length, newBounds());
     assert.ok(Math.abs((b.footMinX + b.footMaxX) / 2 - 4) < 1e-9, 'the shadow slid off the lamp');
     assert.ok(b.footMaxX - b.footMinX > 0, 'the lamp casts no shadow at all');
-});
-
-test('the person cast puts the crowd\'s own people on the stage', () => {
-    const cast = PERSON.mount(new THREE.Scene());
-    const c = defaultControls(PERSON);
-    // Row mode is one per behavior profile a model can draw, as it was one per archetype.
-    const each = BEHAVIOR_KEYS.filter(k => behaviorUnavailable(k) === null);
-    cast.rebuild(7, PERSON.row, c);
-    cast.draw(0, BEHAVIOR_KEYS.map((_, i) => i * 1.15), 0);
-    for (let i = 0; i < PERSON.row; i++) {
-        const want = new Subject(7, i, { behavior: each[i % each.length] });
-        const got = cast.readout(i, 1.8);
-        assert.equal(got.title, want.profile.name, `figure ${i} is not ${each[i % each.length]}`);
-        // 18 is the true floor: torso, neck, head, both legs, both arms, both hands and both feet
-        // are put() unconditionally by drawPerson (even a seated rider's legs are repositioned
-        // rather than hidden), so anything under it can only mean the cast recorded nobody. The
-        // rest -- hat, hair, jacket, bag, accessory, mobility aid -- are each an independent roll,
-        // and at 200-1000 seeds every one of them being absent at once is common, not rare: a
-        // higher bound here would make this assertion fail for the *correct* output on a
-        // legitimate recipe roll, not for a broken cast.
-        assert.ok(cast.parts(i).length > 15, `figure ${i} drew ${cast.parts(i).length} parts`);
-    }
-});
-
-test('an axis override reaches the cast and nothing else does', () => {
-    const cast = PERSON.mount(new THREE.Scene());
-    const c = { ...defaultControls(PERSON), behavior: 'sudden-stopper', 'body-type': 'broad' };
-    cast.rebuild(3, 1, c);
-    cast.draw(0, [0], 0);
-    const out = cast.readout(0, 1.2);
-    assert.equal(new Map(out.rows).get('body type'), 'broad');
-    assert.equal(out.title, 'Sudden Stopper');
 });
 
 /**
@@ -163,10 +127,13 @@ test('a hypothetical entity is inspectable without the shell changing', () => {
 });
 
 test('every person URL that worked before still works', () => {
-    // Written when a person was an archetype: `arch` now arrives as the behavior profile that
-    // replaced it, `mob` as equipment, and `build` (the per-person preset, before it was called the
-    // Body Type) as `body-type`. An age loads and is ignored: age comes only from the model now.
+    // Written when a person was an archetype drawn from primitives: a person is the model now, the
+    // default entity. `arch` arrives as the behavior profile that replaced it, `mob` as equipment, and
+    // `build` (the per-person preset, before it was called the Body Type) as `body-type`. An age loads
+    // and is ignored: age comes only from the model now.
     const person = ENTITIES[0];
+    assert.equal(person.id, 'model');
+    assert.equal(resolve('person').entity, person);
     const url = '?inspect=1&seed=3&arch=dave&age=older&build=broad&mob=cane&walk=1' +
         '&paused=1&yaw=45&phase=0.5&gizmos=1&ink=0';
     const s = stateFor(person, 'single', url);
@@ -191,14 +158,15 @@ test('every person URL that worked before still works', () => {
         assert.equal(stateFor(person, 'single', `?arch=${arch}`).controls.behavior, behavior, arch);
     }
     assert.equal(stateFor(person, 'single', '?arch=seed').controls.behavior, 'seed');
-    assert.equal(s.controls.walk, true);
-    // A gated scalar in the URL means "hold it there", so `phase` alone turns the gait freeze on.
+    // The primitives' `walk` toggle, part gizmos and ink shell have nothing to switch on a model: the
+    // model walks by default, and the two overlays are not offered.
+    assert.equal(s.controls.walk, undefined);
+    assert.ok(!s.overlays.has('gizmos'));
+    // A gated scalar in the URL means "hold it there", so `phase` alone freezes the clip there.
     assert.equal(s.controls.phase, 0.5);
     assert.equal(s.controls.freeze, true);
     assert.equal(s.paused, true);
     assert.ok(Math.abs(s.yaw - Math.PI / 4) < 1e-9);
-    assert.ok(s.overlays.has('gizmos'));
-    assert.ok(!s.overlays.has('ink'));
 
     // And writing it back uses the same keys it was read from -- `freeze` is carried by `phase`,
     // never under its own name, and the default entity is never named.
@@ -206,8 +174,8 @@ test('every person URL that worked before still works', () => {
     assert.equal(q.get('entity'), null);
     assert.equal(q.get('freeze'), null);
     assert.equal(q.get('phase'), '0.500');
-    assert.equal(q.get('ink'), '0');
-    assert.equal(q.get('gizmos'), '1');
+    assert.equal(q.get('gizmos'), null);
+    assert.equal(q.get('walk'), null);
     assert.equal(q.get('yaw'), '45.0');
 });
 
@@ -487,7 +455,8 @@ test('the ink switch and the look are two statements in the URL, and both surviv
     // reconciling the button against a look that had not changed, and then written back out of the
     // address bar -- so the switch did not survive a reload and did not survive a rebuild either.
     // Reconciling belongs to a look *change*, and this pair has to be a fixed point without one.
-    const person = ENTITIES[0];
+    // A cart, because the ink switch is the world's: a model offers none on the stage.
+    const person = ENTITIES.find(e => e.id === 'kiosk') as Inspectable;
     const s = stateFor(person, 'single', '?ink=0');
     assert.equal(s.look, 'current');
     assert.equal(s.overlays.has(INK), false, 'the URL asked for no ink and did not get it');

@@ -11,10 +11,8 @@
  * when they reach the far end. A Group Walker brings their family, a Darter their Typical parent,
  * exactly as the spawner would.
  *
- * **Everyone is drawn from the model**, as on the stage: the lab shows people only as models. The
- * people the game would draw as primitives -- equipment users, and Darters until there is a child
- * model -- walk here as the model without their equipment, at the speed and with the collider their
- * equipment gives them, and the card says what the game does instead.
+ * **Everyone is drawn from the model**, as in the game; if the model does not load, nobody is drawn
+ * and the card says why.
  *
  * Read-only throughout, like the crowd view: it builds its own `Crowd` from the seed's streams and
  * shares nothing with any other page. It touches no hash: the game never builds this scene.
@@ -30,16 +28,13 @@ import { InfoPanel } from '../../inspect/info.ts';
 import type { InfoRow, InfoSection } from '../../inspect/inspectable.ts';
 import { queryOf, readState } from '../../inspect/state.ts';
 import { Subject, forced } from '../../inspect/subject.ts';
-import { ModelCrowd } from '../../modelcrowd/crowd.ts';
+import type { ModelCrowd } from '../../modelcrowd/crowd.ts';
 import type { Knobs } from '../../modelcrowd/crowd.ts';
-import { bodyOf, modelFallback } from '../../modelcrowd/body.ts';
-import { prepareClips, reportClips } from '../../modelcrowd/clips.ts';
-import { prepareRegions } from '../../modelcrowd/regions.ts';
+import { loadModel } from '../../modelcrowd/index.ts';
 import { lookNamed } from '../../render/look.ts';
 import { PERSON_MODELS, personModel } from '../../data/people.ts';
-import { CROWD_MODEL, fetchModel } from '../../render/model-file.ts';
-import { drawPerson, standingHeight } from '../../render/person.ts';
-import { PartPools } from '../../render/pools.ts';
+import { CROWD_MODEL } from '../../composition.ts';
+import { standingHeight } from '../../recipe.ts';
 import { Agent } from '../../sim/agent.ts';
 import type { AgentOptions } from '../../sim/agent.ts';
 import { Crowd } from '../../sim/crowd.ts';
@@ -161,25 +156,21 @@ export async function startPath(lab: Lab): Promise<void> {
     renderer.domElement.classList.add('stage');
     document.body.appendChild(renderer.domElement);
     const world = buildWorld();
-    const pools = new PartPools(world.scene);
     const look = lookNamed(SHIPPED_LOOK);
     world.dress(look);
-    pools.dress(look);
+    // The shipped look's ink, as the game wears it: the world's line and the people's shells together.
+    const inkOn = look?.inkOn ?? true;
+    world.setInk(inkOn);
 
     // ---------- the person's model, as the game draws people ----------
     const modelName = String(c.model) === 'seed' || PERSON_MODELS[String(c.model)] === undefined ? CROWD_MODEL : String(c.model);
     let models: ModelCrowd | null = null, modelNote = '';
     try {
-        const model = personModel(modelName);
-        const got = await fetchModel(model);
-        const regions = prepareRegions(model, got.scene);
         const knobs: Knobs = { ink: false, throttle: false, far: 15, every: 3 };
-        const clips = reportClips(prepareClips(model, got.scene, got.animations));
-        models = new ModelCrowd(world.scene, got, clips, knobs, regions.slots?.usable === true ? regions.paint : null, bodyOf(model));
-        models.everyone = true;
+        models = (await loadModel(personModel(modelName), world.scene, knobs)).crowd;
         modelNote = `${modelName}, as the game draws people`;
     } catch (e) {
-        modelNote = `the model did not load, so everyone is primitives: ${e instanceof Error ? e.message : String(e)}`;
+        modelNote = `the model did not load, so nobody can be drawn: ${e instanceof Error ? e.message : String(e)}`;
     }
 
     // ---------- the scene: a crowd of a few, on the real walkway ----------
@@ -190,7 +181,6 @@ export async function startPath(lab: Lab): Promise<void> {
     const poses: Pose[] = [];
 
     function build(at: number): void {
-        for (const a of crowd.agents) pools.freeSlot(a.slot);
         const streams = makeStreams(st.seed);
         crowd = new Crowd(streams);
         const make = (i: number, s: number, n: number, dir: 1 | -1, opts: AgentOptions): Agent => {
@@ -239,7 +229,6 @@ export async function startPath(lab: Lab): Promise<void> {
     function stepOnce(): void {
         crowd.snapshot();
         crowd.step(player, () => undefined, false);
-        for (const slot of crowd.released) pools.freeSlot(slot);
         steps++;
         const p = person;
         if (p === null || p.dead) { build(0); return; }
@@ -349,7 +338,6 @@ export async function startPath(lab: Lab): Promise<void> {
         const frame = PATH.frameAt(here.s, _frame);
         const forces = steering(p);
         const speed = Math.hypot(p.vx, p.vz);
-        const fallback = models === null ? 'everyone is primitives: the model did not load' : modelFallback(p.recipe, models.drawable);
         const rows: InfoRow[] = [
             { k: 'speed', v: `${n2(speed)} m/s · ${Math.round((speed / p.speed) * 100)}% of their ${n2(p.speed)} m/s pace` },
             { k: 'along', v: `s ${n2(here.s)} of ${FROM_S} to ${TO_S} · n ${n2(here.n)} across (half width ${n2(frame.w)})` },
@@ -357,7 +345,7 @@ export async function startPath(lab: Lab): Promise<void> {
             { k: 'stops', v: p.stopUntil > p.t ? `stopped, ${n2(p.stopUntil - p.t, 1)} s more · ${stops} so far` : Number.isFinite(p.nextStop) ? `${stops} so far · next in ${n2(Math.max(0, p.nextStop - p.t), 1)} s` : 'never stops' },
             { k: 'weaving', v: p.leader !== null || p.parent !== null ? 'follows their group or parent' : `heading for lane n ${n2(p.wanderN)} · next pick in ${n2(Math.max(0, p.nextWander - p.t), 1)} s` },
             { k: 'neighbors', v: `${forces.near} within their ${n2(p.sepR)} m separation radius` },
-            ...(fallback === null ? [] : [{ k: 'in the game', v: models === null ? fallback : `${fallback}; here they are the model${p.recipe.equipment !== 'none' ? `, without the ${p.recipe.equipment}, moving as its user does` : ''}` }]),
+            ...(models === null ? [{ k: 'model', v: modelNote }] : []),
         ];
         const state: InfoSection = {
             id: 'state', rows,
@@ -415,15 +403,7 @@ export async function startPath(lab: Lab): Promise<void> {
         const agents = crowd.agents;
         while (poses.length < agents.length) poses.push(newPose());
         for (let i = 0; i < agents.length; i++) lerpPose(poses[i], agents[i].prev, agents[i], alpha);
-        if (models !== null) models.draw(agents, alpha, player, pools.inkOn);
-        // Primitives only if the model did not load at all.
-        if (models === null) {
-            for (let i = 0; i < agents.length; i++) {
-                const p = poses[i];
-                drawPerson(pools, agents[i].slot, agents[i], p, t, PATH.surfaceY(p.x, p.z));
-            }
-        }
-        pools.commit();
+        if (models !== null) models.draw(agents, alpha, player, inkOn);
 
         const i = person === null ? -1 : agents.indexOf(person);
         const pose = i >= 0 ? poses[i] : null;

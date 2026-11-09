@@ -8,12 +8,9 @@
  * replaces.
  */
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { test } from 'node:test';
-import { join } from 'node:path';
 import * as THREE from 'three';
 import { LOOKS, LOOK_NAMES, SHELL_FLOOR, SHELL_OVER, inkClearance, lookNamed } from '../../resources/js/game/render/look.ts';
-import { PartPools } from '../../resources/js/game/render/pools.ts';
 import { buildEdge } from '../../resources/js/game/world/kit.ts';
 import { edgePlans } from '../../resources/js/game/world/plan.ts';
 import { worldToon } from '../../resources/js/game/world/material.ts';
@@ -22,7 +19,7 @@ import { buildGround } from '../../resources/js/game/world/ground.ts';
 
 test('the six are one list, named once, in the order their panels print', () => {
     assert.deepEqual(LOOK_NAMES, ['current', 'toon-bare', 'soft-ink', 'soft', 'soft-thin', 'matcap']);
-    // The slugs are published -- they are `?look=` names and the comparator's captions -- so a
+    // The slugs are published -- they are `?look=` names and the labs' -- so a
     // duplicate or a rename is a break, not a tidy-up.
     assert.equal(new Set(LOOK_NAMES).size, LOOKS.length);
     for (const slug of LOOK_NAMES) assert.equal(lookNamed(slug)?.slug, slug);
@@ -73,128 +70,6 @@ test('the ink clearance folds a weight in the way the old sweep did', () => {
     // And it cannot invert a shell however negative the weight is.
     assert.ok(inkClearance(SHELL_OVER, -10) >= SHELL_OVER * SHELL_FLOOR - 1e-12);
     assert.ok(inkClearance(SHELL_OVER, -10) > 0);
-});
-
-/** The shell growth the old sweep produced, for one axis, so the folded version can be held to it. */
-function sweptGrowth(size: number, weight: number): number {
-    const shipped = 1.06 + SHELL_OVER / size;      // what put() writes with no look
-    const len = size * shipped;                    // the shell column's length
-    return Math.max(len + weight, len * SHELL_FLOOR) / size;
-}
-
-test('a dressed pool grows its shells exactly as the sweep used to', () => {
-    const pools = new PartPools(new THREE.Scene());
-    const thin = lookNamed('soft-thin');
-    assert.ok(thin !== null);
-    // A thigh, a hand and a lens: the sizes where a constant clearance behaves differently, and
-    // where the floor is the difference between a finer line and an inside-out shell.
-    for (const size of [0.3, 0.06, 0.012]) {
-        const want = sweptGrowth(size, thin.inkWeight ?? 0);
-        const got = pools.shellGrowth(size);       // shipped, before dressing
-        assert.ok(Math.abs(got - (1.06 + SHELL_OVER / size)) < 1e-12, `undressed growth moved at ${size}`);
-        pools.dress(thin);
-        assert.ok(Math.abs(pools.shellGrowth(size) - want) < 1e-9,
-            `at size ${size} the fold gave ${pools.shellGrowth(size)}, the sweep gave ${want}`);
-        pools.dress(null);
-        assert.ok(Math.abs(pools.shellGrowth(size) - got) < 1e-12, `undressing did not restore at ${size}`);
-    }
-});
-
-test('dressing swaps the body materials and puts the shipped ones back', () => {
-    const scene = new THREE.Scene();
-    const pools = new PartPools(scene);
-    const bodies = scene.children.filter(
-        (c): c is THREE.InstancedMesh => c instanceof THREE.InstancedMesh && (c.material as THREE.Material).side !== THREE.BackSide,
-    );
-    assert.ok(bodies.length > 0, 'the pools put no body meshes in the scene');
-    const shipped = bodies.map(m => m.material as THREE.Material);
-
-    // `soft-ink`, not `matcap`: a matcap body paints a canvas texture, which needs a `document`
-    // this suite's node runtime does not have -- the same reason the look above skips calling
-    // matcap's `body` under node. `soft-ink` exercises the identical `dress` swap-and-restore path.
-    pools.dress(lookNamed('soft-ink'));
-    for (let i = 0; i < bodies.length; i++) {
-        assert.notEqual(bodies[i].material, shipped[i], 'a body kept its shipped material under soft-ink');
-    }
-    // `current` declares nothing, and nothing means *as shipped* -- not "as it currently is".
-    pools.dress(lookNamed('current'));
-    for (let i = 0; i < bodies.length; i++) {
-        assert.equal(bodies[i].material, shipped[i], 'the shipped material did not come back');
-    }
-});
-
-test('a look that turns the ink off is visible in inkOn, so the world and the UI can agree', () => {
-    const pools = new PartPools(new THREE.Scene());
-    assert.equal(pools.inkOn, true);
-    pools.dress(lookNamed('toon-bare'));
-    assert.equal(pools.inkOn, false);
-    pools.dress(lookNamed('current'));
-    assert.equal(pools.inkOn, true, 'current did not bring the ink back');
-});
-
-test('setInk clears a shell on a real transition but leaves one alone on a same-state call', () => {
-    // The shell meshes are the pools' own `InstancedMesh`es, told apart from the body meshes the
-    // same way the dressing test above tells them apart -- by their back-face ink material.
-    const scene = new THREE.Scene();
-    const pools = new PartPools(scene);
-    const shells = scene.children.filter(
-        (c): c is THREE.InstancedMesh => c instanceof THREE.InstancedMesh && (c.material as THREE.Material).side === THREE.BackSide,
-    );
-    assert.ok(shells.length > 0, 'the pools put no shell meshes in the scene');
-    const shell = shells[0];
-    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
-
-    // off -> on must still clear: a matrix left over from before ink went off is the stale-shell
-    // bug the clear exists to prevent, and the guard must never skip this edge.
-    pools.setInk(false);
-    const stale = new THREE.Matrix4().makeTranslation(9, 9, 9);
-    shell.setMatrixAt(0, stale);
-    pools.setInk(true);
-    const afterTransition = new THREE.Matrix4();
-    shell.getMatrixAt(0, afterTransition);
-    assert.ok(afterTransition.equals(zero), 'an off-to-on setInk did not clear a stale shell');
-
-    // on -> on must be inert: ink is already on, so a second setInk(true) is not a transition and
-    // must not touch a shell that `put` is already maintaining -- that is the blank frame the guard
-    // removes, and the behaviour the guard changed.
-    const kept = new THREE.Matrix4().makeTranslation(1, 2, 3);
-    shell.setMatrixAt(0, kept);
-    pools.setInk(true);
-    const afterNoop = new THREE.Matrix4();
-    shell.getMatrixAt(0, afterNoop);
-    assert.ok(afterNoop.equals(kept), 'a same-state setInk cleared a shell it should have left alone');
-});
-
-/** Every `.ts` file under `resources/js/game/`, recursively. */
-function sources(dir: string, out: string[] = []): string[] {
-    for (const name of readdirSync(dir)) {
-        const full = join(dir, name);
-        if (statSync(full).isDirectory()) sources(full, out);
-        else if (name.endsWith('.ts')) out.push(full);
-    }
-    return out;
-}
-
-test('nothing outside the comparator depends on the comparator', () => {
-    // A dev tool should be reachable, not load-bearing. The one dependency there was -- the game
-    // reaching in for the treatments -- is what moving them was for, and a dependency nobody is
-    // watching grows back the first time someone finds a useful helper in there.
-    const root = new URL('../../resources/js/game/', import.meta.url).pathname;
-    let checked = 0;
-    for (const file of sources(root)) {
-        const rel = file.slice(root.length);
-        if (rel.startsWith('compare/')) continue;
-        const src = readFileSync(file, 'utf8');
-        const reaches = [...src.matchAll(/(?:from|import)\s*\(?\s*['"]([^'"]+)['"]/g)]
-            .map(m => m[1])
-            .filter(spec => spec.includes('compare/'));
-        // main.ts names it to *open* it -- the same line that opens the inspector. That is the
-        // entry point being an entry point, not a feature depending on the tool's contents.
-        const allowed = rel === 'main.ts' ? ['./compare/index.ts'] : [];
-        assert.deepEqual(reaches, allowed, `${rel} reaches into the comparator: ${reaches.join(', ')}`);
-        checked++;
-    }
-    assert.ok(checked > 20, `only scanned ${checked} files under resources/js/game/`);
 });
 
 /** Every body mesh one instanced layer put under a scene: its shells wear the back-face ink. */

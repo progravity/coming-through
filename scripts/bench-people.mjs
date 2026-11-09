@@ -1,11 +1,8 @@
-// The `?people=` experiment's sweep: both crowd renderers at several crowd sizes, with ink and
-// (for the model) the animation throttle on and off, each as its own ?stress=1&crowd=N run.
+// The model crowd's sweep: several crowd sizes, with ink and the animation throttle on and off, each
+// as its own ?stress=1&crowd=N run.
 //
 // Usage: npm run dev & node scripts/bench-people.mjs [https://coming-through.test/play] [capSeconds]
-//        node scripts/bench-people.mjs https://coming-through.test/play 30 --gpu --sizes=60,190 --only=both
-//
-// Models only by default, the way the game draws people; --only=prim runs the primitives alone and
-// --only=both sweeps the two side by side for comparison.
+//        node scripts/bench-people.mjs https://coming-through.test/play 30 --gpu --sizes=60,190
 //        node scripts/bench-people.mjs https://coming-through.test/play 45 --model=casual-man-low   (a model ID: resources/js/game/data/people/<id>.json)
 //
 // Each run waits for a few settling frames, then averages over the frames that follow, read off the
@@ -16,7 +13,7 @@
 //   frame   wall time per frame: everything, GPU included. Under headless SwiftShader that is
 //           software rasterisation and says nothing about a real GPU. --gpu runs Chrome headed on
 //           the real one, which is the only way to get a frame column worth comparing.
-//   pose    CPU only: posing primitives into instance buffers, or placing and animating clones.
+//   pose    CPU only: placing and animating the clones.
 //   render  CPU only, pose included: the time renderer.render takes to *submit* the frame. The GPU
 //           finishes later and asynchronously, so its cost shows in `frame`, never here.
 //   calls, tris, anim   exact counts from the last frame.
@@ -29,13 +26,11 @@ const [base = 'https://coming-through.test/play', secs = '60'] = args.filter(a =
 // The game page with this query: a bare origin means its /play page, and a trailing slash is dropped.
 const gamePage = (base, query) => { const u = new URL(base); u.pathname = u.pathname === '/' ? '/play' : u.pathname.replace(/\/$/, ''); u.search = query; return u.href; };
 const sizes = (opt('sizes') ?? '40,60,80,120,190').split(',').map(Number);
-const only = opt('only') ?? 'model';
 const model = opt('model');
 
 const runs = [];
 for (const crowd of sizes) {
-    if (only !== 'model') for (const ink of [false, true]) runs.push({ people: 'prim', crowd, ink, throttle: false });
-    if (only !== 'prim') for (const ink of [false, true]) for (const throttle of [false, true]) runs.push({ people: 'model', crowd, ink, throttle });
+    for (const ink of [false, true]) for (const throttle of [false, true]) runs.push({ people: 'model', crowd, ink, throttle });
 }
 
 const CH = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -71,7 +66,7 @@ for (const run of runs) {
     // The shipped look has no ink anywhere; `current` is the shipped look with it, on the world and the people alike.
     const url = gamePage(base, `stress=1&tier=high&people=${run.people}&crowd=${run.crowd}`)
         + (run.ink ? '&look=current' : '') + (run.throttle ? '&throttle=1' : '')
-        + (model !== undefined && run.people === 'model' ? `&model=${encodeURIComponent(model)}` : '');
+        + (model !== undefined ? `&model=${encodeURIComponent(model)}` : '');
     const { result: { targetId } } = await send('Target.createTarget', { url: 'about:blank' });
     const { result: { sessionId } } = await send('Target.attachToTarget', { targetId, flatten: true });
     await send('Runtime.enable', {}, sessionId);
@@ -98,7 +93,7 @@ for (const run of runs) {
     const row = {
         ...run, frames: n, frameMs: per('totalFrameMs'), simMs: per('totalSimMs'), poseMs: per('totalPoseMs'),
         renderMs: per('totalRenderMs'), calls: b.s.drawCalls, tris: b.s.triangles, onPath: b.s.people,
-        animated: b.p?.renderer === 'model' ? b.p.animated : null,
+        animated: b.p?.animated ?? null,
     };
     rows.push(row);
     // Each row as soon as it is measured, so a sweep that dies late still leaves its numbers behind.
@@ -113,7 +108,7 @@ console.log('  ' + ['renderer'.padEnd(9), col('crowd', 5), col('ink', 4), col('t
     col('sim', 6), col('pose', 6), col('render', 7), col('calls', 6), col('tris', 7), col('anim', 5), col('n', 4)].join(' '));
 for (const r of rows) {
     console.log('  ' + [r.people.padEnd(9), col(r.crowd, 5), col(r.ink ? 'on' : 'off', 4),
-        col(r.people === 'model' ? (r.throttle ? 'on' : 'off') : '-', 4), col((1000 / r.frameMs).toFixed(1), 6),
+        col(r.throttle ? 'on' : 'off', 4), col((1000 / r.frameMs).toFixed(1), 6),
         col(r.frameMs.toFixed(0), 8), col(r.simMs.toFixed(2), 6), col(r.poseMs.toFixed(2), 6), col(r.renderMs.toFixed(2), 7),
         col(r.calls, 6), col(`${(r.tris / 1e6).toFixed(2)}M`, 7), col(r.animated ?? '-', 5), col(r.frames, 4)].join(' '));
 }

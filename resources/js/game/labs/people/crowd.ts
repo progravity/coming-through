@@ -6,9 +6,9 @@
  * **It is the game's crowd, not a picture of one.** It builds a `Simulation` from a seed exactly as
  * the game does, primes it exactly as the game does, and steps it with the command the game sends
  * between runs -- the player idle on the start pad, nobody scoring -- so what walks here is what
- * walks there for that seed and crowd size. It draws the world with `buildWorld` and the people
- * with the model crowd -- the way the game draws people -- falling back to `drawPerson` exactly where
- * the game does, under the look the game ships in. The one thing it adds to the simulation is an optional behavior mix,
+ * walks there for that seed and crowd size. It draws the world with `buildWorld` and every person,
+ * the idle player too, with the model crowd -- the way the game draws people -- under the look the
+ * game ships in; if the model does not load, nobody is drawn and the card says why. The one thing it adds to the simulation is an optional behavior mix,
  * which changes only what each person's behavior roll selects; without one the crowd is the game's exactly.
  *
  * Its own instance means it shares nothing with any other page: the simulation, the world and the
@@ -28,16 +28,12 @@ import { personBehavior, personChoices, personGeometry, personIdentity, personPr
 import type { Who } from '../../inspect/entities/person.ts';
 import { InfoPanel } from '../../inspect/info.ts';
 import type { InfoRow, InfoSection, Readout } from '../../inspect/inspectable.ts';
-import { ModelCrowd } from '../../modelcrowd/crowd.ts';
+import type { ModelCrowd } from '../../modelcrowd/crowd.ts';
 import type { Knobs } from '../../modelcrowd/crowd.ts';
-import { bodyOf, drawsAsPrimitive, modelFallback } from '../../modelcrowd/body.ts';
-import { prepareClips, reportClips } from '../../modelcrowd/clips.ts';
-import { prepareRegions } from '../../modelcrowd/regions.ts';
+import { loadModel } from '../../modelcrowd/index.ts';
 import { lookNamed } from '../../render/look.ts';
 import { personModel } from '../../data/people.ts';
-import { fetchModel } from '../../render/model-file.ts';
-import { drawPerson } from '../../render/person.ts';
-import { PartPools } from '../../render/pools.ts';
+import { standingHeight } from '../../recipe.ts';
 import type { Agent } from '../../sim/agent.ts';
 import { lerpPose, newPose } from '../../sim/pose.ts';
 import type { Pose } from '../../sim/pose.ts';
@@ -46,7 +42,6 @@ import type { StepCommand } from '../../sim/simulation.ts';
 import { avoidPlayer, obstacleRepulsion, separation, wallRepulsion } from '../../sim/steering.ts';
 import type { Steer } from '../../sim/steering.ts';
 import { buildWorld } from '../../world/index.ts';
-import { PLAYER_SLOT } from '../../world/layout.ts';
 import { PATH, newPathFrame, newPathPoint } from '../../world/path.ts';
 import { LabChrome } from '../chrome.ts';
 import { button, card, cssHex, el, label, numberBox, row, segmented } from '../dom.ts';
@@ -95,26 +90,23 @@ export async function startCrowd(lab: Lab): Promise<void> {
     document.body.appendChild(renderer.domElement);
 
     const world = buildWorld();
-    const pools = new PartPools(world.scene);
     const look = lookNamed(SHIPPED_LOOK);
     world.dress(look);
-    pools.dress(look);
+    // The view's ink switch, which the world's line and the people's shells share, as in the game.
+    let inkOn = look?.inkOn ?? true;
+    world.setInk(inkOn);
 
-    // ---------- the model crowd: the game's renderer, with its fallback ----------
+    // ---------- the model crowd: the game's renderer ----------
     let models: ModelCrowd | null = null;
     let modelNote = '';
     {
         try {
-            const model = personModel(state.model);
-            const got = await fetchModel(model);
-            const regions = prepareRegions(model, got.scene);
             const knobs: Knobs = { ink: false, throttle: false, far: 15, every: 3 };
-            const body = bodyOf(model);
-            const clips = reportClips(prepareClips(model, got.scene, got.animations));
-            models = new ModelCrowd(world.scene, got, clips, knobs, regions.slots?.usable === true ? regions.paint : null, body);
-            modelNote = `${state.model} · ${count(models.trisPerModel)} triangles and ${models.bones} bones each · ${regions.summary} · a ${body.build} ${body.ageClass} model, Body Type from each recipe`;
+            const got = await loadModel(personModel(state.model), world.scene, knobs);
+            models = got.crowd;
+            modelNote = `${state.model} · ${count(models.trisPerModel)} triangles and ${models.bones} bones each · ${got.regions.summary} · a ${got.body.build} ${got.body.ageClass} model, Body Type from each recipe`;
         } catch (e) {
-            modelNote = `the model did not load, so the crowd is primitives: ${e instanceof Error ? e.message : String(e)}`;
+            modelNote = `the model did not load, so nobody can be drawn: ${e instanceof Error ? e.message : String(e)}`;
         }
     }
 
@@ -131,7 +123,6 @@ export async function startCrowd(lab: Lab): Promise<void> {
     function stepOnce(): void {
         sim.step(cmd);
         stats.afterStep(sim);
-        for (const slot of sim.crowd.released) pools.freeSlot(slot);
     }
 
     /** Build the crowd the state names from scratch, and run it on to `at` steps past its priming. */
@@ -140,7 +131,6 @@ export async function startCrowd(lab: Lab): Promise<void> {
         sim = new Simulation(state.seed, { mix: mixOf(state.mix) });
         sim.prime(state.crowd);
         stats = new CrowdStats();
-        pools.freeAll();
         acc = 0; alpha = 0;
         for (let i = 0; i < at; i++) stepOnce();
     }
@@ -294,7 +284,7 @@ export async function startCrowd(lab: Lab): Promise<void> {
         sizeBox.value = String(state.crowd);
         sizeRange.value = String(state.crowd);
         const ink = state.overlays.has('ink');
-        if (ink !== pools.inkOn) { pools.setInk(ink); world.setInk(ink); }
+        if (ink !== inkOn) { inkOn = ink; world.setInk(ink); }
         writeSoon();
     }
 
@@ -349,7 +339,7 @@ export async function startCrowd(lab: Lab): Promise<void> {
                 `${weights[i]} · ${Math.round((weights[i] / Math.max(1, wsum)) * 100)}%`,
             ]),
         };
-        const renderer_ = models !== null ? `model crowd · ${modelNote}` : `primitives · the shared pools`;
+        const renderer_ = models !== null ? `model crowd · ${modelNote}` : `nobody drawn · ${modelNote}`;
         return {
             title: 'Crowd',
             sub: `seed ${state.seed} · step ${sim.steps - PRIME_STEPS} · ${n2(s.simSeconds, 1)} s simulated`,
@@ -359,7 +349,6 @@ export async function startCrowd(lab: Lab): Promise<void> {
                 ['peak cell', `${s.peak} in one ${cell}×${cell} m cell · ${s.crowded} cells hold 3 or more`],
                 ['stopped', `${s.stopped} holding a stop · ${s.standing} standing still`],
                 ['contacts', `${s.contactsNow} pairs touching · ${n2(s.contactsPerSecond, 1)} new a second · ${s.contactsTotal} since the view began`],
-                ...(models === null ? [] : [['as primitives', `${models.fallback}: ${models.fallbackEquipment} with equipment, not yet supported on models; ${models.fallback - models.fallbackEquipment} Darters, who need a child model`] as const]),
             ],
             sections: [
                 { id: 'state', title: 'Behaviors', tables: [table] },
@@ -439,12 +428,15 @@ export async function startCrowd(lab: Lab): Promise<void> {
         open.className = 'btnlink';
         selActions.append(follow, open, button('clear', () => select(-1)));
         const who = whoOf(sim.seed, a);
-        const fallback = models !== null ? modelFallback(a.recipe, models.drawable) : null;
+        const drawn = models?.heights(a.recipe);
+        const geometry = drawn === undefined
+            ? { height: `${n2(standingHeight(a.recipe))} m` }
+            : { height: `${n2(drawn.height)} m, as ${state.model} is drawn for them`, eye: drawn.eye };
         selInfo.show({
             title: a.A.name,
             sub: `seed ${sim.seed} · agent:${a.index}`,
-            rows: fallback === null ? [] : [['drawn as', `${fallback}; the collider is sized for the equipment`]],
-            sections: [stateSection(a), personIdentity(who), personChoices(who), personBehavior(who), personRecipe(who), personGeometry(who), personProvenance(who)],
+            rows: [],
+            sections: [stateSection(a), personIdentity(who), personChoices(who), personBehavior(who), personRecipe(who), personGeometry(who, geometry), personProvenance(who)],
         });
     }
 
@@ -540,18 +532,12 @@ export async function startCrowd(lab: Lab): Promise<void> {
         const agents = sim.crowd.agents;
         while (poses.length < agents.length) poses.push(newPose());
         for (let i = 0; i < agents.length; i++) lerpPose(poses[i], agents[i].prev, agents[i], alpha);
-        if (models !== null) models.draw(agents, alpha, sim.player, pools.inkOn);
-        // The primitives draw anyone the models cannot draw yet, and everyone if the model did not
-        // load -- exactly as the game does.
-        for (let i = 0; i < agents.length; i++) {
-            if (models !== null && !drawsAsPrimitive(agents[i].recipe, models.drawable)) continue;
-            const p = poses[i];
-            drawPerson(pools, agents[i].slot, agents[i], p, t, PATH.surfaceY(p.x, p.z));
-        }
         const pl = sim.player;
         lerpPose(playerPose, pl.prev, pl, alpha);
-        drawPerson(pools, PLAYER_SLOT, pl, playerPose, t, PATH.surfaceY(playerPose.x, playerPose.z));
-        pools.commit();
+        // Everyone is a model, the player idle on the start pad among them, as the game draws them.
+        if (models !== null) {
+            models.draw(agents, alpha, pl, inkOn, { recipe: pl.recipe, view: playerPose, speed: Math.hypot(pl.vx + pl.kx, pl.vz + pl.kz), time: sim.steps * SIM_DT });
+        }
         const poseMs = performance.now() - poseStart;
 
         const o = state.overlays;

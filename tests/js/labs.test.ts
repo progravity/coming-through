@@ -18,10 +18,11 @@ import { KIOSK_ARCHETYPES, KIOSK_SPANS, KIOSK_TYPES, kiosks } from '../../resour
 import { RESTAURANT_ARCHETYPES } from '../../resources/js/game/world/restaurants.ts';
 import { SHOP_ARCHETYPES } from '../../resources/js/game/world/shops.ts';
 import type { Family } from '../../resources/js/game/entity.ts';
-import type { Control, Site } from '../../resources/js/game/inspect/inspectable.ts';
-import { personBehavior, personChoices, primitiveHeight } from '../../resources/js/game/inspect/entities/person.ts';
+import type { Control, Inspectable, Site } from '../../resources/js/game/inspect/inspectable.ts';
+import { personBehavior, personChoices } from '../../resources/js/game/inspect/entities/person.ts';
+import { standingHeight } from '../../resources/js/game/recipe.ts';
 import { overlaysOf } from '../../resources/js/game/inspect/inspectable.ts';
-import { ENTITIES, modelOf } from '../../resources/js/game/inspect/registry.ts';
+import { ENTITIES, modelOf, resolve } from '../../resources/js/game/inspect/registry.ts';
 import { Subject } from '../../resources/js/game/inspect/subject.ts';
 import { queryOf, readState, resolveIn } from '../../resources/js/game/inspect/state.ts';
 import { LABS, labFor, primaries, viewOf } from '../../resources/js/game/labs/labs.ts';
@@ -38,8 +39,8 @@ test('every family has a category, and every category a lab', () => {
 
 test('the labs partition the registry: every entity is shown in exactly one, or as its model', () => {
     const shown = CATEGORIES.flatMap(c => LABS[c].entities.map(e => e.id));
-    // The primitive person is the game's fallback and is shown nowhere: the people lab shows models only.
-    assert.deepEqual(shown.slice().sort(), ENTITIES.map(e => e.id).filter(id => id !== 'person').sort());
+    // Every person is a model, so there is no primitive person to leave out: each entity is in one lab.
+    assert.deepEqual(shown.slice().sort(), ENTITIES.map(e => e.id).sort());
     for (const e of ENTITIES) {
         const lab = labFor(e);
         assert.ok(lab.entities.includes(e) || (lab.modelsOnly === true && lab.entities.some(m => m.modelOf === e.id)),
@@ -50,9 +51,11 @@ test('the labs partition the registry: every entity is shown in exactly one, or 
     assert.deepEqual(LABS.buildings.entities.map(e => e.id), ['shop', 'restaurant']);
 });
 
-test('a model is a source of the thing it draws, and the only thing a models-only lab picks', () => {
+test('a person is the model, and the only thing a models-only lab picks', () => {
     assert.deepEqual(primaries(LABS.people).map(e => e.id), ['model']);
-    assert.equal(modelOf('person')?.id, 'model');
+    // The primitive person is gone; its name opens the model, and nothing is a model of it.
+    assert.equal(resolve('person').entity.id, 'model');
+    assert.equal(modelOf('person'), undefined);
     for (const e of ENTITIES) {
         if (e.modelOf === undefined) continue;
         const of = ENTITIES.find(o => o.id === e.modelOf);
@@ -104,8 +107,9 @@ test('a lab writes its address without naming its default, and a model as its so
     const prim = readState('single', '?source=prim', LABS.people);
     assert.equal(prim.entity, 'model');
     assert.equal(queryOf(prim, m, LABS.people).get('source'), null);
-    // Outside the labs a model is still its entity plus a source.
-    assert.equal(queryOf(readState('single', '?source=model'), m).get('source'), 'model');
+    // Outside the labs too: the model is the default entity, standing in for nothing.
+    assert.equal(queryOf(readState('single', '?source=model'), m).get('source'), null);
+    assert.equal(queryOf(readState('single', '?source=model'), m).get('entity'), null);
     assert.equal(q.get('view'), 'row');
     assert.equal(q.get('seed'), '4');
 
@@ -255,7 +259,7 @@ test('the model source lists what models cannot do yet, and an address cannot sw
     }
     // Part gizmos mark the primitives' parts, which a model does not have.
     assert.deepEqual(overlaysOf(m).map(o => o.id).filter(id => ['gizmos', 'origins'].includes(id)), []);
-    assert.ok(overlaysOf(ENTITIES[0]).some(o => o.id === 'gizmos'), 'the primitives lost their gizmos');
+    assert.ok(overlaysOf(ENTITIES.find(e => e.id === 'kiosk') as Inspectable).some(o => o.id === 'gizmos'), 'the fixtures lost their gizmos');
 });
 
 test('a person shows each choice apart, the behavior with its settings, and a height its parts', () => {
@@ -272,11 +276,9 @@ test('a person shows each choice apart, the behavior with its settings, and a he
     for (const k of ['behavior', 'body type', 'skin tone', 'hair', 'equipment']) assert.ok(choices.includes(k), `no ${k} choice`);
     assert.ok(!choices.includes('age'), 'age is a choice again: it comes only from the model');
     assert.ok(!keys.includes('color family') && !keys.includes('height'), 'appearance crept into the behavior');
-    // The height adds up: skeleton × height roll × the figure's share, to the standing height it states.
-    const h = primitiveHeight(who.recipe);
-    const nums = [...h.matchAll(/(\d+\.\d+)/g)].map(x => Number(x[1]));
-    assert.ok(Math.abs(nums[1] * nums[2] * nums[3] - nums[0]) < 0.02, h);
-    assert.match(h, /Adult$/);
+    // The height a model is drawn at is the recipe's own, inside the adult range.
+    const h = standingHeight(who.recipe);
+    assert.ok(h > 1.5 && h < 1.95, `${h} m`);
 });
 
 test("the Individual view offers every choice, in order, each with the seed's own roll first", () => {

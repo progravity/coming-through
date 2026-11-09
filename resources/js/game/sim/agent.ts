@@ -19,7 +19,7 @@ import type { Pose } from './pose.ts';
 import { avoidPlayer, obstacleRepulsion, separation, steerToward, wallRepulsion } from './steering.ts';
 import type { Steer } from './steering.ts';
 
-/** Anything drawPerson needs to pose a body. Shared by agents and the player. */
+/** Anything the renderer needs to pose a body. Shared by agents and the player. */
 export interface Poseable extends Pose {
     recipe: Recipe;
     /** Phase offset for idle fidget and balloon sway; from the cosmetic stream. */

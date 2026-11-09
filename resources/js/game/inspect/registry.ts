@@ -10,16 +10,18 @@
 import { FURNITURE } from './entities/furniture.ts';
 import { KIOSK } from './entities/kiosk.ts';
 import { MODEL } from './entities/model.ts';
-import { PERSON } from './entities/person.ts';
 import { RESTAURANT } from './entities/restaurant.ts';
 import { SHOP } from './entities/shop.ts';
 import { RESTAURANT_TYPES } from '../world/restaurants.ts';
 import type { Controls, Inspectable } from './inspectable.ts';
 
-export const ENTITIES: readonly Inspectable[] = [PERSON, KIOSK, FURNITURE, SHOP, RESTAURANT, MODEL];
+export const ENTITIES: readonly Inspectable[] = [MODEL, KIOSK, FURNITURE, SHOP, RESTAURANT];
 
-/** What an address with no `entity` named means outside a lab. Every URL written before this existed. */
-export const DEFAULT_ENTITY = 'person';
+/**
+ * What an address with no `entity` named means outside a lab: a person, as every URL written before
+ * entities existed meant. A person is drawn from a model now, so it is the model.
+ */
+export const DEFAULT_ENTITY = 'model';
 
 /**
  * Names that select an entity with some of its controls already pinned.
@@ -28,6 +30,9 @@ export const DEFAULT_ENTITY = 'person';
  * know what a bench is. An explicit control in the URL still wins over a pin.
  */
 export const ALIASES: Readonly<Record<string, { entity: string; controls: Controls }>> = {
+    // The person, which was its own entity drawn from primitives until every person became a model.
+    // An address naming it opens the model, the only way a person is drawn.
+    person: { entity: 'model', controls: {} },
     bench: { entity: 'furniture', controls: { kind: 'bench' } },
     lamp: { entity: 'furniture', controls: { kind: 'lamp' } },
     bin: { entity: 'furniture', controls: { kind: 'bin' } },

@@ -13,7 +13,7 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   Herd may already be running it for this site: Herd's dev tools started `php artisan dev` on their
   own when the site was linked. Without a dev server the page falls back to the last
   `npm run build`.
-- **Every game mode is a query string on that page:** `/play?compare=1`, `/play?people=model`,
+- **Every game mode is a query string on that page:** `/play?people=model`,
   `/play?stress=1`, `/play?look=current`, `/play?debug=1`. See "URL parameters" below. `/` is the
   starter kit's welcome page, with login and registration.
 - **The labs** are behind the login, at `/lab` (an index), `/lab/people`, `/lab/fixtures` and
@@ -30,7 +30,7 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   incoming connections for `php` and `node` the first time. Two dev servers for one checkout fight
   over `public/hot`, which is why the other one has to stop.
 - **Tests:** `npm test` type-checks the engine and its tests, runs the Math.random check, and then
-  runs everything under `tests/js/` with `node --test` (309 tests). `npm run lint` is the first two
+  runs everything under `tests/js/` with `node --test` (293 tests). `npm run lint` is the first two
   on their own. `composer test` is the Laravel side: Pint, PHPStan and Pest (`tests/Feature/`,
   `tests/Unit/`), against SQLite in memory. Both are plain commands and both must pass.
 - **Node is pinned to 26.13.0** in `.nvmrc` (and `^26.13.0` in `package.json` `engines`). Herd's
@@ -167,9 +167,9 @@ The engine:
   the only **mutable** one, a live tuning bench rather than a constant, which is why nothing under
   `resources/js/game/sim/` may read it. See "Player feel", "Stamina" and "Head bob" below.
 - `resources/js/game/render/`, `resources/js/game/camera.ts`, `resources/js/game/ui.ts`, `resources/js/game/debug.ts` — presentation only.
-- `resources/js/game/main.ts` — the entry point and nothing else: it dynamic-imports the game, or the
-  render comparator when `?compare=` is present, and sends an old `?inspect=` address to the labs
-  (`labs/redirect.ts`), so a normal run never loads a dev tool.
+- `resources/js/game/main.ts` — the entry point and nothing else: it dynamic-imports the game, and
+  sends an old `?inspect=` address to the labs (`labs/redirect.ts`), so a normal run never loads a
+  dev tool. An old `?compare=` address plays the game: the comparator is retired.
 - `resources/js/game/game.ts` — wires the game together: fixed-step accumulator loop, interpolated rendering,
   stress mode.
 - `resources/js/game/inspect/` — the entity inspector, which the labs mount as their individual and row
@@ -199,11 +199,6 @@ The engine:
   ground covered, idle when someone stops (see "Clip roles") -- and `index.ts` loads the models,
   refuses to start without them, and keeps the cost readout, shown
   under `?people=model` or a stress run. The people lab, which shows only models, uses all of it.
-- `resources/js/game/compare/` — the render-direction comparator. The six rendering directions it shows side by
-  side live as data in `resources/js/game/render/look.ts`; `?look=` plays a normal run under one of them and
-  reaches every surface, not just the crowd. `main.ts` names this directory only to *open* it, so
-  nothing here is load-bearing and the game keeps compiling and playing without it. See "URL
-  parameters" and "Looks" below.
 - `tests/js/determinism.test.ts` — headless run with a fixed seed and scripted input, hashed against
   `tests/js/determinism.expected.json`, which stores two values: `hash` (whole state) and `identity`
   (the crowd a seed produces). See "Two hashes" below.
@@ -234,17 +229,6 @@ The engine:
   meter never reddens the file.
 - `tests/js/inspect.test.ts` — proves a turntable person is byte-identical to the crowd's agent,
   guarding `Subject` against `Agent` specifically.
-- `tests/js/attachment.test.ts` — where equipment meets the body, all of it measured off the drawn
-  parts: that nothing a person stands or rides on sinks through the ground, that it holds still
-  while the body bobs through a stride — a grip placed at the bobbing hand height rather than its
-  rest height drives a cane through the pavement twice a step — that overlapping boxes are buried
-  inside each other rather than left flush, that a seated rider carries no backpack (it would be
-  drawn inside the seat back), and that a pram body sits on its wheels.
-- `tests/js/elbow.test.ts` — which way an elbow bends. A held pose is two absolute pitches and nothing
-  in that pair says which of them has to be further forward, so the invariant is read back off the
-  arm cylinders rather than off the constants: no elbow is forward of the shoulder-to-wrist line by
-  more than a real one hyperextends, in any pose, and a handle out in front of the body is reached
-  with a bent arm rather than a straight one.
 - `tests/js/inspectable.test.ts` — that the inspector's shell depends only on the interface: its
   imports reach no entity, a hypothetical entity nobody has written is driven through the shell's
   state, URL and keymap, every person URL that worked before still works and nothing a cast writes
@@ -289,22 +273,16 @@ The engine:
 - `tests/js/obstacles.test.ts` — that the furniture is solid and that being solid never touches the
   score: colliders match the drawn objects, the crowd goes round them, the player is stopped by
   them, and a bump is still player-versus-person contact and nothing else.
-- `tests/js/look.test.ts` — that the six looks are one list, named once, in panel order; that the
-  shipped look is the absence of one, so `current` restores rather than describes; that a look's
-  ink weight folds into a part's shell growth exactly as the per-frame sweep it replaced used to;
-  that every surface dresses and undresses without disposing a material it did not create; and
-  that nothing outside `resources/js/game/compare/` reaches into it, which is what keeps the comparator optional.
-- `tests/js/compare.test.ts` — the structural figure a comparator panel prints beside each look, which
-  is the one number on a card claimed as exact rather than measured: each pool draws its shell as a
-  second mesh, so the ink is exactly half of what a person costs, in draw calls and in instances
-  alike. The looks themselves and their `?look=` names are guarded in `tests/js/look.test.ts`, being
-  data in `resources/js/game/render/look.ts` rather than anything in that directory.
+- `tests/js/look.test.ts` — that the six looks are one list, named once; that the shipped look is the
+  absence of one, so `current` restores rather than describes; that a look's ink weight folds into
+  the edge layer's clearance without inverting a shell; and that every world surface dresses and
+  undresses without disposing a material it did not create.
 - `tests/js/model.test.ts` — the model bench, with a skinned figure built in code standing in for a
   file: that a missing file still stands something the stage can frame and says why, that a skinned
   figure is measured in its pose rather than its bind pose, that the rest pose comes back at its own
   size on an armature scaled by 0.01 (where `Skeleton.pose()` measurably makes a 17 mm figure), that
   the file's materials come back by identity and only what the bench made is disposed, that the
-  row's second exhibit is the game's own person, that the card lists every data file that failed
+  row is models only, that the card lists every data file that failed
   its check, by file and field, and that it lists every clip role, present with its clip or
   missing, a missing walk, run or idle or a clip the GLB does not have as an error, and that it
   carries the spec checks, every one on the checklist, with their verdicts at its head.
@@ -579,10 +557,9 @@ Two things follow from the frame that are worth stating before they are needed:
 
 - **The crowd will drape onto the surface when `height` varies.** The simulation is horizontal and
   stays that way -- separation, avoidance, overlap and the spatial grid are Euclidean in the x/z
-  plane, and none of them should ever gain a y. The *rendered* y is the drape: `game.ts` asks
-  `PATH.surfaceY(x, z)` for the height under each interpolated body and hands it to `drawPerson` as
-  `groundY`, and the camera adds its eye, look and rig heights to the surface under their own
-  points. Today that is 0 everywhere and costs one `toPath` per body per frame. A hill needs no
+  plane, and none of them should ever gain a y. The *rendered* y is the drape: the model crowd asks
+  `PATH.surfaceY(x, z)` for the height under each interpolated body and stands the clone on it, and
+  the camera adds its eye, look and rig heights to the surface under their own points. Today that is 0 everywhere and costs one `toPath` per body per frame. A hill needs no
   change here; a multi-run centreline makes `surfaceY` scan the runs, which is when an agent should
   start carrying the `s` it already computes each step rather than having it projected back.
 - **The path's surface and the ground around it stay separable.** The section in `ground.ts` runs
@@ -635,9 +612,10 @@ walkway and the outer boundary carries as much weight as the inner. Both get an 
 thin dark strip laid along the edge, in `INK_LINE` from `render/materials.ts`, the same colour the
 people's outline shells are. It has to be drawn rather than inflated: a back-face shell works for a
 part because a part has a centre to grow away from, and a ribbon has none. It is a second mesh
-purely so `Ground.setInk` can switch it with `pools.setInk` and the edge layer's shells, which
-`game.ts` does through `World.setInk` in one place so the whole world and the crowd always carry
-the same line -- including under a look that turns the shells off.
+purely so `Ground.setInk` can switch it with the edge layer's shells and the model crowd's, which
+`game.ts` does in one place (`setInk`, through `World.setInk` and the `inkOn` the crowd reads) so
+the whole world and the crowd always carry the same line -- including under a look that turns the
+shells off.
 
 A `Zone` recolours the walking surface over a range of `s`, which is the mechanism for varying the
 ground by place. It works by resolving the two *roles* the surface bands name (`centre` and `edge`)
@@ -867,16 +845,17 @@ hugging the very edge of the screen, and *held* rather than pulsed -- a scrape i
 step you lean on something, so each report re-arms one timeout instead of starting a flash. The red
 flash stays exclusive to bumps.
 
-**Known gap: a person's collision circle is wider than the person.** Measured across four seeds at a
-full crowd, a plain walker's drawn half width averages 0.24 m against a collision radius of 0.30 to
-0.32 -- so player-versus-person contact fires about a third early, which in first person reads as a
-phantom bump. Tightening it is *not* the small change it looks like, which is why it is still here:
-a wheelchair, a scooter and a stroller are all much wider than the torso inside them, their drawn
-widths live as inline constants inside `drawPerson` rather than as data, and shrinking the shared
-`Agent.r` would change crowd density everywhere. Doing it properly means factoring a
-`bodyHalfWidth(recipe)` out of `render/person.ts` alongside `standingHeight`, covering every aid and
-accessory, and re-tuning the crowd against it. The furniture's colliders already follow the
-"collision matches what you see" rule; people are the half that is still owed it.
+**Known gap: a person's collision circle may be wider than the person.** Measured on the primitive
+people, before every person was a model, a plain walker's drawn half width averaged 0.24 m against
+a collision radius of 0.30 to 0.32 -- so player-versus-person contact fired about a third early,
+which in first person reads as a phantom bump. The models have not been measured across a crowd the
+same way; the lab's model card shows each person's drawn torso against their collider. The fix is
+the spec's **collider width** -- each model's torso width at the Average Body Type, recorded in its
+data file (`colliderWidth`, refused until something reads it) -- and it is *not* the small change it
+looks like: shrinking the shared `Agent.r` would change crowd density everywhere and move both
+hashes, and equipment, when it comes back, is much wider than the torso inside it. The furniture's
+colliders already follow the "collision matches what you see" rule; people are the half that is
+still owed it.
 
 ## Player feel
 
@@ -1228,8 +1207,8 @@ were found on the turntable and are worth keeping:
 - **But the thing that gives it a bottom must not also give it a brim.** A band wider than the dome
   is a bowler, and a brim all the way round is the one thing a cap is defined by *not* having, so
   the peak has to be the only part of the hat that protrudes at all.
-- **The band goes under the dome, never the dome on the band** -- `drawPerson`'s sealed-joint rule,
-  arriving in `world/` unchanged: the narrower part is the one that gets buried, so a flat cylinder
+- **The band goes under the dome, never the dome on the band** -- the sealed-joint rule the
+  primitive people were built by, arriving in `world/` unchanged: the narrower part is the one that gets buried, so a flat cylinder
   cap is never the silhouette. A band even slightly the wider of the two shows its top face as a
   ledge, and the ledge is *ragged* as well as wrong, because the two primitives do not share a
   tessellation -- a 12-sided cylinder against a 10-sided sphere, whose outlines cross each other
@@ -1590,79 +1569,22 @@ users behave plausibly in the crowd rather than just looking different. The stro
 Mary's archetype used to take: the collider widened to 0.62 m and pushed 0.6 m ahead, which widens
 the separation with it.
 
-Parts are drawn from the shared instanced pools and the budget per person is **fixed**: a person
-wearing everything costs exactly what a person wearing nothing costs, because hidden parts write a
-zero-scale matrix. That also means the budget *is* the cost -- raising `PER` charges every person
-whether they wear the part or not. `PER` in `render/pools.ts` is that budget (45 parts across seven
-pools) and `drawPerson` documents the index layout within a slot. Adding a part means either
-finding a free index or raising `PER`; never add a mesh per person. A *shared* index is the cheaper
-half of that choice: the gear range serves a stroller or a mobility aid, which the recipe never
-gives to the same person.
-
-## The body
-
-`drawPerson` lays the figure out from human landmarks as fractions of height -- shoulders at 0.75,
-hips at 0.47, knees at 0.27 -- which puts an adult at about five and a half heads tall. Two rules
-keep it readable:
-
-- **Joints are sealed, not butted.** Every cylinder end is buried inside the rounded part at that
-  joint (shoulder cap over the upper arm, hand over the forearm, pelvis over the thigh tops, chest
-  over the neck), and each distal bone is narrower than the one above it, so a flat cylinder cap is
-  never the silhouette. `HIP_OVER`/`KNEE_OVER`/`ELBOW_OVER` extend a bone backwards into its parent
-  without moving the joint.
-- **Limbs are a chain, not a list of positions.** `segment()` walks hip to knee to ankle and
-  shoulder to elbow to wrist to hand, leaving each bone's midpoint for the part that draws it.
-  This is deliberately *hierarchy in the arithmetic, flat in the buffers*: joints can bend without
-  a scene graph, and `put()` stays one compose plus one multiply with no allocation. Do not
-  replace it with `Object3D` parenting -- `scripts/bench-pose.mjs` exists because this is a
-  measured hot path at 190 people.
-
-The waist is not a part: it is where the chest and pelvis ellipsoid silhouettes cross. Colour
-carries it -- chest in `shirt`, pelvis in `pants` -- and the shoulder cap plus upper arm share the
-shirt colour so they read as one sleeve. Recolouring either half breaks the read before the
-geometry does.
-
-A jacket is the one thing that takes the chest's place in that crossing, and it does so by *being*
-the chest: the same ellipsoid, scaled out and up, with its top pinned to the chest's crown so the
-extra height hangs downward and the hem crosses the pelvis instead of stopping in mid-air. It must
-be drawn from the chest's own pool. Pool spheres are polyhedra and a coarser one sags further
-inside the sphere it approximates, so a coat from `ball` (10x8) over a chest from `body` (14x10)
-z-fights it in shards that look exactly like a torn shirt showing through.
-
-The collar is a ring at the base of the neck, in the coat's own colour and sized against the neck
-rather than the torso, so a broad person does not get a ruff. A shirt-coloured one was tried and is
-wrong: at collar size it reads as a scarf, not as a collar.
-
-Anything worn *over* a coat is fitted to the coat's ellipsoid rather than the chest's -- the bag
-strap is. Two rules there, both learned the hard way. Fitting it to the chest sinks it inside the
-garment it crosses and it reads as a scar. And the surface a strap lies on is the body *plus its
-shoulders*: the shoulder cap stands proud of the torso ellipsoid exactly where a strap crosses it,
-so the strap is fitted to a slightly grown ellipsoid (`STRAP_OVER`) that swallows the cap. Fitted
-to the bare torso, the strap's own profile reaches zero depth right at the shoulder and the last
-stretch of it passes *under* the deltoid, where the cap's ink shell slices across it.
-
-Every part is drawn twice: once shaded, and once as a back-face ink shell standing 0.0125 proud of
-every face. That clearance is a constant, not a proportion, which is what makes the outline read as
-one weight of line across a whole figure -- and what makes it swallow anything small. On a thigh it
-is a line; on a lens it was most of the part. Anything that fine goes through `putBare` rather than
-`put` and carries no shell, which also means its written size is its drawn size, with nothing to
-compensate for. The glasses are the only parts exempt today; the balloon string and the phone's
-depth are the next candidates. Adding one is one word at the call site -- deliberately not a list of
-part indices, because `box` 3-9 is shared between a phone, a camera and a pram.
-
-The camera does not read this figure: it stands on the player as the model draws them
-(`ModelCrowd.heights`, see "The model renderer"), so a change of model or of height cannot leave it
-aimed where the chest used to be.
-
 ## Looks
 
 A **look** is four values, in `render/look.ts`: a fresh body material for whatever a surface asks
 for, whether its ink shells are on, what colour they draw in, and how far their clearance moves
 from the shipped constant (`body`, `inkOn`, `inkColour`, `inkWeight`). All six rendering directions
-the comparator has ever shown -- `current`, `toon-bare`, `soft-ink`, `soft`, `soft-thin`, `matcap`
--- fit inside that shape, from a plain toggle of the ink shell to a matcap sphere baked onto a
+-- `current`, `toon-bare`, `soft-ink`, `soft`, `soft-thin`, `matcap` -- fit inside that shape, from a plain toggle of the ink shell to a matcap sphere baked onto a
 canvas, which is what proves it is the right four values rather than a list that happened to cover
 today's six: a seventh look is still one function and three flags in the same shape.
+
+**A look dresses the world, not the people.** Every person is a model, drawn by the model crowd in
+its own `MeshToonMaterial` on the shipped three-step ramp whatever the look; the ink switch a look
+sets is the one thing that reaches them (their back-face shells). So `?look=soft` is a soft world
+with toon people in it. The people lab's model figure is the one person that wears a look's body,
+on the stage, so a model can be judged under each. The six looks were chosen between on the
+render-direction comparator, which drew primitive people and was retired with them; the game ships
+`toon-bare`, the art style spec's "toon-bare for everything".
 
 **An absent field means as shipped, never "as it currently is."** `current` declares nothing at
 all, and dressing with it has to put every material back exactly as it shipped and every shell back
@@ -1682,14 +1604,13 @@ dress and then **re-assert the overlays over the top** -- `cast.dress(look); cas
 which is what makes the button a switch rather than a suggestion. The tool always writes `look` and
 `ink` into the URL together, so only a hand-typed URL can state a look and a contradicting button;
 there the button wins, being the more specific of the two. In the game the equivalent is
-`ui.setInk(pools.inkOn)` after dressing, and there the look wins outright because there is no button
-to defer to -- see `?tier=` below.
+`setInk(look.inkOn ?? true)` after dressing, and there the look wins outright because there is no
+button to defer to -- see `?tier=` below.
 
-**Each layer dresses itself.** `PartPools.dress`, `EdgeLayer.dress`, `Props.dress` and
-`Ground.dress` are four implementations of one call, because only the surface that chose how it
-colours itself can put that choice back correctly -- the crowd knows it multiplies white by
-`instanceColor`, the ground knows its bands are per vertex, and nothing outside either one should
-have to know it too. `World.dress` calls the three it owns for the same reason `World.setInk` is
+**Each layer dresses itself.** `EdgeLayer.dress`, `Props.dress` and `Ground.dress` are three
+implementations of one call, because only the surface that chose how it colours itself can put that
+choice back correctly -- the edge layer knows it multiplies white by `instanceColor`, the ground
+knows its bands are per vertex, and nothing outside either one should have to know it too. `World.dress` calls the three it owns for the same reason `World.setInk` is
 already one call: a look that reached the ground but left the edge layer toon-shaded would put half
 the walkway back in two shading models, which is the bug this whole project exists to remove.
 
@@ -1698,15 +1619,14 @@ the walkway back in two shading models, which is the bug this whole project exis
 `MeshStandardMaterial` instead of the shipped `MeshToonMaterial` costs it nothing: the grain rides
 on whatever body a look supplies rather than being wired into the toon shader by name.
 
-**A prop's colour lives in its material; the crowd's and the edge's live per instance.**
-`MaterialNeeds` is two fields because the four surfaces differ in exactly two ways: a prop needs
-its own colour baked in, because `worldToon` keys its cache by colour and a look still has to paint
-the skyline in its own palette rather than turn every shopfront white, while the crowd and the edge
-layer ask for white and multiply it with `instanceColor`, which is what lets a thousand posts and
-ninety parts a person cost one draw call apiece rather than one per colour; the ground alone asks
-for `vertexColors`, because its bands are painted per vertex rather than carried in the material at
-all. One small interface answering three different relationships to colour is what lets six looks
-meet four surfaces without a twenty-four-cell table.
+**A prop's colour lives in its material; the edge's lives per instance.** `MaterialNeeds` is two
+fields because the surfaces differ in exactly two ways: a prop needs its own colour baked in,
+because `worldToon` keys its cache by colour and a look still has to paint the skyline in its own
+palette rather than turn every shopfront white, while the edge layer asks for white and multiplies
+it with `instanceColor`, which is what lets a thousand posts cost one draw call apiece rather than
+one per colour; the ground alone asks for `vertexColors`, because its bands are painted per vertex
+rather than carried in the material at all. One small interface answering three different
+relationships to colour is what lets six looks meet the world without a table of cases.
 
 **Nothing may dispose a material it did not create, and the test for that is identity against the
 one it shipped with.** Every `dress` captures its surface's shipped material when the surface is
@@ -1748,9 +1668,9 @@ and `view=row` are the turntable (`inspect/index.ts`, mounted with the lab as it
 view. **Source**: `source=model` swaps an entity for the one whose `modelOf` names it. The fixtures
 and buildings toggle is in place and stays on primitives, with its reason in the tooltip. **The people
 lab has no source: it shows models only** (`Lab.modelsOnly`, read as `Scope.modelsOnly`), in every
-view. Its only entity is the model, so the primitive person is filed in no lab, and any address
-naming the primitive person, an old `source=prim` and an old `/play?inspect=` person address all
-open the model. The game draws no primitive people at all (see "Models only").
+view. Its only entity is the model: `entity=person`, an old `source=prim` and an old
+`/play?inspect=` person address all open it. There are no primitive people anywhere (see "Models
+only").
 
 **The shared information panel** (`inspect/info.ts`) is the left card in every view. It renders a
 `Readout` -- the at-a-glance rows, the swatches, and `sections` under shared headings, in this order:
@@ -1793,8 +1713,8 @@ into two vocabularies.
   Types exactly; `compare=build`, from before the rename, still opens it, and an old `compare=age`
   opens it too) or `models` (every model chosen by its `cmp-<name>` switch, at the same recipe,
   presets, pose and camera, with what each costs); `crowd scale` fits
-  the model as the model crowd does. The primitives' part gizmos and part origins are not offered
-  (`Inspectable.universal`). **Height** reads as its parts, `1.70 m = 1.75 base × 0.97
+  the model as the model crowd does. Part gizmos and part origins are not offered: a model has
+  meshes, not instanced parts (`Inspectable.universal`). **Height** reads as its parts, `1.70 m = 1.75 base × 0.97
   recipe height`, and the **height ruler** (`ruler`, `E`, on by default, a shell overlay every lab
   has) stands beside each exhibit, ticked every 10 cm and labeled with its measured height. The
   card's **Data file** section shows the model's data file, its path and every fact in it, and
@@ -1828,8 +1748,7 @@ into two vocabularies.
   Overlays: behavior colors, colliders (furniture's too), separation radii, heading and velocity,
   the spatial grid tinted by occupancy, group links. Statistics: people per behavior against the
   mix, density, the fullest grid cell, stopped and standing, person-to-person contacts (the lab's own
-  count of touching collision circles; the game scores only player bumps), how many are drawn as
-  primitives and why, and the frame timings. Clicking a person gives their live state (position,
+  count of touching collision circles; the game scores only player bumps), and the frame timings. Clicking a person gives their live state (position,
   speed, heading, gait, wander and stop timers, group, and the steering forces from the steering
   functions themselves) with follow and open-in-individual.
 - **Fixtures and buildings, individual and row** — every type, seed stepping re-rolling the paint
@@ -1867,15 +1786,16 @@ finish the loading when the first kiosk or building model exists.
 
 The labs' individual view opens a turntable: one thing on a neutral stage, a camera that holds
 still, a slow spin, and controls for whatever varies about it. `view=row` puts a whole family side
-by side. `&entity=` chooses what is on the stage among the lab's own entities — `person`, `kiosk`,
-`furniture`, `shop`, `restaurant`, and `bench`/`lamp`/`bin` and the five cuisine names as aliases
-with a kind or a type pinned; `&source=model` puts the person's model on it. `?entity=building` still means a shop:
+by side. `&entity=` chooses what is on the stage among the lab's own entities — `model` (a person;
+`person` is an alias for it, since a person is drawn only from a model), `kiosk`, `furniture`,
+`shop`, `restaurant`, and `bench`/`lamp`/`bin` and the five cuisine names as aliases with a kind or
+a type pinned. `?entity=building` still means a shop:
 the family has two members now and an alias owes nobody more than that a URL written before it
 existed opens what it opened.
 
 Its entire value rests on one rule: **it renders everything through the game's own assembler.**
-`makeRecipe` and `drawPerson` for people, `placeStructure` and `buildEdge` for the carts and both
-kinds of building, the `bench`/`lamp`/`bin` builders and `buildEdge` for the furniture. There is no inspection-only copy
+`makeRecipe` and `modelcrowd/body.ts` for people (drawn from their model file: see "Models from
+files"), `placeStructure` and `buildEdge` for the carts and both kinds of building, the `bench`/`lamp`/`bin` builders and `buildEdge` for the furniture. There is no inspection-only copy
 of any of it and there must never be one — a turntable that draws a thing differently from the game
 is worse than no turntable. `tests/js/inspect.test.ts` compares `Subject` against a real `Agent`,
 `tests/js/edge.test.ts` rebuilds `furniturePlan` out of the three builders the inspector calls, and
@@ -1906,24 +1826,24 @@ overlays and describe itself.
 
 Four things about that interface are load-bearing:
 
-- **A `DrawnPart` is a matrix and a colour, and that covers everything.** Every pool geometry and
-  every kit geometry is unit-sized and centred on its origin, so a unit cube under a part's matrix
-  *is* its bounding box — for a thigh and for a kiosk wheel alike. That single fact is why the
+- **A `DrawnPart` is a matrix and a colour, and that covers everything.** Every kit geometry is
+  unit-sized and centred on its origin, and a model hands back one box per mesh, so a unit cube under
+  a part's matrix *is* its bounding box — for a figure and for a kiosk wheel alike. That single fact is why the
   bounding boxes, the origin crosses, the measured height and the ground shadow are universal, and
   it is what keeps the interface small enough to be worth having.
 - **A control is carried in the URL under its own id.** The person's controls were named `arch`,
   `age`, `build`, `mob`, `walk` and `phase` because those were already the query keys, so the
   generic scheme reproduces every URL the character turntable ever wrote; a key renamed since is
   read back by the entity's `legacy` (`build` is `body-type`, the Body Type, now). `gate` is why
-  `?phase=` still means a frozen gait: a gated scalar is written only while its gate is on, and
-  reading one turns the gate on.
+  `?phase=` still means a frozen pose -- the model's clip phase now: a gated scalar is written only
+  while its gate is on, and reading one turns the gate on.
 - **`rebuilds` on a control is the difference between a choice and a slider.** Changing a person's
   behavior has to build a new person; dragging the gait phase must not build seven of them a frame.
 - **A cast may write back a scalar it drives.** The gait slider tracks a walking figure that way.
   A write-back reaches the panel and never the address bar.
 
 **A path-placed entity is built where the game builds it and only staged elsewhere.** A person
-turns through `drawPerson`'s own `yaw`; an edge object has no such parameter, so `entities/edge.ts`
+turns by the yaw the game draws them at; an edge object has no such parameter, so `entities/edge.ts`
 puts it on the real `PATH`, at its real offset from the real edge, inside an inner group that
 brings its own place to the origin and an outer group that carries it to the stage anchor and turns
 it. The collider, the orientation arrows and a kiosk's service and staff points live in that
@@ -1985,10 +1905,10 @@ Two consequences worth knowing:
   `behavior=weaver`, `mob=` as `equipment=` and `build=` as `body-type=`, and drops `age=`, which
   nothing reads since age presets went.
 - The part gizmos -- the **bounding boxes** (`gizmos`, `G`) and the **part origins** (`origins`, `X`),
-  two switches since the labs -- read matrices back from a `PartPools` subclass that records what `put` writes and
-  calls straight through to the real implementation, so nothing the inspector does can change what
-  is drawn. A kiosk's and a bench's come from `standingMatrix` and `barMatrix` — the same two
-  functions `kit.ts` draws them with.
+  two switches since the labs -- read the matrices a cast hands back, so nothing the inspector does
+  can change what is drawn. A kiosk's and a bench's come from `standingMatrix` and `barMatrix` — the
+  same two functions `kit.ts` draws them with. A model has meshes rather than instanced parts, so it
+  offers neither.
 
 The inspector reads no `spawn` or `behavior` draws and never builds a `Simulation`, so it cannot
 move either determinism hash. A cart's paint comes from the kiosk layer's own constant-seeded
@@ -2221,13 +2141,17 @@ the game, as a fallback or otherwise:
   is dropped from the address bar. `?people=model` still shows the cost readout.
 
 The cost readout is on screen only under `?people=model` or a stress run, and kept either way as
-`game.people` for the bench scripts. Its "as primitives" line still counts anyone a model could not
-draw, which in the game is now always nobody.
+`game.people` for the bench scripts (`stress-headless.mjs`, `bench-looks.mjs`,
+`bench-people.mjs`), which all draw people the one way there is.
 
-Measured in a visible tab at 120 Hz (`?stress=1`; frames sit on the vsync cap either way): at 80
-people, primitives pose 1.49 ms and render 1.94 ms against models 0.75 and 1.52; at 190, primitives
-3.22 and 3.66 against models 1.57 and 2.93 -- models are the cheaper of the two on the CPU, and draw
-more triangles (2.85 M against 0.59 M at 190) for the GPU to absorb.
+**What went with the primitive people**: their figure (`render/person.ts`, `drawPerson`), their
+instanced part pools (`render/pools.ts`), the render-direction comparator (`compare/`, `?compare=`)
+that drew them under each look, `scripts/bench-pose.mjs`, the inspector's primitive person and the
+`RecordingPools` its part gizmos read, the `--prim` options of the bench scripts, and the "as
+primitives" counts. Measured in a visible tab at 120 Hz before they went (`?stress=1`): at 80 people
+primitives posed in 1.49 ms and rendered in 1.94 against models' 0.75 and 1.52, and at 190 in 3.22
+and 3.66 against 1.57 and 2.93 -- models were the cheaper on the CPU, and drew more triangles (2.85 M
+against 0.59 M at 190) for the GPU to absorb.
 
 ### The model renderer
 
@@ -2409,16 +2333,17 @@ page's URL as their first argument and default to `https://coming-through.test/p
 means its `/play`); the page needs Vite running or a prior `npm run build`.
 
 Stress numbers without a visible browser: `node scripts/stress-headless.mjs https://coming-through.test/play 60`
-(models, as the game draws people; add `--prim` for the primitives) against a running dev server (see the note in that file about headless frame rates). That figure
-mixes CPU work with software rasterisation; `node scripts/bench-pose.mjs 190` times just the
-per-frame cost of posing a crowd into the instance buffers, with no GL context at all.
+against a running dev server (see the note in that file about headless frame rates). That figure
+mixes CPU work with software rasterisation; its `avgPoseMs` is the CPU half alone, placing and
+animating the model clones.
 
 `npm run bench:looks -- https://coming-through.test/play` sweeps all six looks through `?stress=1&look=` at a
 full crowd and prints them as a table. Read its columns knowing where each comes from: `pose` is CPU
 only and is trustworthy headless, `render` is everything the driver did and under SwiftShader is
 software rasterisation saying nothing about a real GPU. Add `--gpu` to run Chrome headed on the real
 one, which is the only way to get a `render` column worth comparing -- and the only place the fill
-cost of toon against PBR against matcap actually shows up.
+cost of toon against PBR against matcap actually shows up -- on the world, since the people keep their
+own toon material under every look.
 
 `?seed=<uint32 or any string>` (strings are hashed), `?stress=1` (pinned seed, full crowd, no input,
 per-frame sim/render milliseconds; `&crowd=N` holds it at N people), `?debug=1` (top-down overlay),
@@ -2433,24 +2358,14 @@ picks it up for free, and a run loaded with a tuning in it opens the panel — y
 those numbers. A bench whose findings cannot be reloaded is one you re-find your answer on every
 time; see "Head bob" above.
 
-`?compare=1` (or `?compare=row`) opens a side-by-side of rendering directions -- four panels
-crossing toon ramp against soft diffuse and ink shell against none, so each edge of that table
-moves one thing only, then two that ask about the line and the light instead: a finer warm ink, and
-a matcap. It changes nothing in the render path -- each panel builds its own `PartPools` and
-dresses it in one of the six looks, the same call the game itself makes -- and touches neither
-hash. `soft-thin`'s thinner line used to cost a per-frame sweep over every shell to shrink it,
-measured at about a third of the pose cost; that sweep is gone, because a look's ink weight now
-folds into the same growth `put()` was already computing for every part's shell, so thinning a
-line costs nothing a shipped frame was not paying for already.
+`?compare=` used to open a side-by-side of the six rendering directions, drawn on primitive people.
+It was retired with them; an old address plays the game.
 
-`?look=<name>` plays a **normal run** under one rendering direction applied to everything on
-screen -- the crowd, the benches and lamps, the carts, the shopfronts and the ground -- rather than
-the crowd alone: `current`, `toon-bare`, `soft-ink`, `soft`, `soft-thin`, `matcap`. The six live as
-data in `resources/js/game/render/look.ts`, and `?look=` names them by the same slug the comparator's panels
-print, so the loop is to read a panel and then type what it says. Six still turntables cannot
-answer how a direction holds up in motion, at crowd distance, from the game's own camera under the
-game's own lights, and that is the only place it has to hold up. `game.ts` calls `World.dress`
-then `PartPools.dress`; it is applied after `applyTier`, which gives the look the last word on the
+`?look=<name>` plays a **normal run** under one rendering direction applied to the world -- the
+benches and lamps, the carts, the shopfronts and the ground -- and to the ink the people share with
+it: `current`, `toon-bare`, `soft-ink`, `soft`, `soft-thin`, `matcap`. The people keep their own toon
+shading (see "Looks"). The six live as data in `resources/js/game/render/look.ts`. `game.ts` calls
+`World.dress` and sets the ink the look asks for; it is applied after `applyTier`, which gives the look the last word on the
 ink in **both** directions -- `toon-bare` takes the line off a `high` run, and
 `?tier=low&look=soft-ink` puts it back on, because an absent `inkOn` means the shipped ink rather
 than whatever the tier just decided. Judging a look is what the flag is for, so the look winning is
@@ -2463,43 +2378,6 @@ normal run downloaded none of it, and every run needs it now. `current` is uncha
 *as shipped*, outline and all, so `?look=current` is the way back to the old picture. An unknown
 name warns with the real list and then falls back to `DEFAULT_LOOK`, so a typo in the flag lands on
 the same picture a run with no flag does rather than on a third thing.
-
-Each panel prints what its look costs, split three ways because the three are not equally knowable.
-**Structure** is exact rather than measured: draw calls and instance matrices per person, which only
-the ink shells move -- each pool draws its shell as a second `InstancedMesh`, so turning them off
-halves both, 14 calls to 7 and 90 instances to 45. **CPU** is measured on demand, by the
-`cost` button, `B`, or `&cost=1`: it poses a full 190-person crowd and times it, which is fair to
-quote because posing costs the same whether those people land on six pixels or six hundred. Ink is
-worth something like a sixth of it, and the choice of material costs nothing at all -- read the
-shape of that rather than the exact percentages, which move with the machine. **Fill** is deliberately absent from the cards. It scales with the
-pixels people cover, a panel covers almost none, and a millisecond quoted at panel size would rank
-the six by an effect that barely exists there -- confidently, which is worse. `?look=` and
-`npm run bench:looks` measure it where it is real.
-
-The cards collapse to their titles -- the `cards` button, `C`, clicking any card, or `&cards=1` --
-and collapsing is global because six panels showing different information are no longer a
-comparison. Cards are levelled to one height and width per row and kept inside their own grid
-cell; placing them against the top bar instead lets a second row's cards drift up over the first
-row's figures while leaving their own unlabelled. Where a layout leaves no slack above a panel the
-card sits over the figure's head, which is where shading reads hardest -- that is what collapsing
-is for.
-
-Two things in `compare/bench.ts` keep that CPU figure honest, and the test for both is that the
-three looks doing identical CPU work report the same number. It times through a rig of its own
-rather than through each panel's pools, because the baseline panel draws through `RecordingPools`,
-whose `put` composes a second matrix per part -- benchmarking in place charges `Current` for the
-measuring apparatus and reports the shipped look as the slowest of the six. And it runs a throwaway
-pass before the first measurement, or whichever look leads the list carries the JIT's first sight of
-a crowd and reads a few percent high for being first.
-
-`resources/js/game/compare/` is therefore genuinely disposable, on purpose. Nothing outside it depends on
-anything inside it: `main.ts` names the directory only to *open* it, exactly as it opens the
-inspector, and `tests/js/look.test.ts` walks every file under `resources/js/game/` and fails the moment that stops
-being true. The six looks and their names live in `render/look.ts`, not here; what `treatments.ts`
-keeps is the one thing a comparator panel still wants that a look does not answer -- picking a
-bare `PartPools`'s meshes back out of the scene it just put them in, to caption their structure.
-Retiring the comparator is therefore a decision about the tool alone: delete the directory and the
-game keeps compiling, keeps testing green, and keeps playing under every `?look=`.
 
 The labs' turntable (`/lab/people`, `/lab/fixtures`, `/lab/buildings`, and `view=row` for its
 side-by-side row) takes `&entity=` for what stands on it within the lab (`kiosk`, `furniture`,

@@ -45,7 +45,7 @@ export function forced(o: Partial<Overrides>): Partial<Choices> {
     return out as Partial<Choices>;
 }
 
-/** Everything `drawPerson` needs, plus enough of `Agent` to drive the walk cycle in place. */
+/** One person as the crowd rolls them, plus enough of `Agent` to drive the walk cycle in place. */
 export class Subject implements Poseable {
     readonly seed: number;
     readonly index: number;

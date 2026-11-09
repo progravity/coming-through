@@ -61,8 +61,8 @@ export interface Behavior {
     gait: BehaviorGait;
     /**
      * The model class this profile needs, when it is not an adult's. A Darter is a child: an adult
-     * model cannot be made into one, so until a child model exists the game draws Darters as
-     * primitives (`drawsAsPrimitive` in `modelcrowd/body.ts`).
+     * model cannot be made into one, so until a child model exists the crowd has no Darters
+     * (`behaviorUnavailable` in `composition.ts`).
      */
     needs?: ModelClass;
     /**
