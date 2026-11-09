@@ -12,6 +12,8 @@ Every person model must meet this spec so it works with the game's color, body, 
 
 Values marked *starting target* are educated guesses that only looking at models in the game can settle. Everything else is decided.
 
+**Models only.** Every person in the game, the player included, is drawn with a person model. There are no primitive people, as a fallback or otherwise. A person the current models can't draw (one who needs a child model or equipment that doesn't exist yet) is left out of the crowd until it can be drawn, and a model that fails to load or fails its checks stops the game with a clear error rather than being replaced.
+
 ## Terms
 
 These terms are used the same way everywhere in this spec and in the game's code.
@@ -175,7 +177,7 @@ In the game, skin tone is recolored from the person's preset, so a model's own s
 
 A model's age and build come from the model itself; the game's Body Type preset only adjusts within them.
 
-- **Age class** (declared per model): adult, child, or elder. Age comes only from the model: children and elderly people come from models made for those ages, never from adjusting an adult, and there are no age presets. Darters require a child model. Gray is among the hair colors, so some adults can have graying hair.
+- **Age class** (declared per model): adult, child, or elder. Age comes only from the model: children and elderly people come from models made for those ages, never from adjusting an adult, and there are no age presets. Darters require a child model, so the crowd has none until one exists. Gray is among the hair colors, so some adults can have graying hair.
 - **Build** (declared per model): average or heavy-set, as generated in Meshy. Heavy-set models cover the fullest end of the crowd.
 - **Body Type** (rolled per person): Slim, Trim, Average, Solid, or Broad on every model, including body and facial fullness, within the global limits. A model that stretches poorly can tighten its limits in its data file.
 - **Collider width:** the model's torso width at the Average Body Type, recorded in its data file, so collisions can later match what the player sees.
@@ -216,7 +218,7 @@ Every accessory and item is Meshy-made in the game's art style; nothing ships as
 - **Anchors:** head top, face, right hand, and left hand, measured automatically from each model's skin weights. A model's data file can override any anchor that lands badly.
 - **Accessories:** the table below, colored through the accessory color slots. Fixed to that model.
 - **Props in moments:** a phone or camera appears and disappears on the timing its clip records.
-- **Equipment:** stroller, wheelchair, scooter, and cane, attached by the game and constant for that person: equipment is rolled per person, never baked into a model, so any model can use it. Each piece of equipment records whether it uses a pose or a clip; a seated person uses the same standing model. Not part of step 3; until then those people temporarily fall back to primitives.
+- **Equipment:** stroller, wheelchair, scooter, and cane, attached by the game and constant for that person: equipment is rolled per person, never baked into a model, so any model can use it. Each piece of equipment records whether it uses a pose or a clip; a seated person uses the same standing model. Not part of step 3; until equipment items exist, the crowd includes no one with equipment.
 
 Scale: people are normalized by height when loaded (an adult stands about 1.75 m), and every prop and piece of equipment records its real-world dimensions in its own data file and is scaled to match, so Meshy's export sizes never matter and one wheelchair fits every model. Fit is handled by placing the person to the equipment (hips to the seat, hands to the rims or control); chairs widen slightly for Solid and Broad Body Types and scale down for children. Items are separate shared assets, never part of a model: any model can use any item. A prop is either carried throughout (a shopping bag) or appears only during a moment (a phone).
 
