@@ -107,8 +107,26 @@ test('ground equipment holds still while the body bobs through a stride', () => 
  * reason this exemption is needed rather than merely true: the whole frame is about 0.03 across,
  * so a lens and its bridge are closer together than FLUSH no matter how they are arranged, and any
  * face detail built from more than one piece would be unbuildable under the flat rule.
+ *
+ * The shoulder bag and its flap are the other exemption, for the same reason and by design. The
+ * flap is the bag's own color and stands barely proud of it on purpose, so that all it shows is
+ * the ink line round its lower edge: a z-fight between two faces of one color shows nothing, and
+ * that line is the flap's shell surfacing exactly as intended. The exemption holds only while the
+ * two are one color, so recoloring the flap brings the rule back. It went unexercised until the
+ * seeds here first drew a walking person with a bag; every bag had failed the flat rule.
  */
 const FLUSH = 0.03;
+/**
+ * How much two boxes have to share before they interpenetrate rather than touch. Parts that meet
+ * edge to edge -- a wheelchair's seat and its back, which meet at the seat's top -- share nothing,
+ * but rounding can leave them a few times 1e-17 inside each other, and whether it does depends on
+ * the person's proportions. A nanometre is far below anything drawn and far above any rounding.
+ */
+const TOUCH = 1e-9;
+/** The bag and its flap, as `drawPerson` numbers them within a slot's boxes (box b + 1 and b + 2). */
+const BAG = 1, FLAP = 2;
+const isBagAndFlap = (a: { idx: number; color: number }, b: { idx: number; color: number }): boolean =>
+    a.color === b.color && ((a.idx === BAG && b.idx === FLAP) || (a.idx === FLAP && b.idx === BAG));
 
 /** World-space bounding box of one recorded part. */
 function bounds(m: THREE.Matrix4): { lo: number[]; hi: number[] } {
@@ -131,19 +149,20 @@ test('overlapping boxes are buried inside each other, never flush', () => {
             s.mv = 1;
             pools.beginRecord();
             drawPerson(pools, 0, s, s, 0);
-            const boxes: { id: string; ink: boolean; lo: number[]; hi: number[] }[] = [];
+            const boxes: { id: string; idx: number; color: number; ink: boolean; lo: number[]; hi: number[] }[] = [];
             for (let p = 0; p < pools.recorded; p++) {
                 const rec = pools.parts[p];
-                if (rec.pool === 'box') boxes.push({ id: `box ${rec.idx}`, ink: rec.color === INK, ...bounds(rec.matrix) });
+                if (rec.pool === 'box') boxes.push({ id: `box ${rec.idx}`, idx: rec.idx, color: rec.color, ink: rec.color === INK, ...bounds(rec.matrix) });
             }
             for (let i = 0; i < boxes.length; i++) {
                 for (let j = i + 1; j < boxes.length; j++) {
                     const a = boxes[i], b = boxes[j];
-                    // Ink against ink has no seam to show: see the note on FLUSH.
-                    if (a.ink && b.ink) continue;
+                    // Ink against ink has no seam to show, and neither has the bag against its
+                    // flap: see the note on FLUSH.
+                    if ((a.ink && b.ink) || isBagAndFlap(a, b)) continue;
                     // Only parts that actually interpenetrate can fight; ones merely near each
                     // other are two separate objects and may line up however they like.
-                    if ([0, 1, 2].some(k => Math.min(a.hi[k], b.hi[k]) - Math.max(a.lo[k], b.lo[k]) <= 0)) continue;
+                    if ([0, 1, 2].some(k => Math.min(a.hi[k], b.hi[k]) - Math.max(a.lo[k], b.lo[k]) <= TOUCH)) continue;
                     for (const k of [0, 1, 2]) {
                         for (const face of ['lo', 'hi'] as const) {
                             const d = Math.abs(a[face][k] - b[face][k]);
