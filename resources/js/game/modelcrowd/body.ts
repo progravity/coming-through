@@ -28,7 +28,7 @@ import * as THREE from 'three';
 import type { ModelClass } from '../behaviors.ts';
 import { BODY_LIMIT_KEYS } from '../data/people.ts';
 import type { ModelBuild, PersonModel } from '../data/people.ts';
-import { BODY_TYPES, BODY_TYPE_WIDTH, figureHeight } from '../recipe.ts';
+import { BODY_TYPES, BODY_TYPE_WIDTH, standingHeight } from '../recipe.ts';
 import type { BodyType, Recipe } from '../recipe.ts';
 
 // ---------- the tables ----------
@@ -156,11 +156,11 @@ export function shape(pos: number, limits: Limits = LIMITS): Shaped {
 export const shapeRecipe = (r: Recipe, limits: Limits = LIMITS): Shaped => shape(BODY_TYPES.indexOf(r.bodyType), limits);
 
 /**
- * How tall to draw a recipe on a model: its standing height with its primitive figure's own height
- * taken back out (a child's, for a Darter shown on an adult model), so a model is never shrunk into
- * anything and the recipe's own height roll still applies.
+ * How tall to draw a recipe on a model: its standing height (`standingHeight` in `recipe.ts`), the
+ * recipe's own height roll, a child's scaled for a child. A model is scaled to it from the height it
+ * stands in its file, and never stretched into another age class: a child is drawn from a child model.
  */
-export const drawnHeight = (standing: number, r: Recipe): number => standing / figureHeight(r);
+export const drawnHeight = (r: Recipe): number => standingHeight(r);
 
 // ---------- what models cannot draw yet ----------
 

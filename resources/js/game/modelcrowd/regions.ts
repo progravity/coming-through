@@ -595,7 +595,8 @@ export function dressOn(r: Recipe, slots: readonly ClothingSlot[], salt: number)
 /** The color each color slot is painted, for one person on one model. */
 export function personColors(r: Recipe, slots: readonly ClothingSlot[], salt: number): Record<PaintSlot, number> {
     const c = dressOn(r, slots, salt).colors;
-    const fill = c.tops ?? r.shirt;
+    // Every model has a top (`data/people.ts` requires one); white only if a scheme left it empty.
+    const fill = c.tops ?? 0xffffff;
     return {
         skin: r.skin, hair: r.hairColor,
         tops: fill, bottoms: c.bottoms ?? fill, footwear: c.footwear ?? fill, accessory: c.accessory ?? fill,

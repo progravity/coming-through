@@ -26,7 +26,6 @@
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
 import { SIM_DT } from '../core/time.ts';
-import { standingHeight } from '../recipe.ts';
 import type { Recipe } from '../recipe.ts';
 import { SHELL_OVER } from '../render/look.ts';
 import { INK_LINE, makeToonGradient } from '../render/materials.ts';
@@ -343,7 +342,7 @@ export class ModelCrowd {
      * player's eye and its follow shot on, measured off the model rather than any other figure.
      */
     heights(r: Recipe): FigureHeights {
-        const height = drawnHeight(standingHeight(r), r);
+        const height = drawnHeight(r);
         return { height, eye: height * this.eye };
     }
 
@@ -361,7 +360,7 @@ export class ModelCrowd {
         // Fullness is a fraction of height; the skinned vertices come out in the model's own units.
         s.full.bodyFull.value = s.inkFull.bodyFull.value = body.fullness * this.height;
         s.full.bodyFace.value = s.inkFull.bodyFace.value = body.face * this.height;
-        s.group.scale.setScalar(drawnHeight(standingHeight(r), r) / this.height);
+        s.group.scale.setScalar(drawnHeight(r) / this.height);
     }
 }
 

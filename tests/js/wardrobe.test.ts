@@ -18,8 +18,8 @@ import { apart } from '../../resources/js/game/palette.ts';
 import { makeRecipe } from '../../resources/js/game/recipe.ts';
 import { modelFileName } from '../../resources/js/game/render/model-file.ts';
 import {
-    CLOTHING_SLOTS, COLORS, HAIR_KEYS, POOLED_KEYS, PRIMITIVE_SALT, SCHEME_KEYS, SKIN_TONE_KEYS, UNIFORM_KEYS,
-    checkClothing, dress, hairColor, saltOf, schemeNamed, skinColor, skinRamp,
+    CLOTHING_SLOTS, COLORS, HAIR_KEYS, POOLED_KEYS, SCHEME_KEYS, SKIN_TONE_KEYS, UNIFORM_KEYS,
+    dress, hairColor, saltOf, schemeNamed, skinColor, skinRamp,
 } from '../../resources/js/game/wardrobe.ts';
 import type { ClothingSlot } from '../../resources/js/game/wardrobe.ts';
 
@@ -73,7 +73,7 @@ test('every pooled scheme meets the rules on every model, at every skin tone and
     assert.ok(worst <= 40, `one arrangement took ${worst} tries`);
 });
 
-test('the crowd as rolled meets the rules too, on every model and on the primitives', () => {
+test('the crowd as rolled meets the rules too, on every model', () => {
     const models = [...modelSlots(), ...FUTURE];
     for (let seed = 1; seed <= 600; seed++) {
         const r = makeRecipe(makeStreams(seed).recipe.fork(`agent:${seed % 7}`));
@@ -82,9 +82,6 @@ test('the crowd as rolled meets the rules too, on every model and on the primiti
             const d = dress(r.scheme, r.arrange, r.skin, r.hairColor, m.slots, saltOf(m.file));
             assert.deepEqual(d.broken, [], `seed ${seed} on ${m.file}`);
         }
-        // The primitive figure is dressed by makeRecipe itself, and has to pass the same rules.
-        const worn = { tops: r.shirt, bottoms: r.pants, footwear: r.shoe, ...(r.hat !== 'none' ? { headwear: r.hatColor } : {}) };
-        assert.deepEqual(checkClothing(worn, r.skin, r.hairColor), [], `seed ${seed} as primitives`);
     }
 });
 
@@ -134,14 +131,14 @@ test('a uniform is the same clothing on everyone, whatever their skin and hair, 
     for (let seed = 1; seed <= 400; seed++) {
         assert.ok(!UNIFORM_KEYS.includes(makeRecipe(makeStreams(seed).recipe.fork('agent:0')).scheme as never));
     }
-    // But the lab can put anyone in one, and the primitives wear it exactly.
+    // But the lab can put anyone in one, and a model wears it exactly.
     const staff = makeRecipe(makeStreams(9).recipe.fork('agent:0'), { scheme: 'park-staff' });
     const s = schemeNamed('park-staff');
     assert.ok(s.kind === 'uniform');
-    assert.equal(staff.shirt, s.colors.tops);
-    assert.equal(staff.pants, s.colors.bottoms);
-    assert.equal(staff.shoe, s.colors.footwear);
-    void PRIMITIVE_SALT;
+    const worn = dress(staff.scheme, staff.arrange, staff.skin, staff.hairColor, ['tops', 'bottoms', 'footwear'], saltOf('casual-man'));
+    assert.equal(worn.colors.tops, s.colors.tops);
+    assert.equal(worn.colors.bottoms, s.colors.bottoms);
+    assert.equal(worn.colors.footwear, s.colors.footwear);
 });
 
 test('every scheme has a name and a kind, and the format holds more than one uniform', () => {

@@ -130,12 +130,10 @@ export class Simulation {
             h.f64(a.x).f64(a.z).f64(a.vx).f64(a.vz).f64(a.yaw).f64(a.speed).f64(a.r).f64(a.colOff).f64(a.accel).f64(a.turn);
             h.f64(a.t).f64(a.wanderN).f64(a.wanderS).f64(a.nextWander).f64(a.stopUntil).f64(a.nextStop).f64(a.bumpCd);
             h.str(r.bodyType).str(r.skinTone).str(r.hairTone).str(r.scheme).f64(r.arrange).str(r.equipment).str(r.modelClass).bool(r.sharesScheme);
-            h.f64(r.h).f64(r.w).f64(r.headR).f64(r.shoulder).f64(r.stoop).f64(r.limb);
-            h.u32(r.skin).u32(r.shirt).u32(r.pants).u32(r.shoe);
-            h.str(r.hat).u32(r.hatColor).str(r.hair).u32(r.hairColor).bool(r.ponytail).str(r.beard).bool(r.glasses);
-            h.bool(r.jacket).u32(r.jacketColor).bool(r.shorts).bool(r.bag).u32(r.bagColor);
-            h.str(r.acc).u32(r.accColor).str(r.mobility).u32(r.frameColor).f64(r.pace);
-            h.f64(r.gait.bob).f64(r.gait.stride).f64(r.gait.cadence).f64(r.gait.arm).f64(r.gait.limp);
+            h.f64(r.h).f64(r.w).f64(r.headR);
+            h.u32(r.skin).u32(r.hairColor);
+            h.str(r.mobility).f64(r.pace);
+            h.f64(r.gait.cadence);
         }
         return h.digest();
     }

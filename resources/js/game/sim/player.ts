@@ -87,15 +87,12 @@ export function createPlayer(): Player {
     // are the values the roll gave before the age roll was removed. h puts them at about 1.75 m: the
     // middle of the crowd, not a head above it. The model dresses them from their scheme and its
     // arrangement, so those are pinned too, at what the roll gave when the player became a model.
-    const recipe = makeRecipe(new Rng(0), { behavior: 'typical', bodyType: 'trim', skinTone: 'light', equipment: 'none', shirt: 0xf2f0ea,
+    const recipe = makeRecipe(new Rng(0), { behavior: 'typical', bodyType: 'trim', skinTone: 'light', equipment: 'none',
         hairTone: 'dark-brown', scheme: 'bold-primaries' });
-    recipe.arrange = 0.6489853798411787; recipe.hairColor = 0x332419;
-    recipe.h = 0.93; recipe.headR = 0.1794; recipe.hat = 'cap'; recipe.hatColor = 0xd9534f;
-    recipe.skin = 0xefcca9; recipe.pants = 0xc8a97e; recipe.shoe = 0xd4a21f; recipe.shorts = true; recipe.bag = false;
-    recipe.gait = { bob: 0.046, stride: 0.636, cadence: 9.1, arm: 0.42, limp: 0 };
-    recipe.hair = 'none'; recipe.ponytail = false; recipe.beard = 'none'; recipe.acc = 'none';
-    recipe.mobility = 'none'; recipe.seated = false; recipe.stoop = 0; recipe.jacket = false;
-    recipe.limb = 1;
+    recipe.arrange = 0.6489853798411787; recipe.hairColor = 0x332419; recipe.skin = 0xefcca9;
+    recipe.h = 0.93; recipe.headR = 0.1794;
+    recipe.gait = { cadence: 9.1 };
+    recipe.mobility = 'none';
     const p: Player = { x: 0, z: 0, yaw: 0, camYaw: 0, kx: 0, kz: 0, knock: 0, stamina: STAMINA.max, sprinting: false,
         r: 0.32, vx: 0, vz: 0, phase: 0, mv: 0, lean: 0, fidget: 0, recipe, prev: newPose(), prevCamYaw: 0 };
     placeAtStart(p);

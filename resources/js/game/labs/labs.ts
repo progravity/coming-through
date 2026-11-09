@@ -53,7 +53,7 @@ const modelsOf = (c: Category): Inspectable[] =>
     entitiesOf(c).filter(e => e.modelOf !== undefined || !entitiesOf(c).some(m => m.modelOf === e.id));
 
 export const LABS: Readonly<Record<Category, Lab>> = {
-    // People are models here and nowhere else primitives: the game keeps them only as its fallback.
+    // People are models, here as everywhere: there are no primitive people.
     people: { id: 'people', title: 'People', path: `${LAB_ROOT}/people`, entities: modelsOf('people'), views: ['single', 'row', 'crowd'], modelsOnly: true, pathMode: true },
     fixtures: { id: 'fixtures', title: 'Fixtures', path: `${LAB_ROOT}/fixtures`, entities: entitiesOf('fixtures'), views: ['single', 'row', 'placement'] },
     buildings: { id: 'buildings', title: 'Buildings', path: `${LAB_ROOT}/buildings`, entities: entitiesOf('buildings'), views: ['single', 'row', 'placement'] },

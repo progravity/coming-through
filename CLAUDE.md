@@ -131,7 +131,7 @@ The engine:
 - `resources/js/game/behaviors.ts` — the behavior profiles: speed, steering, stops and grouping, and nothing about looks.
 - `resources/js/game/composition.ts` — what the crowd is made of: the default weight of every choice a person is rolled from.
 - `resources/js/game/wardrobe.ts` — `COLORS`, the one table of skin tones, hair colors and clothing schemes.
-- `resources/js/game/recipe.ts` — one person: every choice rolled in a fixed order, the primitives' figure and equipment profiles.
+- `resources/js/game/recipe.ts` — one person: every choice rolled in a fixed order, their height, and the equipment profiles.
 - `resources/js/game/data/` — the game's data files. `data/people/<id>.json` is one per person
   model, and `data/people.ts` finds, validates and exposes them (`PERSON_MODELS`, `DATA_FILES`,
   `personModel`). Pure: it imports nothing, and `tests/js/purity.test.ts` walks it beside `sim/`.
@@ -303,7 +303,7 @@ The engine:
   scheme arranged on the clothing slots it has.
 - `tests/js/wardrobe.test.ts` — the color system: every pooled scheme meets the rules on every
   model's color slots and the clothing slot sets to come, at every skin tone and hair color, in few
-  tries; the crowd as rolled meets them on the models and the primitives; a pooled scheme arranges
+  tries; the crowd as rolled meets them on the models; a pooled scheme arranges
   differently by model and by person, from its pool alone; a uniform is the same clothing on
   everyone and never rolled; skin tones are named by lightness alone and stay human; gray is a hair
   color of its own, near neutral from salt-and-pepper to silver, rolled at its composition share,
@@ -1388,10 +1388,8 @@ the one table the crowd's makeup is tuned in:
 None of them decides another -- the taxonomy's independent-axes rule, applied to people -- except the
 pairings that are tied on purpose: **a stroller only ever comes with a Slow Walker** (forcing a
 stroller forces the profile), **a Darter needs a child model**, and **a Group Walker's family can
-share the leader's clothing** (`groupSharesScheme`). One small tie was added for the primitives' sake:
-a child who rolls a mobility scooter walks instead, since the primitive child cannot sit one (the lab
-can still force it); and a seated rider -- a wheelchair or a scooter -- carries no backpack, which
-would be drawn inside the seat back (the roll is taken either way).
+share the leader's clothing** (`groupSharesScheme`). One small tie more: a mobility scooter is an
+adult's, so a child who rolls one walks instead (the lab can still force it).
 
 **The crowd holds only people a model can draw** (`docs/specs/person-model.md`, "Models only"). The
 weights below are the crowd as designed; the crowd is rolled from them with every choice the game
@@ -1477,22 +1475,21 @@ A behavior profile also declares what kind of thing a person is -- see "The enti
 for a person the taxonomy's type is their profile. That is metadata about the *kind* rather than a
 roll: it reads no stream.
 
-Proportions come from one height axis and the Body Type: the height roll and the preset's width
-feed height, width, head radius and shoulder width together, so a body reads as one person. The
-primitives' **figure** -- a child's for anyone who needs a child model, an adult's for everyone
-else -- scales height, head-to-body ratio and **limb length**; a cane user's recipe stoops. `h` is very nearly a stature
-in meters divided by 1.86, the skeleton's unit height: adults land between about 1.56 m and 1.90 m.
+**How tall a person is** comes from one height roll and the Body Type: `h`, the roll, and
+`headR`, a head radius the roll and the preset's width both feed, add up to `standingHeight` in
+`recipe.ts` -- `(1.52 + 2 × headR) × h` meters, the stature the primitive figure's skeleton gave, kept
+so nobody's height changed when it went. A child (the model class a Darter needs) is shorter and,
+for their height, bigger-headed (`FIGURE`). Adults land between about 1.56 m and 1.90 m. A model is
+drawn at that height (`drawnHeight`), and the camera stands on it for the player.
 
-`limb` is what stops a child being a scaled-down adult. It shortens the leg and arm bones, and
-`drawPerson` *derives* the hip from it (`hipY = ANKLE_Y + (THIGH + SHIN) * limb`) rather than
-hardcoding it, so the feet stay on the ground and the torso lengthens to take up the difference.
-The chest and pelvis are then placed as fractions of the hip-to-shoulder span, not at absolute
-heights, so they stretch with it.
-
-The primitives' own parts -- hats, hair styles, beards, glasses, jackets, shorts, bags, a backpack
-or a child's balloon -- are rolled after the choices, for the primitive fallback alone; a model has
-none of them yet. Nobody carries a phone or a camera any more: they were Kyle's and Linda's, and
-profiles carry only behavior.
+**A recipe holds what a model draws or the simulation reads, and nothing else.** The primitive
+people's own rolls went with them: hats, hair styles, ponytails, beards, glasses, jackets, shorts,
+bags, a backpack or a balloon, their clothing colors dressed at recipe time, shoulder width, stoop,
+limb length, a head pitch, an equipment frame color, whether a rider is seated, and the gait's bob,
+stride, arm swing and limp. The gait keeps its cadence, which the simulation turns the gait phase by
+and the model reads back out as the ground covered. Wearables, props and equipment are items, from
+the item spec, when they exist. Nobody carries a phone or a camera any more: they were Kyle's and
+Linda's, and profiles carry only behavior.
 
 ### Colors: skin, hair, and clothing schemes
 
@@ -1516,8 +1513,8 @@ elder models exist.
 color slots (`colorSlots`): the clothing slots **`tops`, `bottoms`, `footwear` and `accessory`**
 (anything baked into a model, a bag or a backpack), plus `skin`, `hair` and `keep` (details left as
 authored, like eyes and shoe soles). A one-piece garment is `tops` with no `bottoms`. **`headwear` is
-a clothing slot but not a color slot**: models are generated without hats, and a hat -- the
-primitives' today, a wearable later -- takes the person's headwear color, so a data file naming it
+a clothing slot but not a color slot**: models are generated without hats, and a hat -- a
+wearable, when there are wearables -- takes the person's headwear color, so a data file naming it
 is refused, and the region code (`RegionSlot` in `modelcrowd/regions.ts`) has no headwear either.
 The spec's `accessory2` is refused too, with the reason, until `wardrobe.ts` can color a second
 accessory. "Role" is not the word for any of this: it is the clip role's (see the spec), and the
@@ -1557,10 +1554,9 @@ find, Pastels on the lightest skin with all five slots, takes about twenty tries
 every pooled scheme against every model's color slots and the clothing slot sets to come, at every skin tone and
 hair color, young and old, and that a uniform comes out identical on everyone.
 
-The **primitives** are dressed by the same `dress()`, at recipe time, on the clothing slots they wear (a hat
-and a bag only when worn), salted as `primitives`; a primitive jacket is the top, in the tops color.
-A model is dressed by the renderer on its own clothing slots (`personColors` in `modelcrowd/regions.ts`),
-because only the renderer knows which color slots a model has. The old `Outfit` table, the shoe and hair
+A person is dressed by the renderer, on their model's own clothing slots (`personColors` in
+`modelcrowd/regions.ts`), because only the renderer knows which color slots a model has; the recipe
+holds the scheme and the arrangement roll, never the colors. The old `Outfit` table, the shoe and hair
 sets and the skin ramp have left `palette.ts`, which now holds only the world's colors.
 
 Equipment is people, not obstacles. Each piece carries a `MotionProfile` the simulation applies on
@@ -2264,10 +2260,10 @@ never adjusted into a younger or older person (see "A person").
   default), a person's width is that preset's (`BODY_TYPE_WIDTH`, the scale the "recipe width" column is
   on), and the model wears the preset exactly; a width between two anchors would blend them, which
   only an explicit width does now.
-- **A model is drawn at the recipe's height, never shrunk into anyone**: `standingHeight /
-  figureHeight(recipe)`, which takes the primitives' child figure back out for a Darter shown on an
-  adult model and is the standing height itself for an adult. `figureHeight` is a read-only export
-  from `recipe.ts`; nothing there rolls differently.
+- **A model is drawn at the recipe's height**: `drawnHeight` is `standingHeight`, the recipe's own
+  height roll -- a child's scaled down for a child -- and the clone is scaled to it from the height
+  the model stands in its file. A model is never stretched into another age class: a child is drawn
+  from a child model, at a child's height.
 - **A child is not an age; it is a model class.** Only a Darter needs one, and an adult model cannot
   be made into a convincing child, so until there is a child model the crowd has no Darters and the
   lab greys the Darter out with the reason.

@@ -19,7 +19,7 @@ import {
 } from '../../resources/js/game/modelcrowd/body.ts';
 import { personModel } from '../../resources/js/game/data/people.ts';
 import type { Body } from '../../resources/js/game/modelcrowd/body.ts';
-import { BODY_TYPE_WIDTH, figureHeight, makeRecipe } from '../../resources/js/game/recipe.ts';
+import { BODY_TYPE_WIDTH, makeRecipe, standingHeight } from '../../resources/js/game/recipe.ts';
 
 const NEUTRAL: Body = { width: 1, shoulders: 1, limbs: 1, fullness: 0, face: 0, neck: 1 };
 
@@ -81,15 +81,17 @@ test('a body is its Body Type and nothing else: no age in it, and an adult drawn
     assert.deepEqual([...BODY_KEYS].sort(), fields);
     for (let pos = 0; pos < BODY_TYPES.length; pos++) assert.deepEqual(Object.keys(shape(pos).body).sort(), fields);
     const r = makeRecipe(makeStreams(3).recipe.fork('agent:0'), { behavior: 'typical' });
-    assert.equal(figureHeight(r), 1);
-    assert.equal(drawnHeight(1.7, r), 1.7);
+    assert.equal(drawnHeight(r), standingHeight(r));
+    assert.ok(drawnHeight(r) > 1.5 && drawnHeight(r) < 1.95, `an adult drawn ${drawnHeight(r)} m tall`);
 });
 
-test('a Darter is drawn at an adult model\'s size, never shrunk', () => {
-    const r = makeRecipe(makeStreams(3).recipe.fork('agent:0'), { behavior: 'darter' });
-    assert.equal(r.modelClass, 'child');
-    // The primitives' child height comes back out: no model is ever scaled into a child.
-    assert.ok(Math.abs(drawnHeight(1, r) - 1 / figureHeight(r)) < 1e-12);
+test('a child is drawn at a child\'s height, from a child model, and never an adult stretched down', () => {
+    const child = makeRecipe(makeStreams(3).recipe.fork('agent:0'), { behavior: 'darter' });
+    const adult = makeRecipe(makeStreams(3).recipe.fork('agent:0'), { behavior: 'typical' });
+    assert.equal(child.modelClass, 'child');
+    // The model is scaled to this from the height it stands in its own file: a child model, at a child's height.
+    assert.equal(drawnHeight(child), standingHeight(child));
+    assert.ok(drawnHeight(child) < 0.7 * drawnHeight(adult), `a child drawn ${drawnHeight(child)} m tall`);
 });
 
 test('a model\'s body is its data file\'s: its age class, its build, and any limits it narrows', () => {

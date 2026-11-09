@@ -8,8 +8,8 @@
  * `headwear` -- and a model's data file says which of them its texture has, as color slots beside
  * `skin`, `hair` and `keep` (details left as authored, like eyes). A one-piece garment is `tops`
  * with no `bottoms`. `headwear` is the one clothing slot that is never a model's color slot: models
- * are generated without hats, and a hat -- the primitives' today, a wearable later -- wears the
- * person's headwear color.
+ * are generated without hats, and a hat -- a wearable, when wearables exist -- wears the person's
+ * headwear color.
  *
  * **A scheme is one of two kinds**, and the format holds both so a staff uniform never needs it
  * reworked:
@@ -232,8 +232,6 @@ export function saltOf(name: string): number {
     for (let i = 0; i < name.length; i++) { h ^= name.charCodeAt(i); h = Math.imul(h, 0x01000193); }
     return h >>> 0;
 }
-/** The salt of the primitive people, who are drawn from no model file. */
-export const PRIMITIVE_SALT = saltOf('primitives');
 
 /** One arrangement's start, mixed from the person's roll and the model's salt. Integer arithmetic only. */
 function startOf(roll: number, salt: number, n: number): number {

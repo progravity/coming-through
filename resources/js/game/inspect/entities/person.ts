@@ -15,6 +15,7 @@ import * as THREE from 'three';
 import { BEHAVIORS, BEHAVIOR_KEYS } from '../../behaviors.ts';
 import type { Behavior, BehaviorKey } from '../../behaviors.ts';
 import { COMPOSITION, behaviorUnavailable, crowdBehavior, crowdEquipment, crowdStroller, equipmentUnavailable } from '../../composition.ts';
+import { standingHeight } from '../../recipe.ts';
 import type { Choices, Equipment, Recipe } from '../../recipe.ts';
 import type { Range } from '../../util.ts';
 import { SPEED_CAP } from '../../sim/steering.ts';
@@ -180,7 +181,7 @@ export function personBehavior(w: Who): InfoSection {
         ['grouping', A.group !== undefined ? `${range(A.group)} together, ${A.spacing ?? 1} m apart, abreast; the family ${pct(COMPOSITION.groupSharesScheme)} of the time in the leader's clothing scheme`
             : A.parentType !== undefined ? `walks with a ${BEHAVIORS[A.parentType].name} parent` : 'walks alone'],
         ['collider', `r ${A.radius} m, before equipment`],
-        ['gait', `stride ×${A.gait.stride ?? 1}, cadence ×${A.gait.cadence ?? 1}`],
+        ['gait', `cadence ×${A.gait.cadence ?? 1}`],
     ];
     return {
         id: 'behavior', title: `Behavior: ${A.name}`,
@@ -201,11 +202,10 @@ export function personRecipe(w: Who, note = ''): InfoSection {
         { k: 'scheme', v: `${schemeNamed(r.scheme).name} · arrangement roll ${n2(r.arrange, 3)}` },
         colorRow('skin', r.skin),
         colorRow('hair', r.hairColor),
-        r.mobility === 'none' ? { k: 'mobility', v: 'none' } : { k: 'mobility', v: `${r.mobility}${r.seated ? ' · seated' : ''}` },
-        { k: 'height', v: `h ${n2(r.h, 3)} (× the 1.86-unit skeleton)` },
-        { k: 'body type', v: `w ${n2(r.w, 3)} · shoulder ${n2(r.shoulder, 3)}` },
-        { k: 'stoop', v: `${n2(r.stoop, 3)} rad` },
-        { k: 'gait', v: `bob ${n2(r.gait.bob)} · stride ${n2(r.gait.stride)} · cadence ${n2(r.gait.cadence, 1)} · arm ${n2(r.gait.arm)} · limp ${n2(r.gait.limp)}` },
+        { k: 'mobility', v: r.mobility },
+        { k: 'height', v: `h ${n2(r.h, 3)} · head r ${n2(r.headR, 3)} · standing ${n2(standingHeight(r))} m` },
+        { k: 'body type', v: `w ${n2(r.w, 3)}` },
+        { k: 'gait', v: `cadence ${n2(r.gait.cadence, 1)}` },
         { k: 'motion', v: `speed ×${n2(r.motion.speed)} · turn ×${n2(r.motion.turn)} · accel ×${n2(r.motion.accel)} · radius ×${n2(r.motion.radius)} · offset ${n2(r.motion.colOffset)} m` },
     ];
     return { id: 'recipe', title: 'Rolls', rows, ...(note === '' ? {} : { note }) };

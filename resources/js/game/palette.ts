@@ -43,9 +43,6 @@ export const PALETTE: readonly number[] = [
 /** A colour family: indices into PALETTE. */
 export type Family = readonly number[];
 
-/** Equipment frames: wheelchairs, scooters, strollers, cane shafts. */
-export const FRAME: Family    = [5, 4, 6, 19, 10];
-
 /** Dark neutrals for things that are not dyed: phone bodies, spokes, glasses, tyres. */
 export const INK = 0x2a2a2e;
 
@@ -108,9 +105,6 @@ export const GROUND = {
     goalPad: PALETTE[13],
     goalPadEdge: mix(PALETTE[13], PALETTE[12], 0.4),
 } as const;
-
-/** Select from a family with an already-drawn roll in [0, 1). Never draws. */
-export const fromFamily = (fam: Family, roll: number): number => PALETTE[fam[index(fam.length, roll)]];
 
 /**
  * Perceptual distance between two packed colours: the "redmean" approximation, which is cheap and

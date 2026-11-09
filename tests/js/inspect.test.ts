@@ -82,7 +82,7 @@ test('a choice moves only itself: the rest of the person keeps their rolls', () 
     // A Body Type moves the body's proportions and nothing else the person rolled.
     const base = new Subject(3, 0, { bodyType: 'average', behavior: 'typical' });
     const broad = new Subject(3, 0, { bodyType: 'broad', behavior: 'typical' });
-    for (const k of ['skin', 'hairColor', 'shirt', 'pants', 'shoe', 'hatColor', 'bagColor', 'accColor', 'skinTone', 'hairTone', 'hat', 'stoop'] as const) {
+    for (const k of ['skin', 'hairColor', 'skinTone', 'hairTone', 'scheme', 'arrange', 'h'] as const) {
         assert.equal(broad.recipe[k], base.recipe[k], `the Body Type override changed ${k}`);
     }
     assert.ok(broad.recipe.w > base.recipe.w, 'Broad is no wider');
@@ -92,7 +92,7 @@ test('a choice moves only itself: the rest of the person keeps their rolls', () 
 
     const weaver = new Subject(3, 0, { behavior: 'weaver' });
     const typical = new Subject(3, 0, { behavior: 'typical' });
-    for (const k of ['skin', 'hairColor', 'shirt', 'pants', 'bodyType', 'skinTone'] as const) {
+    for (const k of ['skin', 'hairColor', 'scheme', 'arrange', 'bodyType', 'skinTone'] as const) {
         assert.equal(weaver.recipe[k], typical.recipe[k], `the behavior override changed ${k}`);
     }
     assert.ok(weaver.speed > typical.speed);
@@ -104,8 +104,8 @@ test('every equipment override lands, on every Body Type, and a stroller brings 
             const s = new Subject(3, 0, { bodyType, equipment, behavior: 'typical' });
             assert.equal(s.recipe.bodyType, bodyType);
             assert.equal(s.recipe.equipment, equipment, `${equipment} did not take on ${bodyType}`);
-            assert.equal(s.recipe.seated, equipment === 'wheelchair' || equipment === 'scooter');
-            assert.equal(s.recipe.acc === 'stroller', equipment === 'stroller');
+            // A stroller is pushed, not ridden or leaned on: its user has no mobility aid.
+            assert.equal(s.recipe.mobility, equipment === 'stroller' ? 'none' : equipment);
             // The pairing that stays tied on purpose: nobody but a Slow Walker pushes a stroller.
             assert.equal(s.type, equipment === 'stroller' ? 'slow-walker' : 'typical');
         }
@@ -131,6 +131,6 @@ test('a Darter is a child and needs a child model; nobody else does', () => {
         assert.equal(s.recipe.modelClass, b === 'darter' ? 'child' : 'adult', b);
     }
     const darter = new Subject(3, 0, { behavior: 'darter' }), typical = new Subject(3, 0, { behavior: 'typical' });
-    assert.ok(darter.recipe.h < typical.recipe.h * 0.7, 'a Darter is drawn child-sized on the primitives');
+    assert.ok(darter.recipe.h < typical.recipe.h * 0.7, 'a Darter is not child-sized');
     assert.ok(darter.recipe.headR > typical.recipe.headR, 'and relatively bigger-headed');
 });

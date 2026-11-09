@@ -38,7 +38,6 @@ import { DATA_DIR, DATA_FILES, PERSON_MODELS, UNKNOWN } from '../../data/people.
 import type { DataFile } from '../../data/people.ts';
 import { CROWD_MODEL, crowdModels } from '../../composition.ts';
 import { fetchModel } from '../../render/model-file.ts';
-import { standingHeight } from '../../recipe.ts';
 import {
     BODY_KEYS, BODY_TYPES, BODY_TYPE_PRESETS, BodyRig, LIMITS, NOT_ON_MODELS, bakeMask,
     NO_MODEL_BODY, bodyOf, drawnHeight, patchFullness, shape, skinSpace,
@@ -420,7 +419,7 @@ class Figure {
         this.rig = new BodyRig(root, skinned, model.pristine);
         this.rig.apply(body);
         this.rig.pose();
-        this.scale = c.fit === true && model.restHeight > 0 ? drawnHeight(standingHeight(who.recipe), who.recipe) / model.restHeight : 1;
+        this.scale = c.fit === true && model.restHeight > 0 ? drawnHeight(who.recipe) / model.restHeight : 1;
         const mixer = new THREE.AnimationMixer(root);
         const clip = model.clips.find(k => k.name === c.clip)
             ?? (c.clip === STAND_IN && model.roles?.standIn === true ? model.roles.idle ?? undefined : undefined);

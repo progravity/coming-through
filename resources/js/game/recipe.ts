@@ -32,10 +32,9 @@ import type { BehaviorKey, BehaviorMix, ModelClass } from './behaviors.ts';
 import { COMPOSITION, crowdBehavior, crowdEquipment, crowdStroller, pick } from './composition.ts';
 import type { Drawable } from './composition.ts';
 import type { Rng } from './core/rng.ts';
-import { FRAME, fromFamily, fromList } from './palette.ts';
 import type { Range } from './util.ts';
-import { HAIR_KEYS, POOLED_KEYS, PRIMITIVE_SALT, SKIN_TONE_KEYS, dress, hairColor, skinColor } from './wardrobe.ts';
-import type { ClothingSlot, HairKey, SchemeKey, SkinToneKey } from './wardrobe.ts';
+import { HAIR_KEYS, POOLED_KEYS, SKIN_TONE_KEYS, hairColor, skinColor } from './wardrobe.ts';
+import type { HairKey, SchemeKey, SkinToneKey } from './wardrobe.ts';
 
 /**
  * The five Body Types, slim to broad: the preset rolled per person. Not a model's build, which is
@@ -44,8 +43,8 @@ import type { ClothingSlot, HairKey, SchemeKey, SkinToneKey } from './wardrobe.t
 export type BodyType = 'slim' | 'trim' | 'average' | 'solid' | 'broad';
 export const BODY_TYPES: readonly BodyType[] = ['slim', 'trim', 'average', 'solid', 'broad'];
 /**
- * Each preset's width, on the width scale the primitive people are drawn with and the model bodies
- * are anchored to: the old continuous roll's range (0.84 to 1.2) in even steps.
+ * Each preset's width, on the width scale the model bodies are anchored to (`BODY_TYPE_PRESETS` in
+ * `modelcrowd/body.ts`): the old continuous roll's range (0.84 to 1.2) in even steps.
  */
 export const BODY_TYPE_WIDTH: Readonly<Record<BodyType, number>> = { slim: 0.84, trim: 0.93, average: 1.02, solid: 1.11, broad: 1.2 };
 
@@ -59,15 +58,6 @@ export const EQUIPMENT: readonly Equipment[] = ['none', 'stroller', 'cane', 'whe
 export type Mobility = 'none' | 'cane' | 'wheelchair' | 'scooter';
 const AIDS: readonly Exclude<Equipment, 'stroller'>[] = ['none', 'cane', 'wheelchair', 'scooter'];
 
-/**
- * The parts of the primitive people a person carries beyond their equipment. Only the primitives
- * draw them; a model has none of them yet.
- */
-export type Accessory = 'none' | 'backpack' | 'balloon' | 'stroller' | 'phone' | 'camera';
-export type HatType = 'none' | 'cap' | 'brim' | 'cone' | 'beanie' | 'bucket';
-export type HairType = 'none' | 'crop' | 'round' | 'flat' | 'bob';
-export type BeardType = 'none' | 'stubble' | 'full';
-
 /** The choices a person is made of. Every one has a default weight in `composition.ts`. */
 export interface Choices {
     behavior: BehaviorKey;
@@ -79,13 +69,13 @@ export interface Choices {
     equipment: Equipment;
 }
 
+/**
+ * How fast a person's gait phase turns per meter covered. The simulation advances `phase` by speed
+ * times cadence, and the model plays its walk and run by `phase / cadence`, the ground covered
+ * (`modelcrowd/clips.ts`), so the cadence sets the phase's units and never the speed of a stride.
+ */
 export interface Gait {
-    bob: number;
-    stride: number;
     cadence: number;
-    arm: number;
-    /** Asymmetry between the legs, 0..1; a cane user favors one side. */
-    limp: number;
 }
 
 /** Multipliers the simulation applies on top of the behavior. Comes from equipment alone. */
@@ -109,52 +99,25 @@ export interface Recipe extends Choices {
     modelClass: ModelClass;
     /** Whether a Group Walker leader's family wears their scheme. Rolled for everyone, read for leaders. */
     sharesScheme: boolean;
-    // ---- proportions, all from one height axis and the Body Type ----
+    // ---- height, from one roll, and the Body Type's width ----
+    /** The height roll, as a multiple of the 1.86-unit figure height (`standingHeight`), a child's scaled down. */
     h: number;
+    /** The Body Type on the width scale the model bodies are anchored to (`BODY_TYPE_WIDTH`). */
     w: number;
+    /** Head radius in figure units: the head's share of `standingHeight`. */
     headR: number;
-    /** Half the shoulder width in unit-height space; also where the arms hang from. */
-    shoulder: number;
-    /** Forward stoop of the torso in radians: a cane user's. */
-    stoop: number;
-    /**
-     * Limb-length multiplier. A child is not a scaled-down adult: their legs and arms are
-     * proportionally shorter and their torso longer. drawPerson derives the hip height from this so
-     * the feet stay on the ground and the torso takes up the difference.
-     */
-    limb: number;
     // ---- color ----
     /**
      * The roll a pooled scheme's arrangement starts from. The arrangement itself is the renderer's
-     * to work out per model (`dress` in `wardrobe.ts`), since it depends on which color slots the model
-     * has; the colors below are the arrangement for the primitive figure.
+     * to work out per model (`dress` in `wardrobe.ts`), since it depends on which color slots the
+     * model has.
      */
     arrange: number;
     skin: number;
-    shirt: number;
-    pants: number;
-    shoe: number;
-    // ---- the primitives' parts ----
-    hat: HatType;
-    hatColor: number;
-    hair: HairType;
     hairColor: number;
-    ponytail: boolean;
-    beard: BeardType;
-    glasses: boolean;
-    jacket: boolean;
-    jacketColor: number;
-    /** Trousers stop at the knee, leaving the shin bare. */
-    shorts: boolean;
-    bag: boolean;
-    bagColor: number;
-    acc: Accessory;
-    accColor: number;
-    // ---- equipment, as the primitives and the simulation read it ----
+    // ---- equipment, as the simulation and the renderer read it ----
+    /** The mobility aid, if any: what moves differently. Anyone on one walks rather than running. */
     mobility: Mobility;
-    /** True for wheelchair and scooter users: the legs are folded and the body rides lower. */
-    seated: boolean;
-    frameColor: number;
     /**
      * This person's own walking speed in m/s, rolled within their behavior's range, before the
      * equipment's multiplier. A group follower walks at the leader's speed instead, but still rolls
@@ -162,46 +125,28 @@ export interface Recipe extends Choices {
      */
     pace: number;
     motion: MotionProfile;
-    headPitch: number;
     gait: Gait;
 }
 
 /**
- * The proportions a primitive figure is drawn with: a child's for anyone who needs a child model,
- * and an adult's for everyone else. Nothing here changes speed or gait -- that is the behavior's.
+ * How tall and how big-headed a person is for the class of model they are drawn from: a child is
+ * shorter and, for their height, bigger-headed. Nothing here changes speed or gait -- that is the
+ * behavior's.
  */
-type FigureKey = 'child' | 'adult';
 interface FigureProfile {
     /** Multiplies the height roll. */
     height: number;
     /** Head radius relative to an adult of the same height: children are famously top-heavy. */
     head: number;
-    shoulder: number;
-    /** Leg and arm length relative to an adult of the same height. */
-    limb: number;
-    stoop: number;
 }
-const FIGURE: Record<FigureKey, FigureProfile> = {
-    child: { height: 0.62, head: 1.24, shoulder: 0.88, limb: 0.85, stoop: 0 },
-    adult: { height: 1,    head: 1,    shoulder: 1,    limb: 1,    stoop: 0 },
+const FIGURE: Readonly<Record<'child' | 'adult', FigureProfile>> = {
+    child: { height: 0.62, head: 1.24 },
+    adult: { height: 1, head: 1 },
 };
-const figureOf = (r: Pick<Recipe, 'modelClass'>): FigureKey => (r.modelClass === 'child' ? 'child' : 'adult');
 
-/**
- * How much of a person's height their figure takes away: a child's, or none. Read-only, for the
- * model renderer, which takes it back out rather than shrinking a model into anything
- * (`modelcrowd/body.ts`): a model's age is its own. Nothing here rolls.
- */
-export const figureHeight = (r: Pick<Recipe, 'modelClass'>): number => FIGURE[figureOf(r)].height;
-/** The figure a recipe is drawn as on the primitives, for the lab's readouts. */
-export const figureName = (r: Pick<Recipe, 'modelClass'>): string => figureOf(r);
-
+/** How each piece of equipment changes a person's motion, and the gait cadence that goes with it. */
 interface EquipmentProfile extends MotionProfile {
-    seated: boolean;
-    stride: number;
     cadence: number;
-    bob: number;
-    limp: number;
 }
 
 /**
@@ -212,40 +157,25 @@ interface EquipmentProfile extends MotionProfile {
  * clipping through the crowd.
  */
 const EQUIP: Record<Equipment, EquipmentProfile> = {
-    none:       { speed: 1,    turn: 1,    accel: 1,    radius: 1,     colOffset: 0,    seated: false, stride: 1,    cadence: 1,    bob: 1,    limp: 0 },
-    stroller:   { speed: 1,    turn: 1,    accel: 1,    radius: 1.94,  colOffset: 0.6,  seated: false, stride: 1,    cadence: 1,    bob: 0.4,  limp: 0 },
-    cane:       { speed: 0.62, turn: 0.85, accel: 0.62, radius: 1.2,   colOffset: 0.06, seated: false, stride: 0.68, cadence: 0.86, bob: 0.7,  limp: 0.55 },
-    wheelchair: { speed: 0.8,  turn: 0.72, accel: 0.7,  radius: 1.5,   colOffset: 0.12, seated: true,  stride: 0,    cadence: 1,    bob: 0.18, limp: 0 },
-    scooter:    { speed: 1.12, turn: 0.5,  accel: 0.45, radius: 1.8,   colOffset: 0.28, seated: true,  stride: 0,    cadence: 1,    bob: 0.1,  limp: 0 },
+    none:       { speed: 1,    turn: 1,    accel: 1,    radius: 1,     colOffset: 0,    cadence: 1 },
+    stroller:   { speed: 1,    turn: 1,    accel: 1,    radius: 1.94,  colOffset: 0.6,  cadence: 1 },
+    cane:       { speed: 0.62, turn: 0.85, accel: 0.62, radius: 1.2,   colOffset: 0.06, cadence: 0.86 },
+    wheelchair: { speed: 0.8,  turn: 0.72, accel: 0.7,  radius: 1.5,   colOffset: 0.12, cadence: 1 },
+    scooter:    { speed: 1.12, turn: 0.5,  accel: 0.45, radius: 1.8,   colOffset: 0.28, cadence: 1 },
 };
 
 /**
  * How tall a person stands, in meters: what a model is drawn at (`drawnHeight` in
  * `modelcrowd/body.ts`) and what the camera stands on. The formula is the one the primitive figure's
  * skeleton gave -- the base of its head 1.52 units up, the head's diameter on top, all times the
- * height roll -- kept as it was so nobody's height changed when the primitive people went.
+ * height roll -- kept as it was so nobody's height changed when the primitive people went. That is
+ * why the recipe still rolls a head radius: it is part of how tall a person is.
  */
 export const standingHeight = (r: Pick<Recipe, 'h' | 'headR'>): number => (HEAD_BASE + 2 * r.headR) * r.h;
 const HEAD_BASE = 1.52;
 
 /** The adult height roll's range, as a multiple of the 1.86-unit skeleton: about 1.56 m to 1.90 m. */
 export const HEIGHT_RANGE: Range = [0.84, 1.02];
-
-/** Hat styles by figure: a party hat belongs on a child, a brimmed hat rarely does. */
-const HAT_TYPES: Record<'child' | 'grown', readonly HatType[]> = {
-    child: ['cap', 'cap', 'cone', 'cone', 'beanie', 'bucket'],
-    grown: ['cap', 'cap', 'cap', 'brim', 'brim', 'beanie', 'bucket'],
-};
-/** One entry is 'none', so a share of the hatless crowd is bald. */
-const HAIR_TYPES: readonly HairType[] = ['crop', 'crop', 'round', 'round', 'flat', 'bob', 'bob', 'none'];
-/** What a primitive figure may carry in its hands or on its back, by figure. */
-const CARRIED: Record<'child' | 'grown', readonly Accessory[]> = {
-    child: ['none', 'balloon'],
-    grown: ['none', 'none', 'none', 'backpack'],
-};
-
-/** The primitives' optional parts, each a chance, modulated by the figure where the comment says. */
-const PARTS = { hat: 0.35, glasses: 0.18, beard: 0.2, ponytail: 0.22, jacket: 0.3, shorts: 0.28, bag: 0.2 } as const;
 
 export interface RecipeOptions extends Partial<Choices> {
     /** Behavior weights in place of the composition's: the people lab's crowd mix. */
@@ -255,8 +185,6 @@ export interface RecipeOptions extends Partial<Choices> {
      * asking what a child model or an equipment item would bring back. The game never passes one.
      */
     drawable?: Drawable;
-    /** Fixed shirt color. Only the player uses this. */
-    shirt?: number;
 }
 
 const lerpRange = (v: Range, t: number): number => (typeof v === 'number' ? v : v[0] + (v[1] - v[0]) * t);
@@ -289,11 +217,7 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
     const bodyType0 = rng.next();
     const skin0 = rng.next(), skinVar0 = rng.next(), hair0 = rng.next(), hairVar0 = rng.next();
     const scheme0 = rng.next(), arrange0 = rng.next(), share0 = rng.next();
-    const height0 = rng.next(), headR0 = rng.next();
-    const hat0 = rng.next(), hatType0 = rng.next(), hairStyle0 = rng.next(), ponytail0 = rng.next();
-    const beard0 = rng.next(), glasses0 = rng.next(), jacket0 = rng.next(), shorts0 = rng.next();
-    const bag0 = rng.next(), carry0 = rng.next(), frame0 = rng.next();
-    const bob0 = rng.next(), stride0 = rng.next(), cadence0 = rng.next(), arm0 = rng.next();
+    const height0 = rng.next(), headR0 = rng.next(), cadence0 = rng.next();
 
     // ---- the choices ----
     // A stroller only ever comes with a Slow Walker, so forcing one forces the profile too.
@@ -315,40 +239,15 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
     const equipment: Equipment = opts.equipment
         ?? (rolledStroller ? 'stroller' : modelClass === 'child' && rolledAid === 'scooter' ? 'none' : rolledAid);
     const ep = EQUIP[equipment];
-    const fig = FIGURE[figureOf({ modelClass })];
-    const child = modelClass === 'child';
+    const fig = FIGURE[modelClass === 'child' ? 'child' : 'adult'];
 
-    // ---- proportions: one height axis, the Body Type's width ----
+    // ---- height: one height axis, and the Body Type's width ----
     const w = BODY_TYPE_WIDTH[bodyType];
-    const across = (w - BODY_TYPE_WIDTH.slim) / (BODY_TYPE_WIDTH.broad - BODY_TYPE_WIDTH.slim);
     // Taller bodies carry relatively smaller heads; a child's figure pushes the other way. Sized so
-    // an adult lands near five and a half heads tall against the skeleton in person.ts.
+    // an adult lands near five and a half heads tall, which is what `standingHeight` adds up.
     const headR = ((0.179 - 0.025 * height0) * fig.head * (1 + 0.06 * (w - 1))) + 0.004 * headR0;
 
-    // ---- the primitives' parts ----
-    // A seated rider's back is against the seat, where a backpack would be drawn inside the backrest,
-    // so they carry none -- as someone pushing a stroller carries no bag. The roll is taken either way.
-    const carried = fromList(CARRIED[child ? 'child' : 'grown'], carry0);
-    const acc: Accessory = equipment === 'stroller' ? 'stroller' : ep.seated && carried === 'backpack' ? 'none' : carried;
-    const hat: HatType = hat0 < PARTS.hat ? fromList(HAT_TYPES[child ? 'child' : 'grown'], hatType0) : 'none';
-    const hair: HairType = hat === 'none' ? fromList(HAIR_TYPES, hairStyle0) : 'none';
-    const beardP = PARTS.beard * (child ? 0 : 1);
-    const glassesP = PARTS.glasses * (child ? 0.5 : 1);
     const mobility: Mobility = equipment === 'stroller' ? 'none' : equipment;
-    const jacket = jacket0 < PARTS.jacket;
-    const bag = bag0 < PARTS.bag && equipment !== 'stroller';
-
-    // ---- colors: skin and hair, then the scheme arranged on the primitive figure's clothing slots ----
-    const skin = skinColor(skinTone, skinVar0);
-    const hairCol = hairColor(hairTone, hairVar0);
-    // The primitives wear every clothing slot, but a hat or a bag only when they have one: an empty slot
-    // is not a constraint on the others.
-    const carries = bag || acc === 'backpack' || acc === 'balloon';
-    const slots: ClothingSlot[] = ['tops', 'bottoms', 'footwear'];
-    if (hat !== 'none') slots.push('headwear');
-    if (carries) slots.push('accessory');
-    const worn = dress(scheme, arrange0, skin, hairCol, slots, PRIMITIVE_SALT).colors;
-    const top = worn.tops ?? 0xffffff, bottom = worn.bottoms ?? top, accessory = worn.accessory ?? bottom;
 
     return {
         behavior, bodyType, skinTone, hairTone, scheme, equipment,
@@ -358,44 +257,14 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
         h: lerpRange(HEIGHT_RANGE, height0) * fig.height,
         w,
         headR,
-        shoulder: (0.183 + 0.034 * across) * fig.shoulder,
-        stoop: fig.stoop + (equipment === 'cane' ? 0.06 : 0),
-        limb: fig.limb,
 
         arrange: arrange0,
-        skin,
-        shirt: opts.shirt ?? top,
-        pants: bottom,
-        shoe: worn.footwear ?? bottom,
-
-        hat, hatColor: worn.headwear ?? top,
-        hair, hairColor: hairCol,
-        // A ponytail hangs out from under a cap or a beanie, so it survives a hat; a bald head or a
-        // party hat gets none.
-        ponytail: ponytail0 < PARTS.ponytail && hat !== 'cone' && (hair !== 'none' || hat !== 'none'),
-        // The same roll picks whether there is a beard and how full it is: still one draw.
-        beard: beard0 < beardP ? (beard0 < beardP * 0.45 ? 'full' : 'stubble') : 'none',
-        glasses: glasses0 < glassesP,
-        // A jacket is the top: the one tops color, worn over the chest rather than as a second garment.
-        jacket,
-        jacketColor: top,
-        shorts: shorts0 < PARTS.shorts * (child ? 1.7 : 1),
-        bag,
-        bagColor: accessory,
-        acc, accColor: accessory,
+        skin: skinColor(skinTone, skinVar0),
+        hairColor: hairColor(hairTone, hairVar0),
 
         mobility,
-        seated: ep.seated,
-        frameColor: fromFamily(FRAME, frame0),
         pace: lerpRange(B.speed, pace0),
         motion: { speed: ep.speed, turn: ep.turn, accel: ep.accel, radius: ep.radius, colOffset: ep.colOffset },
-        headPitch: 0,
-        gait: {
-            bob: (0.03 + 0.02 * bob0) * ep.bob,
-            stride: (B.gait.stride ?? 1) * (0.5 + 0.15 * stride0) * ep.stride,
-            cadence: (B.gait.cadence ?? 1) * (8 + 2 * cadence0) * ep.cadence,
-            arm: (0.35 + 0.15 * arm0) * (equipment === 'cane' ? 0.55 : 1),
-            limp: ep.limp,
-        },
+        gait: { cadence: (B.gait.cadence ?? 1) * (8 + 2 * cadence0) * ep.cadence },
     };
 }
