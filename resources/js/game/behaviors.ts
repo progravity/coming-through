@@ -1,3 +1,4 @@
+import type { AgeClass } from './data/people.ts';
 import { entityMeta } from './entity.ts';
 import type { EntityMeta } from './entity.ts';
 import type { Range } from './util.ts';
@@ -21,10 +22,10 @@ import type { Range } from './util.ts';
 export type BehaviorKey = 'typical' | 'weaver' | 'slow-walker' | 'distracted' | 'sudden-stopper' | 'group-walker' | 'darter';
 
 /**
- * What kind of model a person has to be drawn from: a model file's age class (its body file says
- * which). Every model today is an adult; child and elderly models come later.
+ * What kind of model a person has to be drawn from: a model's age class, as its data file declares
+ * it (`data/people.ts`). Every model today is an adult; child and elder models come later.
  */
-export type ModelClass = 'adult' | 'child' | 'elderly';
+export type ModelClass = AgeClass;
 
 /** How a profile walks, as multipliers on the recipe's own rolled gait. Age no longer touches it. */
 export interface BehaviorGait {

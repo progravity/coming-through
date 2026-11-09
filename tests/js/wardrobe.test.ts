@@ -5,32 +5,30 @@
  * whichever model, at whichever skin tone and hair -- meets the minimum rules: tops and bottoms
  * contrast, footwear differs from the bottoms or is a neutral, the accessory differs from the top,
  * headwear from the hair, and nothing is close to the skin. That is checked here against every
- * pooled scheme, every model's own role file (and the role sets models will have later), every skin
+ * pooled scheme, every model's own color slots (and the role sets models will have later), every skin
  * tone and hair color, young and old, and many seeds. A uniform's promise is the opposite one: the
  * same clothing on everyone, whatever their skin and hair.
  */
 import assert from 'node:assert/strict';
-import { readFileSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';
 import { COMPOSITION } from '../../resources/js/game/composition.ts';
 import { makeStreams } from '../../resources/js/game/core/rng.ts';
+import { PERSON_MODELS } from '../../resources/js/game/data/people.ts';
 import { apart } from '../../resources/js/game/palette.ts';
 import { makeRecipe } from '../../resources/js/game/recipe.ts';
+import { modelFileName } from '../../resources/js/game/render/model-file.ts';
 import {
     CLOTHING_ROLES, COLORS, HAIR_KEYS, POOLED_KEYS, PRIMITIVE_SALT, SCHEME_KEYS, SKIN_TONE_KEYS, UNIFORM_KEYS,
     checkClothing, dress, hairColor, saltOf, schemeNamed, skinColor, skinRamp,
 } from '../../resources/js/game/wardrobe.ts';
 import type { ClothingRole } from '../../resources/js/game/wardrobe.ts';
 
-const MODELS = new URL('../../public/models/people/', import.meta.url);
-
-/** Every model's clothing roles, read from its own role file, keyed by the file its salt comes from. */
+/** Every model's clothing roles, read from its data file's color slots, keyed by the GLB its salt comes from. */
 function modelRoles(): { file: string; roles: ClothingRole[] }[] {
-    return readdirSync(MODELS).filter(f => f.endsWith('.regions.json')).map(f => {
-        const file = JSON.parse(readFileSync(new URL(f, MODELS), 'utf8')) as { regions: { role: string }[] };
-        const roles = CLOTHING_ROLES.filter(r => file.regions.some(e => e.role === r));
-        return { file: f.replace(/\.regions\.json$/, '.glb'), roles };
-    });
+    return Object.values(PERSON_MODELS).map(m => ({
+        file: modelFileName(m),
+        roles: CLOTHING_ROLES.filter(r => m.colorSlots.some(c => c.slot === r)),
+    }));
 }
 
 /** The role sets the models of tomorrow will have, beside today's: every role, a one-piece, a hat. */
@@ -43,7 +41,7 @@ const FUTURE: readonly { file: string; roles: ClothingRole[] }[] = [
 
 test('the models in the repo are on the standard roles, with no headwear or accessory today', () => {
     const got = modelRoles();
-    assert.ok(got.length >= 2, 'no role files found');
+    assert.ok(got.length >= 2, 'no model data files found');
     for (const m of got) assert.deepEqual(m.roles, ['tops', 'bottoms', 'footwear'], m.file);
 });
 

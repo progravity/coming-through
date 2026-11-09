@@ -6,7 +6,7 @@
 //
 // Models only by default, the way the game draws people; --only=prim runs the primitives alone and
 // --only=both sweeps the two side by side for comparison.
-//        node scripts/bench-people.mjs https://coming-through.test/play 45 --model=casual-man-low   (a name in MODELS)
+//        node scripts/bench-people.mjs https://coming-through.test/play 45 --model=casual-man-low   (a model ID: resources/js/game/data/people/<id>.json)
 //
 // Each run waits for a few settling frames, then averages over the frames that follow, read off the
 // running totals game.ts keeps in `game.stress` -- so shader compiles at the start are never in the

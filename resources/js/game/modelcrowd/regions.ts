@@ -8,13 +8,13 @@
  * between an island and the gutter around it -- are left out of the grouping and labelled from
  * their neighbours afterwards, so a blend of two colours cannot become a third group.
  *
- * **What each group *is* lives in a data file beside the model**, `<model>.regions.json` in
- * `public/models/people/`, which maps colors to the standard roles every model shares: the clothing roles
- * (headwear, tops, bottoms, footwear, accessory -- see `wardrobe.ts`), skin, hair, and keep. Entries
- * are matched by colour rather than by position in a list, so a file keeps working when the
- * detector's ordering changes and largely carries over to a regeneration in the same garments. A
- * misassigned region is fixed by editing that file; a pair of regions merged into one group by
- * raising or lowering `bandwidth` there.
+ * **What each group *is* lives in the model's data file**, as its `colorSlots`
+ * (`resources/js/game/data/people/<id>.json`), which map colors to the color slots every model
+ * shares: the clothing slots (tops, bottoms, footwear, accessory -- see `wardrobe.ts`), skin, hair,
+ * and keep. Entries are matched by colour rather than by position in a list, so a file keeps working
+ * when the detector's ordering changes and largely carries over to a regeneration in the same
+ * garments. A misassigned region is fixed by editing that file; a pair of regions merged into one
+ * group by raising or lowering `regionBandwidth` there.
  *
  * **It says so when it cannot tell.** Two groups whose texels sit between each other in quantity
  * are a *blend*. A blend inside one role is harmless; a blend across two roles means a recolour
@@ -24,8 +24,9 @@
  * its luminance over the luminance of its role's centre, so folds and baked shadows survive.
  */
 import * as THREE from 'three';
+import type { PersonModel } from '../data/people.ts';
 import type { Recipe } from '../recipe.ts';
-import { PERSON_MODEL_DIR as MODEL_DIR } from '../render/model-file.ts';
+import { modelFileName } from '../render/model-file.ts';
 import { CLOTHING_ROLES, dress, saltOf } from '../wardrobe.ts';
 import type { ClothingRole, Dressed } from '../wardrobe.ts';
 
@@ -33,8 +34,6 @@ export const ROLES = ['skin', 'hair', 'headwear', 'tops', 'bottoms', 'footwear',
 export type Role = (typeof ROLES)[number];
 /** The roles a person has a color for; `keep` is left as the file painted it. */
 export type PaintRole = Exclude<Role, 'keep'>;
-/** The names the first role files used, and what each became. A file still using one is told. */
-const RENAMED: Readonly<Record<string, Role>> = { top: 'tops', trousers: 'bottoms', shoes: 'footwear' };
 
 /** How many groups the shader can tell apart. A texture with more distinct colours than this is refused. */
 export const REGION_MAX = 12;
@@ -123,7 +122,7 @@ export interface Pixels { readonly width: number; readonly height: number; reado
 
 export interface Group {
     readonly index: number;
-    /** The group's centre, in Oklab and as the sRGB hex a role file names it by. */
+    /** The group's centre, in Oklab and as the sRGB hex a data file names it by. */
     readonly lab: readonly [number, number, number];
     readonly hex: string;
     /** Share of the used texels. */
@@ -149,7 +148,7 @@ export interface Segmentation {
     /** Groups that still look like two colours. Empty unless the bandwidth was fixed or hit its floor. */
     readonly splits: readonly Split[];
     readonly bandwidth: number;
-    /** Whether the bandwidth was found by the search rather than given by the role file. */
+    /** Whether the bandwidth was found by the search rather than given by the data file. */
     readonly auto: boolean;
     /** Worth knowing, but not a reason to refuse. */
     readonly notes: readonly string[];
@@ -160,7 +159,7 @@ export interface Segmentation {
 /**
  * Group the texels a mesh actually uses by colour. `uv` is the mesh's TEXCOORD_0 (two per vertex)
  * and `index` its triangles, or null for a non-indexed mesh. With no `bandwidth` it is searched for;
- * a role file can fix one instead. Pure, so a test can hand it a texture built in code.
+ * a data file can fix one instead. Pure, so a test can hand it a texture built in code.
  */
 export function segment(px: Pixels, uv: ArrayLike<number>, index: ArrayLike<number> | null, bandwidth?: number): Segmentation {
     const p = prepare(px, uv, index);
@@ -367,7 +366,7 @@ function cluster(p: Prepared, bandwidth: number, auto: boolean, full = true): Se
     };
     if (groupCount < 2) return fail('the texture is one colour group: there is nothing to separate');
     if (groupCount > REGION_MAX) {
-        return fail(`${groupCount} distinct colour groups, and at most ${REGION_MAX} can be told apart; raise "bandwidth" in the role file to merge near ones`);
+        return fail(`${groupCount} distinct colour groups, and at most ${REGION_MAX} can be told apart; raise "regionBandwidth" in the model's data file to merge near ones`);
     }
 
     if (!full) {
@@ -479,7 +478,7 @@ const pct = (v: number): string => `${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%`;
 
 // ---------------------------------------------------------------- roles
 
-/** What `<model>.regions.json` holds. */
+/** A model's color slots as the detector reads them: what a data file's `colorSlots` hold (`roleFileOf`). */
 export interface RoleFile {
     readonly regions: readonly { readonly colour: string; readonly role: Role }[];
     /** Overrides the mean-shift width for this model: lower splits near colours, higher merges them. */
@@ -498,48 +497,14 @@ export interface Roles {
     readonly usable: boolean;
 }
 
-/** Where a model's role file lives: beside it, named after it. */
-export const rolePath = (file: string): string => file.replace(/\.glb$/i, '') + '.regions.json';
-
-/** Fetch a model's role file. Null with a reason when there is none or it is not readable. */
-export async function fetchRoles(file: string): Promise<{ roles: RoleFile | null; error: string | null }> {
-    const path = rolePath(file);
-    try {
-        const res = await fetch(MODEL_DIR + path);
-        // A missing file can come back as an HTML page with a 200; only the content type says so.
-        if (!res.ok || (res.headers.get('content-type') ?? '').includes('text/html')) {
-            return { roles: null, error: `no role file at public${MODEL_DIR}${path}` };
-        }
-        return parseRoles(await res.text(), path);
-    } catch (e) {
-        return { roles: null, error: `could not read public${MODEL_DIR}${path}: ${e instanceof Error ? e.message : String(e)}` };
-    }
-}
-
-/** Read and check a role file's text. Every entry is checked, and a bad one says which and why. */
-export function parseRoles(text: string, path: string): { roles: RoleFile | null; error: string | null } {
-    let raw: unknown;
-    try { raw = JSON.parse(text); } catch (e) {
-        return { roles: null, error: `${path} is not JSON: ${e instanceof Error ? e.message : String(e)}` };
-    }
-    const r = raw as { regions?: unknown; bandwidth?: unknown };
-    if (!Array.isArray(r.regions)) return { roles: null, error: `${path} has no "regions" list` };
-    const regions: { colour: string; role: Role }[] = [];
-    for (const [i, e] of r.regions.entries()) {
-        const entry = e as { colour?: unknown; role?: unknown };
-        if (typeof entry.colour !== 'string' || labOfHex(entry.colour) === null) {
-            return { roles: null, error: `${path}: entry ${i + 1} needs "colour" as "#rrggbb"` };
-        }
-        if (typeof entry.role === 'string' && RENAMED[entry.role] !== undefined) {
-            return { roles: null, error: `${path}: entry ${i + 1} has role "${entry.role}", which is now "${RENAMED[entry.role]}"` };
-        }
-        if (typeof entry.role !== 'string' || !(ROLES as readonly string[]).includes(entry.role)) {
-            return { roles: null, error: `${path}: entry ${i + 1} has role "${String(entry.role)}"; use one of ${ROLES.join(', ')}` };
-        }
-        regions.push({ colour: entry.colour, role: entry.role as Role });
-    }
-    const bandwidth = typeof r.bandwidth === 'number' && r.bandwidth > 0 ? r.bandwidth : undefined;
-    return { roles: { regions, bandwidth }, error: null };
+/**
+ * A data file's color slots, as the detector reads them. The file was checked when it loaded, so
+ * every slot is one the game can color: `accessory2`, which the spec allows and the renderer cannot
+ * paint yet, never reaches here.
+ */
+export function roleFileOf(m: PersonModel): RoleFile {
+    const regions = m.colorSlots.flatMap(c => (c.slot === 'accessory2' ? [] : [{ colour: c.color, role: c.slot }]));
+    return m.regionBandwidth === undefined ? { regions } : { regions, bandwidth: m.regionBandwidth };
 }
 
 /**
@@ -555,9 +520,9 @@ export function assignRoles(seg: Segmentation, file: RoleFile | null, missing: s
     for (const sp of seg.splits) {
         problems.push(`${seg.groups[sp.group].hex} looks like two colours, ${sp.hexes[0]} (${pct(sp.shares[0])}) and `
             + `${sp.hexes[1]} (${pct(sp.shares[1])}), at bandwidth ${+seg.bandwidth.toFixed(4)}`
-            + (seg.auto ? ', the narrowest that keeps the texture separable' : '; lower "bandwidth" in the role file'));
+            + (seg.auto ? ', the narrowest that keeps the texture separable' : '; lower "regionBandwidth" in the data file'));
     }
-    if (file === null) problems.push(missing ?? 'no role file');
+    if (file === null) problems.push(missing ?? 'no color slots');
     else {
         const entries = file.regions.map(e => ({ ...e, lab: labOfHex(e.colour) as Lab }));
         const claimed = new Array<boolean>(entries.length).fill(false);
@@ -570,11 +535,11 @@ export function assignRoles(seg: Segmentation, file: RoleFile | null, missing: s
             if (best >= 0 && bestD <= MATCH) {
                 byGroup[g.index] = entries[best].role; named[g.index] = true; claimed[best] = true;
             } else {
-                warnings.push(`${g.hex} (${pct(g.share)}) is not in the role file, so it is left as authored`);
+                warnings.push(`${g.hex} (${pct(g.share)}) is not in the data file's color slots, so it is left as authored`);
             }
         }
         entries.forEach((e, i) => {
-            if (!claimed[i]) warnings.push(`${e.colour} in the role file matches no colour group in this texture`);
+            if (!claimed[i]) warnings.push(`${e.colour} in the data file's color slots matches no colour group in this texture`);
         });
         for (const b of seg.blends) {
             const ra = byGroup[b.a], rb = byGroup[b.b];
@@ -587,12 +552,12 @@ export function assignRoles(seg: Segmentation, file: RoleFile | null, missing: s
 }
 
 /**
- * A role file to start from: every detected group, with the role the current file gives it or
- * `keep`. Printed to the console when a model has no file or the file misses a group.
+ * Color slots to start from: every detected group, with the slot the data file gives it or `keep`,
+ * written as a data file's `colorSlots`. Printed to the console when the file misses a group.
  */
 export function starterRoles(seg: Segmentation, roles: Roles): string {
-    const lines = seg.groups.map(g => `    { "colour": "${g.hex}", "role": "${roles.byGroup[g.index]}" }`);
-    return `{\n  "regions": [\n${lines.join(',\n')}\n  ]\n}\n`;
+    const lines = seg.groups.map(g => `        { "color": "${g.hex}", "slot": "${roles.byGroup[g.index]}" }`);
+    return `    "colorSlots": [\n${lines.join(',\n')}\n    ],\n`;
 }
 
 // ---------------------------------------------------------------- the texture's pixels
@@ -674,7 +639,7 @@ export class RegionPaint {
     readonly roles: Roles;
     /** The clothing roles this model has, which is what a scheme is arranged on. */
     readonly clothing: readonly ClothingRole[];
-    /** The model's own salt for an arrangement, from its file name: the same in the lab and the game. */
+    /** The model's own salt for an arrangement, from its GLB's file name: the same in the lab and the game. */
     readonly salt: number;
     private readonly shared: Record<string, { value: unknown }>;
 
@@ -751,6 +716,7 @@ export interface Regions {
     readonly paint: RegionPaint | null;
     /** The textured mesh the regions belong to. */
     readonly mesh: THREE.Mesh | null;
+    /** The data file the color slots came from. */
     readonly file: string;
     readonly ms: number;
     /** One line: what was found and whether it is painted. */
@@ -758,12 +724,12 @@ export interface Regions {
 }
 
 /**
- * Find and assign a model's regions: segment its first textured mesh, fetch its role file, and say
- * plainly whether the result can be painted. Never rejects.
+ * Find and assign a model's regions: segment its first textured mesh, read the color slots its data
+ * file gives, and say plainly whether the result can be painted. Never throws.
  */
-export async function prepareRegions(file: string, root: THREE.Object3D): Promise<Regions> {
+export function prepareRegions(m: PersonModel, root: THREE.Object3D): Regions {
     const mesh = texturedMesh(root);
-    const none = (summary: string): Regions => ({ seg: null, roles: null, paint: null, mesh, file: rolePath(file), ms: 0, summary });
+    const none = (summary: string): Regions => ({ seg: null, roles: null, paint: null, mesh, file: m.path, ms: 0, summary });
     if (mesh === null) return none('no textured mesh to find regions in');
     const px = readPixels((mesh.material as THREE.MeshStandardMaterial).map as THREE.Texture);
     const attr = mesh.geometry.getAttribute('uv');
@@ -772,17 +738,17 @@ export async function prepareRegions(file: string, root: THREE.Object3D): Promis
     // Through getX/getY, so a file storing its coordinates as normalised integers reads as 0..1.
     const uv = new Float32Array(2 * attr.count);
     for (let i = 0; i < attr.count; i++) { uv[2 * i] = attr.getX(i); uv[2 * i + 1] = attr.getY(i); }
-    const { roles: roleFile, error } = await fetchRoles(file);
+    const roleFile = roleFileOf(m);
     const t0 = performance.now();
-    const seg = segment(px, uv, mesh.geometry.index?.array ?? null, roleFile?.bandwidth);
+    const seg = segment(px, uv, mesh.geometry.index?.array ?? null, roleFile.bandwidth);
     const ms = performance.now() - t0;
-    const roles = assignRoles(seg, roleFile, error);
-    const paint = seg.failure === null ? new RegionPaint(seg, roles, file) : null;
+    const roles = assignRoles(seg, roleFile, null);
+    const paint = seg.failure === null ? new RegionPaint(seg, roles, modelFileName(m)) : null;
     const found = seg.failure !== null ? seg.failure : `${seg.groups.length} colour groups`;
     const summary = roles.usable ? `${found}, painted from the recipe` : `${found}; not painted: ${roles.problems[0]}`;
     if (seg.failure === null && (!roles.usable || roles.warnings.length > 0)) {
-        console.info(`Colour regions of ${file}: ${summary}\n${[...roles.problems, ...roles.warnings].map(s => `- ${s}`).join('\n')}\n`
-            + `A starting point for public${MODEL_DIR}${rolePath(file)}:\n${starterRoles(seg, roles)}`);
+        console.info(`Colour regions of ${m.id}: ${summary}\n${[...roles.problems, ...roles.warnings].map(s => `- ${s}`).join('\n')}\n`
+            + `A starting point for the colorSlots in ${m.path}:\n${starterRoles(seg, roles)}`);
     }
-    return { seg, roles, paint, mesh, file: rolePath(file), ms, summary };
+    return { seg, roles, paint, mesh, file: m.path, ms, summary };
 }

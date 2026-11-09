@@ -36,7 +36,7 @@
  */
 import { apart, mix } from './palette.ts';
 
-/** The clothing roles every model's role file is divided into, in the order they are filled. */
+/** The clothing roles a person is dressed in, in the order they are filled: a model's are its data file's clothing color slots. */
 export type ClothingRole = 'headwear' | 'tops' | 'bottoms' | 'footwear' | 'accessory';
 export const CLOTHING_ROLES: readonly ClothingRole[] = ['tops', 'bottoms', 'footwear', 'accessory', 'headwear'];
 

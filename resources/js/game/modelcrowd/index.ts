@@ -10,8 +10,9 @@
  * in the panel. `&throttle=1&far=15&every=3` sets them from the address bar, for headless runs.
  */
 import type * as THREE from 'three';
-import { MODELS, fetchModel } from '../render/model-file.ts';
-import { fetchBodyFile } from './body.ts';
+import { personModel } from '../data/people.ts';
+import { CROWD_MODEL, fetchModel } from '../render/model-file.ts';
+import { bodyOf } from './body.ts';
 import { ModelCrowd } from './crowd.ts';
 import { prepareRegions } from './regions.ts';
 import type { Knobs } from './crowd.ts';
@@ -46,7 +47,7 @@ export interface PeopleStats {
     clips: string;
     /** What the colour regions came to: how many groups, and whether the crowd is painted from them. */
     colours: string;
-    /** The model's body type, from its body file; every clone's age and build come from its recipe. */
+    /** The model's build, from its data file; every clone's age and build preset come from its recipe. */
     body: string;
     /** People the model renderer left to the primitives last frame: mobility aids and strollers. */
     fallback: number;
@@ -96,18 +97,18 @@ export async function startPeople(mode: PeopleMode, scene: THREE.Scene, params: 
     };
     let models: ModelCrowd | null = null;
     if (mode === 'model') {
-        const name = params.get('model') ?? Object.keys(MODELS)[0];
+        const name = params.get('model') ?? CROWD_MODEL;
         try {
-            const file = MODELS[name];
-            if (file === undefined) throw new Error(`no model named "${name}" in MODELS`);
-            const got = await fetchModel(file);
+            // Throws, saying why, when there is no such model or its data file is not valid.
+            const model = personModel(name);
+            const got = await fetchModel(model);
             // Painted only when the regions are known and confidently separated; otherwise as authored, saying why.
-            const regions = await prepareRegions(file, got.scene);
-            const body = await fetchBodyFile(file);
+            const regions = prepareRegions(model, got.scene);
+            const body = bodyOf(model);
             models = new ModelCrowd(scene, got, knobs, regions.roles?.usable === true ? regions.paint : null, body);
             Object.assign(stats, {
                 renderer: 'model', model: name, trisPerModel: models.trisPerModel, bones: models.bones, clips: models.clips,
-                colours: regions.summary, body: `${body.type} model; age and build from each recipe`,
+                colours: regions.summary, body: `${body.build} model; age and build from each recipe`,
             });
         } catch (e) {
             stats.error = e instanceof Error ? e.message : String(e);

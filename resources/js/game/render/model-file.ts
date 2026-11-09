@@ -1,41 +1,22 @@
 /**
  * The `.glb` files under `public/models/`, and the one way they are fetched.
  *
- * Shared by the inspector's model bench and the `?people=model` crowd experiment, so both stand up
- * the same file through the same loader. Nothing in a browser can list `public/`, so a list it is:
- * drop a person's file in `public/models/people/` and add a line under the name `?model=` uses.
+ * Shared by the people lab and the game's model crowd, so both stand up the same file through the
+ * same loader. A person model is found through its data file (`data/people.ts`), which names its GLB:
+ * nothing here lists them.
  */
 import type * as THREE from 'three';
-
-/** Every person file that can be shown, by the name `?model=` uses, as a path under `public/models/people/`. */
-export const MODELS: Readonly<Record<string, string>> = {
-    'casual-man': 'Meshy_AI_casual_man_30s_rigged_20261106_animated_mixamo_All_animation.glb',
-    // The same figure remeshed: 2,591 triangles against 15,571, the same rig and the same clips.
-    'casual-man-low': 'Meshy_AI_casual_man_30s_remesh_rigged_20261107_animated_mixamo_All_animation.glb',
-};
+import type { PersonModel } from '../data/people.ts';
 
 /**
- * Where each file came from and what it may be used under, for the people lab's provenance card.
- *
- * `license` is `null` until somebody records it: the lab says "not recorded" rather than guessing,
- * because a provenance card that invents a license is worse than one that admits it does not know.
- * The sources below are read off the file names, which is all the repo knows about them.
+ * The model the game's crowd is drawn from unless `?model=` names another. Crowd composition will
+ * choose models by their facts; until then, this one.
  */
-export interface ModelSource { readonly source: string; readonly license: string | null }
-export const MODEL_SOURCES: Readonly<Record<string, ModelSource>> = {
-    'casual-man': {
-        source: 'Generated with Meshy AI (a casual man in his 30s), rigged and animated through Mixamo, per its file name.',
-        license: null,
-    },
-    'casual-man-low': {
-        source: 'The same Meshy AI figure, remeshed to 2,591 triangles, with the same Mixamo rig and clips.',
-        license: null,
-    },
-};
+export const CROWD_MODEL = 'casual-man';
 
 /**
  * **Designed, not built: a model for a fixture or building type.** One model per type, standing in
- * for that archetype's primitives the way `MODELS` stands in for the person's, with a data file of
+ * for that archetype's primitives the way a person model stands in for the person's, with a data file of
  * its own beside it (`<file>.structure.json`) that carries what the primitives derive from their
  * parts today:
  *
@@ -44,7 +25,7 @@ export const MODEL_SOURCES: Readonly<Record<string, ModelSource>> = {
  *   `.seating` already use, so `placeStructure` turns them through the frame unchanged;
  * - **footprint** -- the solid box `footprintOf` would read off the solid parts, across and along,
  *   so a model's collider is still derived from one stated fact rather than authored twice;
- * - **regions** -- the same role file a person model's `.regions.json` is (`RoleFile` in
+ * - **regions** -- what a person data file's `colorSlots` are (`RoleFile` in
  *   `modelcrowd/regions.ts`), mapping the model's color groups to the archetype's paint slots
  *   (`base`, `trim`, `topper`, `accent`) so a livery can still roll.
  *
@@ -67,11 +48,10 @@ export const STRUCTURE_MODELS: Readonly<Record<string, StructureModel>> = {};
 
 /**
  * Root-relative, because Laravel serves `public/` as the web root: the game page is a route (`/play`)
- * rather than a file beside the models, so a page-relative path would move with the route.
+ * rather than a file beside the models, so a page-relative path would move with the route. A person
+ * data file's `modelFile` is written the same way, under `/models/people/`.
  */
 export const MODEL_DIR = '/models/';
-/** Where the person models are, under it. */
-export const PERSON_MODEL_DIR = `${MODEL_DIR}people/`;
 
 /** A parsed file: its scene, its clips, and how big it was on the wire. */
 export interface ModelFile {
@@ -80,21 +60,27 @@ export interface ModelFile {
     readonly bytes: number;
 }
 
+/** The GLB's own file name, as Meshy exported it. A model's clothing arrangement is salted by it. */
+export const modelFileName = (m: PersonModel): string => m.modelFile.slice(m.modelFile.lastIndexOf('/') + 1);
+
 /**
- * Fetch and parse one file. Rejects with a readable reason when the file is not there.
+ * Fetch and parse a person model's GLB. Rejects with a readable reason when the file is not there.
+ *
+ * The data file's version goes on the address, so a regenerated character -- the same file name, a
+ * new version -- is never served from a browser's cache as the old one.
  *
  * A missing file can come back as an HTML page: Laravel's 404, or, from a server that falls back to
  * the app's own page, a 200 -- so the status cannot say "not there" on its own; the content type
- * can. The loader is imported dynamically, so it is
- * fetched only when a model is asked for and never under `node`.
+ * can. The loader is imported dynamically, so it is fetched only when a model is asked for and never
+ * under `node`.
  */
-export async function fetchModel(file: string): Promise<ModelFile> {
+export async function fetchModel(m: PersonModel): Promise<ModelFile> {
     const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
-    const res = await fetch(PERSON_MODEL_DIR + file);
+    const res = await fetch(`${m.modelFile}?v=${m.version}`);
     if (!res.ok || (res.headers.get('content-type') ?? '').includes('text/html')) {
-        throw new Error(`not found at public${PERSON_MODEL_DIR}${file}`);
+        throw new Error(`${m.id}: its model file is not at public${m.modelFile} (named in ${m.path})`);
     }
     const buf = await res.arrayBuffer();
-    const gltf = await new GLTFLoader().parseAsync(buf, PERSON_MODEL_DIR);
+    const gltf = await new GLTFLoader().parseAsync(buf, m.modelFile.slice(0, m.modelFile.lastIndexOf('/') + 1));
     return { scene: gltf.scene, animations: gltf.animations, bytes: buf.byteLength };
 }

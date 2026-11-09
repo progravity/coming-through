@@ -31,7 +31,7 @@ import { lerpPose, newPose } from '../sim/pose.ts';
 import { MAX } from '../world/layout.ts';
 import { PATH } from '../world/path.ts';
 import { BodyRig, LIMITS, bakeMask, drawnHeight, drawsAsPrimitive, patchFullness, shapeRecipe } from './body.ts';
-import type { BodyFile, FullnessUniforms, Limits } from './body.ts';
+import type { FullnessUniforms, Limits, ModelBody } from './body.ts';
 import type { ModelClass } from '../behaviors.ts';
 import { personColors } from './regions.ts';
 import type { RegionPaint, RegionUniforms } from './regions.ts';
@@ -136,7 +136,7 @@ export class ModelCrowd {
     fallback = 0;
     /** Equipment users, out of `fallback`; the rest need another model class (a Darter, a child). */
     fallbackEquipment = 0;
-    /** The class of person this model can be, from its body file: an adult unless it says otherwise. */
+    /** The class of person this model can be, from its data file: an adult unless it says otherwise. */
     readonly drawable: ModelClass;
     /**
      * Draw everyone from the model, the fallback's people included -- without their equipment, and an
@@ -154,14 +154,15 @@ export class ModelCrowd {
     private frame = 0;
 
     private readonly paint: RegionPaint | null;
-    /** How far this model may be pushed, from its body file or the global table. */
+    /** How far this model may be pushed, from its data file or the global table. */
     readonly limits: Limits;
 
     /**
      * `paint` repaints each clone's regions in its recipe's colours; null draws the texture as
-     * authored. `body` is the model's body file, whose limits every clone is shaped inside.
+     * authored. `body` is the model's own body (`bodyOf` its data file), whose limits every clone is
+     * shaped inside.
      */
-    constructor(scene: THREE.Scene, file: ModelFile, knobs: Knobs, paint: RegionPaint | null, body: BodyFile | null = null) {
+    constructor(scene: THREE.Scene, file: ModelFile, knobs: Knobs, paint: RegionPaint | null, body: ModelBody | null = null) {
         this.knobs = knobs;
         this.paint = paint;
         this.limits = body?.limits ?? LIMITS;

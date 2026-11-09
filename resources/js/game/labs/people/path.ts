@@ -32,10 +32,11 @@ import { queryOf, readState } from '../../inspect/state.ts';
 import { Subject, forced } from '../../inspect/subject.ts';
 import { ModelCrowd } from '../../modelcrowd/crowd.ts';
 import type { Knobs } from '../../modelcrowd/crowd.ts';
-import { fetchBodyFile, modelFallback } from '../../modelcrowd/body.ts';
+import { bodyOf, modelFallback } from '../../modelcrowd/body.ts';
 import { prepareRegions } from '../../modelcrowd/regions.ts';
 import { lookNamed } from '../../render/look.ts';
-import { MODELS, fetchModel } from '../../render/model-file.ts';
+import { PERSON_MODELS, personModel } from '../../data/people.ts';
+import { CROWD_MODEL, fetchModel } from '../../render/model-file.ts';
 import { drawPerson, standingHeight } from '../../render/person.ts';
 import { PartPools } from '../../render/pools.ts';
 import { Agent } from '../../sim/agent.ts';
@@ -165,15 +166,14 @@ export async function startPath(lab: Lab): Promise<void> {
     pools.dress(look);
 
     // ---------- the person's model, as the game draws people ----------
-    const modelName = String(c.model) === 'seed' || MODELS[String(c.model)] === undefined ? Object.keys(MODELS)[0] ?? '' : String(c.model);
+    const modelName = String(c.model) === 'seed' || PERSON_MODELS[String(c.model)] === undefined ? CROWD_MODEL : String(c.model);
     let models: ModelCrowd | null = null, modelNote = '';
     try {
-        const file = MODELS[modelName];
-        if (file === undefined) throw new Error('no model files are listed');
-        const got = await fetchModel(file);
-        const regions = await prepareRegions(file, got.scene);
+        const model = personModel(modelName);
+        const got = await fetchModel(model);
+        const regions = prepareRegions(model, got.scene);
         const knobs: Knobs = { ink: false, throttle: false, far: 15, every: 3 };
-        models = new ModelCrowd(world.scene, got, knobs, regions.roles?.usable === true ? regions.paint : null, await fetchBodyFile(file));
+        models = new ModelCrowd(world.scene, got, knobs, regions.roles?.usable === true ? regions.paint : null, bodyOf(model));
         models.everyone = true;
         modelNote = `${modelName}, as the game draws people`;
     } catch (e) {

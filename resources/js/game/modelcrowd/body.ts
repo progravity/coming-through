@@ -21,14 +21,15 @@
  *   head and the face carry no weight in it, so they never swell.
  *
  * Every number lives in the tables below, with global limits that a model may narrow (or widen) in
- * its own body file, `<model>.body.json` beside its `.regions.json`.
+ * its data file's `bodyLimits` (`resources/js/game/data/people/<id>.json`).
  */
 import * as THREE from 'three';
 import { BEHAVIORS } from '../behaviors.ts';
 import type { ModelClass } from '../behaviors.ts';
+import { BODY_LIMIT_KEYS } from '../data/people.ts';
+import type { ModelBuild, PersonModel } from '../data/people.ts';
 import { AGES, BUILDS, BUILD_WIDTH, figureHeight } from '../recipe.ts';
 import type { Age, Build, Recipe } from '../recipe.ts';
-import { PERSON_MODEL_DIR as MODEL_DIR } from '../render/model-file.ts';
 
 // ---------- the tables ----------
 
@@ -101,14 +102,15 @@ export interface Body {
     height: number; width: number; shoulders: number; limbs: number;
     fullness: number; face: number; neck: number; head: number; legs: number; stoop: number;
 }
-export const BODY_KEYS: readonly (keyof Body)[] = ['height', 'width', 'shoulders', 'limbs', 'fullness', 'face', 'neck', 'head', 'legs', 'stoop'];
+/** The data files' own list (`BODY_LIMIT_KEYS`), so a limit a file may set and a body value are one vocabulary. */
+export const BODY_KEYS: readonly (keyof Body)[] = BODY_LIMIT_KEYS;
 
 export type Limits = Readonly<Record<keyof Body, readonly [number, number]>>;
 
 /**
  * The most any model is pushed, so no combination comes out grotesque: a Normal Broad is the
- * widest a body gets, a Young Slim the narrowest. A model's body file may override any of them --
- * some models stretch better than others.
+ * widest a body gets, a Young Slim the narrowest. A model's data file may override any of them in
+ * `bodyLimits` -- some models stretch better than others.
  */
 export const LIMITS: Limits = {
     height: [0.88, 1.05],
@@ -123,22 +125,17 @@ export const LIMITS: Limits = {
     stoop: [0, 0.22],
 };
 
-/** What a model's body file says about it. */
-export type BodyType = 'average' | 'heavy';
-export const BODY_TYPES: readonly BodyType[] = ['average', 'heavy'];
-export const AGE_CLASSES: readonly ModelClass[] = ['adult', 'child', 'elderly'];
-
-export interface BodyFile {
-    /** Who the model can be: an adult today; child and elderly models later. A Darter needs a child. */
+/** What a model's data file says about its body (`bodyOf`). */
+export interface ModelBody {
+    /** Who the model can be: an adult today; child and elder models later. A Darter needs a child. */
     readonly ageClass: ModelClass;
-    /** The figure as authored, before any preset: the fullest end of the crowd will come from `heavy` models. */
-    readonly type: BodyType;
+    /** The shape it was generated with, before any preset: the fullest end of the crowd will come from heavy-set models. */
+    readonly build: ModelBuild;
     readonly limits: Limits;
-    /** Which limits the file overrode. */
+    /** Which limits the data file overrode. */
     readonly overridden: readonly (keyof Body)[];
+    /** The data file, from the repository root; empty for a figure with none. */
     readonly path: string;
-    /** Why the file could not be read, when it could not. */
-    readonly error: string | null;
 }
 
 // ---------- from a recipe to a body ----------
@@ -215,7 +212,7 @@ export const NOT_ON_MODELS = 'not yet supported on models';
  * - **Equipment** -- a stroller, a wheelchair, a scooter, a cane -- is not on the models yet, and
  *   its collider is sized for the equipment: a model drawn without it would be a person you bump
  *   into half a meter before you reach them. Until models carry it, these people are primitives.
- * - **A Darter is a child**, and the crowd's model is an adult one (`drawable`, from its body
+ * - **A Darter is a child**, and the crowd's model is an adult one (`drawable`, from its data
  *   file's age class). An adult model cannot be made into a child, so until a child model exists
  *   Darters are primitives too.
  *
@@ -232,55 +229,24 @@ export function modelFallback(r: Recipe, drawable: ModelClass = 'adult'): string
 export const drawsAsPrimitive = (r: Recipe, drawable: ModelClass = 'adult'): boolean =>
     r.equipment !== 'none' || r.modelClass !== drawable;
 
-// ---------- the body file ----------
+// ---------- the model's own body, from its data file ----------
 
-export const bodyPath = (file: string): string => file.replace(/\.glb$/i, '') + '.body.json';
-
-function parseLimits(raw: unknown): { limits: Limits; overridden: (keyof Body)[] } {
-    const out: Record<keyof Body, readonly [number, number]> = { ...LIMITS };
+/**
+ * What a model's data file says about its body: who it can be, the shape it was generated with, and
+ * the limits every clone of it is shaped inside -- the global ones, with any the file overrides.
+ */
+export function bodyOf(m: PersonModel): ModelBody {
+    const limits: Record<keyof Body, readonly [number, number]> = { ...LIMITS };
     const overridden: (keyof Body)[] = [];
-    if (raw !== null && typeof raw === 'object') {
-        for (const k of BODY_KEYS) {
-            const v = (raw as Record<string, unknown>)[k];
-            if (Array.isArray(v) && v.length === 2 && v.every(x => typeof x === 'number' && Number.isFinite(x)) && v[0] <= v[1]) {
-                out[k] = [v[0], v[1]];
-                overridden.push(k);
-            }
-        }
+    for (const k of BODY_KEYS) {
+        const v = m.bodyLimits[k];
+        if (v !== undefined) { limits[k] = v; overridden.push(k); }
     }
-    return { limits: out, overridden };
+    return { ageClass: m.ageClass, build: m.build, limits, overridden, path: m.path };
 }
 
-/** Read a body file's text. An absent field is the default; a malformed file is reported, not thrown. */
-export function parseBodyFile(text: string, path: string): BodyFile {
-    try {
-        const raw = JSON.parse(text) as { ageClass?: unknown; bodyType?: unknown; limits?: unknown };
-        const type = BODY_TYPES.includes(raw.bodyType as BodyType) ? raw.bodyType as BodyType : 'average';
-        const ageClass = AGE_CLASSES.includes(raw.ageClass as ModelClass) ? raw.ageClass as ModelClass : 'adult';
-        const { limits, overridden } = parseLimits(raw.limits);
-        const errors = [
-            ...(raw.bodyType !== undefined && type !== raw.bodyType ? [`unknown bodyType "${String(raw.bodyType)}"; read as average`] : []),
-            ...(raw.ageClass !== undefined && ageClass !== raw.ageClass ? [`unknown ageClass "${String(raw.ageClass)}"; read as adult`] : []),
-        ];
-        return { ageClass, type, limits, overridden, path, error: errors.length === 0 ? null : errors.join('; ') };
-    } catch (e) {
-        return { ageClass: 'adult', type: 'average', limits: LIMITS, overridden: [], path, error: e instanceof Error ? e.message : String(e) };
-    }
-}
-
-/** Fetch `<model>.body.json`. Never rejects: no file is an average body inside the global limits. */
-export async function fetchBodyFile(file: string): Promise<BodyFile> {
-    const path = bodyPath(file);
-    try {
-        const res = await fetch(MODEL_DIR + path);
-        if (!res.ok || (res.headers.get('content-type') ?? '').includes('text/html')) {
-            return { ageClass: 'adult', type: 'average', limits: LIMITS, overridden: [], path, error: 'no body file; read as an average adult, inside the global limits' };
-        }
-        return parseBodyFile(await res.text(), path);
-    } catch (e) {
-        return { ageClass: 'adult', type: 'average', limits: LIMITS, overridden: [], path, error: e instanceof Error ? e.message : String(e) };
-    }
-}
+/** The body of a figure with no data file behind it: an average adult inside the global limits. */
+export const NO_MODEL_BODY: ModelBody = { ageClass: 'adult', build: 'average', limits: LIMITS, overridden: [], path: '' };
 
 // ---------- the fullness mask ----------
 

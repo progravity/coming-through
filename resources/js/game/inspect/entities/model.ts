@@ -25,8 +25,9 @@
  *   skinning. This answers "does it look right"; `?people=model` on /play measures the rest.
  * - **No root motion.** A clip plays on the spot; one that walks forward walks off its anchor.
  *
- * Files are listed in `MODELS` in `render/model-file.ts` by the name the address bar uses, and
- * fetched by its `fetchModel` -- the same file and loader the `?people=model` crowd uses.
+ * Every model is a data file in `resources/js/game/data/people/`, found by `data/people.ts` and named
+ * by the ID the address bar uses; its GLB is fetched by `fetchModel` in `render/model-file.ts` -- the
+ * same file and loader the game's crowd uses.
  */
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
@@ -36,13 +37,14 @@ import { hairNamed, schemeNamed, skinToneNamed } from '../../wardrobe.ts';
 import type { Age } from '../../recipe.ts';
 import type { Look } from '../../render/look.ts';
 import { makeToonGradient } from '../../render/materials.ts';
-import { MODELS, PERSON_MODEL_DIR as DIR, MODEL_SOURCES, fetchModel } from '../../render/model-file.ts';
+import { PERSON_MODELS, UNKNOWN } from '../../data/people.ts';
+import { CROWD_MODEL, fetchModel } from '../../render/model-file.ts';
 import { standingHeight } from '../../render/person.ts';
 import {
     AGES, AGE_PRESETS, BODY_KEYS, BUILDS, BUILD_PRESETS, BodyRig, CHILD_NOTE, LIMITS, NOT_ON_MODELS, bakeMask,
-    drawnHeight, fetchBodyFile, modelFallback, patchFullness, shape, skinSpace,
+    NO_MODEL_BODY, bodyOf, drawnHeight, modelFallback, patchFullness, shape, skinSpace,
 } from '../../modelcrowd/body.ts';
-import type { Body, BodyFile, FullnessUniforms, Limits, Shaped } from '../../modelcrowd/body.ts';
+import type { Body, FullnessUniforms, Limits, ModelBody, Shaped } from '../../modelcrowd/body.ts';
 import { RUN_ON } from '../../modelcrowd/crowd.ts';
 import { dressOn, falseHex, personColors, prepareRegions } from '../../modelcrowd/regions.ts';
 import type { RegionUniforms, Regions } from '../../modelcrowd/regions.ts';
@@ -101,7 +103,7 @@ interface Model {
     readonly textures: readonly TextureInfo[];
     /** Fetching and parsing the file, in milliseconds; 0 when it did not come from a fetch. */
     readonly loadMs: number;
-    readonly body: BodyFile;
+    readonly body: ModelBody;
 }
 
 /**
@@ -200,7 +202,7 @@ function texturesOf(meshes: readonly THREE.Mesh[]): TextureInfo[] {
 const models = new Map<string, Model>();
 const failures = new Map<string, string>();
 
-const names = Object.keys(MODELS);
+const names = Object.keys(PERSON_MODELS);
 /**
  * Which model the person is drawn from. "Seed" is the game's own answer: the crowd's model, or --
  * for a person who needs another class, a Darter needing a child -- the first model of that class,
@@ -212,10 +214,14 @@ const modelControl: Control = {
     titles: { seed: "Seed (the game's model)" },
 };
 
-/** The model the game would draw this person from: the first of the class they need, else the first. */
+/**
+ * The model the game would draw this person from: the crowd's model when it is of the class they
+ * need, else the first model of that class, else the crowd's. Read off the data files, so it is
+ * known before anything has loaded.
+ */
 function gameModelFor(who: Subject): { name: string; found: boolean } {
-    const of = names.find(n => (models.get(n)?.body.ageClass ?? 'adult') === who.recipe.modelClass);
-    return { name: of ?? names[0] ?? 'none', found: of !== undefined };
+    const of = [CROWD_MODEL, ...names].find(n => PERSON_MODELS[n]?.ageClass === who.recipe.modelClass);
+    return { name: of ?? CROWD_MODEL, found: of !== undefined };
 }
 /**
  * The clip names are the file's, so this control is only complete once `load` has run: it starts as
@@ -240,8 +246,8 @@ function refreshClips(): void {
     clipControl.value = seen.find(n => /walk/i.test(n)) ?? clipControl.options[0];
 }
 
-/** What a loaded file brings beside its scene: its body file and how long it took to arrive. */
-export interface Arrival { body?: BodyFile; loadMs?: number }
+/** What a loaded file brings beside its scene: its body, from its data file, and how long it took to arrive. */
+export interface Arrival { body?: ModelBody; loadMs?: number }
 
 /**
  * Take a loaded figure into the bench under `name`. What `load` does with each file that arrives,
@@ -279,24 +285,24 @@ export function adopt(name: string, root: THREE.Object3D, clips: readonly THREE.
     models.set(name, {
         name, root, clips, meshes, shipped, rest, pristine, verts, bones: bones.size, bytes, regions, triangles, restHeight,
         textures: texturesOf(meshes), loadMs: arrival.loadMs ?? 0,
-        body: arrival.body ?? { ageClass: 'adult', type: 'average', limits: LIMITS, overridden: [], path: '', error: 'no body file read' },
+        body: arrival.body ?? NO_MODEL_BODY,
     });
     failures.delete(name);
     refreshClips();
 }
 
 /**
- * Fetch and parse every listed file, one after another so each one's load time is its own rather
+ * Fetch and parse every model's GLB, one after another so each one's load time is its own rather
  * than a share of a contended network. Never rejects: a file that fails says why on the stage.
  */
 async function load(): Promise<void> {
-    for (const [name, file] of Object.entries(MODELS)) {
+    for (const [name, model] of Object.entries(PERSON_MODELS)) {
         try {
             const t0 = performance.now();
-            const got = await fetchModel(file);
+            const got = await fetchModel(model);
             const loadMs = performance.now() - t0;
-            const regions = await prepareRegions(file, got.scene);
-            adopt(name, got.scene, got.animations, got.bytes, regions, { body: await fetchBodyFile(file), loadMs });
+            const regions = prepareRegions(model, got.scene);
+            adopt(name, got.scene, got.animations, got.bytes, regions, { body: bodyOf(model), loadMs });
         } catch (e) {
             failures.set(name, e instanceof Error ? e.message : String(e));
         }
@@ -504,7 +510,7 @@ function swap(mesh: THREE.Mesh, shipped: THREE.Material | THREE.Material[], want
     mesh.material = want;
 }
 
-/** Which models the comparison row stands: the chosen ones, in `MODELS` order. */
+/** Which models the comparison row stands: the chosen ones, in ID order. */
 const chosen = (c: Controls): string[] => names.filter(n => c[comparing(n)] !== false);
 
 /** How many stand in the row, by what it compares. */
@@ -618,16 +624,17 @@ class ModelCast implements Cast {
 
     readout(i: number, top: number): Readout {
         const f = this.figures[i];
-        const name = f.spec.name, file = MODELS[name] ?? name;
+        const name = f.spec.name, data = PERSON_MODELS[name];
         const m = f.model, who = this.who;
-        const provenance = modelProvenance(name, file, m);
+        const dataFile = dataFileSection(name);
+        const provenance = modelProvenance(name, m);
         if (m === null || who === null) {
             const why = failures.get(name) ?? 'not loaded';
             return {
                 title: name, sub: 'no model on stage',
-                rows: [['file', `public${DIR}${file}`], ['status', why]],
+                rows: [['data file', data?.path ?? 'none'], ['model file', data === undefined ? 'none' : `public${data.modelFile}`], ['status', why]],
                 line: `${name} · ${why}`,
-                sections: [provenance],
+                sections: [dataFile, provenance],
             };
         }
         const clip = f.action?.getClip();
@@ -664,7 +671,7 @@ class ModelCast implements Cast {
         const a = AGE_PRESETS[r.age], b = BUILD_PRESETS[r.build];
         const pace = who.speed;
         const contributes = {
-            model: `age class ${m.body.ageClass} · ${m.body.type} body · ${count(m.triangles)} triangles`,
+            model: `age class ${m.body.ageClass} · ${m.body.build} build · ${count(m.triangles)} triangles`,
             age: `height ×${n2(a.height)}, width ×${n2(a.width)}, shoulders ×${n2(a.shoulders)}, head ×${n2(a.head)}, legs ×${n2(a.legs)}, stoop ${n2(a.stoop * 180 / Math.PI, 0)}°`,
             build: `width ×${n2(b.width)}, shoulders ×${n2(b.shoulders)}, limbs ×${n2(b.limbs)}, fullness ${n2(b.fullness * 100, 1)}%, face ${n2(b.face * 100, 2)}%, neck ×${n2(b.neck)}`,
             scheme: roles.length === 0 ? 'this model has no clothing roles to paint'
@@ -697,6 +704,7 @@ class ModelCast implements Cast {
                 bodySection(f, who, top),
                 personRecipe(who, '', 'model'),
                 personGeometry(who, { top, height, ...(f.torso === undefined ? {} : { torso: f.torso }) }),
+                dataFile,
                 model,
                 provenance,
                 {
@@ -757,10 +765,10 @@ function bodySection(f: Figure, who: Subject, top: number): InfoSection {
         ];
     });
     const out: InfoRow[] = [
-        { k: 'body type', v: `${m.body.type} · ${m.body.path === '' ? 'no body file' : m.body.path}${m.body.error === null ? '' : ` · ${m.body.error}`}` },
+        { k: 'model build', v: `${m.body.build} · ${m.body.path === '' ? 'no data file' : m.body.path}` },
         { k: 'age', v: `${title(f.shaped.shown)}${f.spec.exact === 'age' ? ', exactly' : ` (the recipe is ${who.recipe.age})`}` },
         { k: 'build', v: `${buildLabel(f.spec)}${f.spec.exact === null ? ` · recipe width ${n2(who.recipe.w, 3)}` : ''}` },
-        { k: 'limits', v: m.body.overridden.length === 0 ? 'the global limits' : `the global limits, with ${m.body.overridden.join(', ')} from this model's file` },
+        { k: 'limits', v: m.body.overridden.length === 0 ? 'the global limits' : `the global limits, with ${m.body.overridden.join(', ')} from this model's data file` },
     ];
     if (who.recipe.modelClass !== m.body.ageClass) out.push({ k: 'child', v: CHILD_NOTE });
     if (held.size > 0) out.push({ k: 'held back', v: f.shaped.held.map(h => `${h.key} asked ${fmt(h.key, h.wanted, top)}, drawn ${fmt(h.key, h.limit, top)}`).join('; ') });
@@ -846,18 +854,58 @@ function anchorTable(root: THREE.Object3D | null): InfoTable {
     };
 }
 
-/** The file, its role file and body file, and where it came from. */
-function modelProvenance(name: string, file: string, m: Model | null): InfoSection {
-    const src = MODEL_SOURCES[name];
+/** A provenance value, or a row that says plainly nobody has recorded it. */
+const recorded = (k: string, v: string): InfoRow => (v === UNKNOWN ? { k, v: `${UNKNOWN} in the data file`, tags: ['missing'] } : { k, v });
+
+/**
+ * The model's data file: where it is, and every fact it states about the person, as composition
+ * will read them. The color slots are listed in full in the model's region table, beside what the
+ * detector found.
+ */
+function dataFileSection(name: string): InfoSection {
+    const d = PERSON_MODELS[name];
+    if (d === undefined) return { id: 'model', title: 'Data file', rows: [{ k: 'data file', v: `none for ${name}` }] };
+    const garments = (Object.entries(d.garments) as [string, string][]).map(([slot, g]) => `${slot} ${g}`).join(' · ');
+    const slots = d.colorSlots.map(c => c.slot);
+    const limits = Object.entries(d.bodyLimits).map(([k, v]) => `${k} ${v[0]} to ${v[1]}`);
+    return {
+        id: 'model', title: 'Data file',
+        rows: [
+            { k: 'file', v: d.path, mono: true },
+            { k: 'id', v: d.id, mono: true },
+            { k: 'label', v: d.label },
+            { k: 'description', v: d.description },
+            { k: 'version', v: String(d.version) },
+            { k: 'model file', v: `public${d.modelFile}`, mono: true },
+            { k: 'age class', v: d.ageClass },
+            { k: 'sex', v: d.sex },
+            { k: 'build', v: d.build },
+            { k: 'occupation', v: d.occupation },
+            { k: 'garments', v: garments },
+            { k: 'accessories', tags: d.accessories.map(a => `${a.accessory} → ${a.slot}`) },
+            { k: 'color slots', v: `${slots.length} regions: ${[...new Set(slots)].map(s => { const n = slots.filter(x => x === s).length; return n > 1 ? `${s} ×${n}` : s; }).join(', ')}` },
+            ...(d.regionBandwidth === undefined ? [] : [{ k: 'region bandwidth', v: String(d.regionBandwidth) }]),
+            { k: 'body limits', v: limits.length === 0 ? 'none: the global limits' : limits.join(' · ') },
+        ],
+        note: 'Everything the game knows about this model is in its data file; the GLB is only the asset it points at. Found in resources/js/game/data/people/ without being listed.',
+    };
+}
+
+/** The GLB's size, where the body numbers live, and where the model came from, as its data file records it. */
+function modelProvenance(name: string, m: Model | null): InfoSection {
+    const d = PERSON_MODELS[name];
     const rows: InfoRow[] = [
-        { k: 'file', v: `public${DIR}${file}`, mono: true },
         { k: 'size', v: m === null || m.bytes === 0 ? 'not loaded' : `${n2(m.bytes / 1e6, 1)} MB` },
-        { k: 'role file', v: `public${DIR}${m?.regions?.file ?? file.replace(/\.glb$/i, '.regions.json')}`, mono: true },
-        { k: 'body file', v: `public${DIR}${m?.body.path !== undefined && m.body.path !== '' ? m.body.path : file.replace(/\.glb$/i, '.body.json')}`, mono: true },
-        { k: 'listed in', v: 'resources/js/game/render/model-file.ts · MODELS', mono: true },
         { k: 'body table', v: 'resources/js/game/modelcrowd/body.ts · BUILD_PRESETS, AGE_PRESETS, LIMITS', mono: true },
-        { k: 'source', v: src?.source ?? 'not recorded' },
-        { k: 'license', v: src?.license ?? 'not recorded: add it to MODEL_SOURCES in render/model-file.ts' },
+        ...(d === undefined ? [{ k: 'source', v: 'no data file' }] : [
+            recorded('Meshy plan', d.source.plan),
+            recorded('generator version', d.source.generatorVersion),
+            recorded('date', d.source.date),
+            recorded('prompt', d.source.prompt),
+            recorded('prompt version', d.source.promptVersion),
+            recorded('license (model)', d.license.model),
+            recorded('license (clips)', d.license.clips),
+        ]),
     ];
     return { id: 'provenance', rows };
 }
@@ -897,7 +945,7 @@ export const MODEL: Inspectable = {
         { kind: 'toggle', id: 'own', label: 'own materials', value: false, key: 'n', rebuilds: true },
         { kind: 'toggle', id: 'freeze', label: 'freeze clip', value: false, key: 'f' },
         { kind: 'scalar', id: 'phase', label: 'clip phase', value: 0, keys: [',', '.'], gate: 'freeze' },
-        // Painted in the recipe of the person below, through the role file.
+        // Painted in the recipe of the person below, through the data file's color slots.
         { kind: 'toggle', id: 'recolour', label: 'recipe colors', value: true, key: 'p' },
         // Each detected color group flat in its own color, numbered as in the readout.
         { kind: 'toggle', id: 'regions', label: 'region false color', value: false, key: 'r' },

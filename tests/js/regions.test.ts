@@ -1,18 +1,19 @@
 /**
- * Colour regions for the `?people=model` crowd: found automatically, named by a role file, and
- * refused rather than guessed when they cannot be told apart.
+ * Colour regions for the `?people=model` crowd: found automatically, named by a data file's color
+ * slots, and refused rather than guessed when they cannot be told apart.
  *
  * Textures are built in code -- flat patches of colour on UV quads, with a little deterministic
  * noise standing in for baked shading and a black gutter between them, which is the shape an
  * exported atlas arrives in. Checked: that the groups found are the patches and never the gutter,
  * that the mask labels every used texel including the edges left out of the grouping, that two
  * colours as close as this model's skin and khaki are pulled apart by the bandwidth search, that a
- * fixed bandwidth too wide to do so says so rather than painting one as the other, that a role file
- * is matched by colour and not by order, and that a blend is only a refusal across two roles.
+ * fixed bandwidth too wide to do so says so rather than painting one as the other, that color slots
+ * are matched by colour and not by order, and that a blend is only a refusal across two roles.
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { RegionPaint, assignRoles, parseRoles, personColors, segment } from '../../resources/js/game/modelcrowd/regions.ts';
+import { personModel } from '../../resources/js/game/data/people.ts';
+import { RegionPaint, assignRoles, personColors, roleFileOf, segment } from '../../resources/js/game/modelcrowd/regions.ts';
 import { makeRecipe } from '../../resources/js/game/recipe.ts';
 import { makeStreams } from '../../resources/js/game/core/rng.ts';
 import { dress, saltOf } from '../../resources/js/game/wardrobe.ts';
@@ -82,7 +83,7 @@ test("colours as close as this model's skin and khaki are pulled apart by the ba
 
 test('a bandwidth too wide to separate them says so, and painting is refused rather than guessed', () => {
     const { px, uv, index } = atlas([SKIN, KHAKI, BLUE, WHITE]);
-    // A role file may fix the bandwidth; this one is too wide for skin against khaki.
+    // A data file may fix the bandwidth; this one is too wide for skin against khaki.
     const seg = segment(px, uv, index, 0.06);
     assert.equal(seg.failure, null);
     assert.equal(seg.groups.length, 3);
@@ -93,18 +94,16 @@ test('a bandwidth too wide to separate them says so, and painting is refused rat
     assert.match(roles.problems.join(' '), /looks like two colours/);
 });
 
-test('a role file is matched by colour, not by order, and says what it does not cover', () => {
+test('color slots are matched by colour, not by order, and say what they do not cover', () => {
     const { px, uv, index } = atlas([SKIN, KHAKI, BLUE, WHITE]);
     const seg = segment(px, uv, index);
-    const { roles: file, error } = parseRoles(JSON.stringify({
-        regions: [
-            { colour: '#d3cdc8', role: 'footwear' },
-            { colour: '#a58a67', role: 'bottoms' },
-            { colour: '#cb8559', role: 'skin' },
-            { colour: '#00ff00', role: 'hair' },
-        ],
-    }), 'test.regions.json');
-    assert.equal(error, null);
+    // A data file's color slots, in an order that is not the detector's.
+    const file = roleFileOf({ ...personModel('casual-man'), colorSlots: [
+        { color: '#d3cdc8', slot: 'footwear' },
+        { color: '#a58a67', slot: 'bottoms' },
+        { color: '#cb8559', slot: 'skin' },
+        { color: '#00ff00', slot: 'hair' },
+    ] });
     const roles = assignRoles(seg, file, null);
     assert.equal(roles.usable, true, roles.problems.join('; '));
     // The group whose centre is nearest the colour a patch was painted.
@@ -120,17 +119,10 @@ test('a role file is matched by colour, not by order, and says what it does not 
     assert.equal(roleOf(WHITE), 'footwear');
     // Blue is in the texture and not the file: left as authored, and said so.
     assert.equal(roleOf(BLUE), 'keep');
-    assert.ok(roles.warnings.some(w => /not in the role file/.test(w)));
+    assert.ok(roles.warnings.some(w => /not in the data file's color slots/.test(w)));
     assert.ok(roles.warnings.some(w => /#00ff00.*matches no colour group/.test(w)));
 });
 
-test('a bad role file names the entry and the reason', () => {
-    const { roles, error } = parseRoles('{"regions":[{"colour":"#123456","role":"skin"},{"colour":"#abcdef","role":"socks"}]}', 'x.regions.json');
-    assert.equal(roles, null);
-    assert.match(error ?? '', /entry 2.*"socks"/);
-    assert.match(parseRoles('{"regions":[{"colour":"blue","role":"skin"}]}', 'x').error ?? '', /entry 1 needs "colour"/);
-    assert.match(parseRoles('not json', 'x').error ?? '', /not JSON/);
-});
 
 test('a blend is harmless inside one role and a refusal across two', () => {
     const { px, uv, index } = atlas([SKIN, KHAKI, BLUE, WHITE]);
@@ -143,21 +135,20 @@ test('a blend is harmless inside one role and a refusal across two', () => {
     assert.match(apart.problems[0], /blend/);
 });
 
-test('with no role file nothing is painted, and the reason is the missing file', () => {
+test('with no color slots nothing is painted, and the reason is given', () => {
     const { px, uv, index } = atlas([SKIN, KHAKI, BLUE, WHITE]);
-    const roles = assignRoles(segment(px, uv, index), null, 'no role file at public/models/x.regions.json');
+    const roles = assignRoles(segment(px, uv, index), null, 'no color slots for x');
     assert.equal(roles.usable, false);
-    assert.deepEqual(roles.problems, ['no role file at public/models/x.regions.json']);
+    assert.deepEqual(roles.problems, ['no color slots for x']);
 });
 
-test('a role file names the standard roles, and an old role name says what it became', () => {
-    for (const [old, now] of [['top', 'tops'], ['trousers', 'bottoms'], ['shoes', 'footwear']]) {
-        const { roles, error } = parseRoles(`{"regions":[{"colour":"#123456","role":"${old}"}]}`, 'x.regions.json');
-        assert.equal(roles, null);
-        assert.match(error ?? '', new RegExp(`"${old}", which is now "${now}"`));
-    }
-    const ok = parseRoles('{"regions":[{"colour":"#123456","role":"headwear"},{"colour":"#654321","role":"accessory"}]}', 'x').roles;
-    assert.deepEqual(ok?.regions.map(r => r.role), ['headwear', 'accessory']);
+test('a data file\'s color slots reach the detector as they are, with its bandwidth', () => {
+    // What a slot may be, and what an old role name became, is checked when the file loads: see
+    // tests/js/people-data.test.ts. Here: that what was checked is what the detector is handed.
+    const m = personModel('casual-man');
+    assert.deepEqual(roleFileOf(m), { regions: m.colorSlots.map(c => ({ colour: c.color, role: c.slot })) });
+    assert.deepEqual(roleFileOf({ ...m, colorSlots: [{ color: '#654321', slot: 'accessory' }], regionBandwidth: 0.02 }),
+        { regions: [{ colour: '#654321', role: 'accessory' }], bandwidth: 0.02 });
 });
 
 test('a model is painted in the person\'s skin and hair, and their scheme arranged on the roles it has', () => {

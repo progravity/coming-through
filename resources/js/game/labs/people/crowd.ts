@@ -29,10 +29,11 @@ import { InfoPanel } from '../../inspect/info.ts';
 import type { InfoRow, InfoSection, Readout } from '../../inspect/inspectable.ts';
 import { ModelCrowd } from '../../modelcrowd/crowd.ts';
 import type { Knobs } from '../../modelcrowd/crowd.ts';
-import { drawsAsPrimitive, fetchBodyFile, modelFallback } from '../../modelcrowd/body.ts';
+import { bodyOf, drawsAsPrimitive, modelFallback } from '../../modelcrowd/body.ts';
 import { prepareRegions } from '../../modelcrowd/regions.ts';
 import { lookNamed } from '../../render/look.ts';
-import { MODELS, fetchModel } from '../../render/model-file.ts';
+import { personModel } from '../../data/people.ts';
+import { fetchModel } from '../../render/model-file.ts';
 import { drawPerson } from '../../render/person.ts';
 import { PartPools } from '../../render/pools.ts';
 import type { Agent } from '../../sim/agent.ts';
@@ -101,15 +102,14 @@ export async function startCrowd(lab: Lab): Promise<void> {
     let models: ModelCrowd | null = null;
     let modelNote = '';
     {
-        const file = MODELS[state.model];
         try {
-            if (file === undefined) throw new Error(`no model named "${state.model}"`);
-            const got = await fetchModel(file);
-            const regions = await prepareRegions(file, got.scene);
+            const model = personModel(state.model);
+            const got = await fetchModel(model);
+            const regions = prepareRegions(model, got.scene);
             const knobs: Knobs = { ink: false, throttle: false, far: 15, every: 3 };
-            const body = await fetchBodyFile(file);
+            const body = bodyOf(model);
             models = new ModelCrowd(world.scene, got, knobs, regions.roles?.usable === true ? regions.paint : null, body);
-            modelNote = `${state.model} · ${count(models.trisPerModel)} triangles and ${models.bones} bones each · ${regions.summary} · a ${body.type} body, age and build from each recipe`;
+            modelNote = `${state.model} · ${count(models.trisPerModel)} triangles and ${models.bones} bones each · ${regions.summary} · a ${body.build} model, age and build from each recipe`;
         } catch (e) {
             modelNote = `the model did not load, so the crowd is primitives: ${e instanceof Error ? e.message : String(e)}`;
         }

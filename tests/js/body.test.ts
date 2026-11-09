@@ -16,8 +16,9 @@ import * as THREE from 'three';
 import { makeStreams } from '../../resources/js/game/core/rng.ts';
 import {
     AGES, AGE_PRESETS, BUILDS, BUILD_PRESETS, BodyRig, CHILD_NOTE, LIMITS, bakeMask, buildAt, buildPosition, drawnHeight,
-    drawsAsPrimitive, modelFallback, parseBodyFile, patchFullness, shape,
+    bodyOf, drawsAsPrimitive, modelFallback, patchFullness, shape,
 } from '../../resources/js/game/modelcrowd/body.ts';
+import { personModel } from '../../resources/js/game/data/people.ts';
 import { Subject } from '../../resources/js/game/inspect/subject.ts';
 import type { Body } from '../../resources/js/game/modelcrowd/body.ts';
 import { BUILD_WIDTH, figureHeight, makeRecipe } from '../../resources/js/game/recipe.ts';
@@ -100,22 +101,18 @@ test('a Darter is drawn at an adult model\'s size, never shrunk, and the lab say
     assert.match(CHILD_NOTE, /child model/);
 });
 
-test('a body file names its type and may narrow the limits; a bad one is read as average and says why', () => {
-    const f = parseBodyFile('{"bodyType":"heavy","limits":{"width":[0.9,1.2],"nonsense":[0,1]}}', 'x.body.json');
-    assert.equal(f.type, 'heavy');
+test('a model\'s body is its data file\'s: its age class, its build, and any limits it narrows', () => {
+    // A bad value never gets this far: the data file fails when it loads (tests/js/people-data.test.ts).
+    const m = personModel('casual-man');
+    const plain = bodyOf(m);
+    assert.deepEqual({ ...plain, limits: null }, { ageClass: 'adult', build: 'average', limits: null, overridden: [], path: m.path });
+    assert.deepEqual(plain.limits, LIMITS);
+    const f = bodyOf({ ...m, ageClass: 'child', build: 'heavy-set', bodyLimits: { width: [0.9, 1.2] } });
+    assert.equal(f.ageClass, 'child');
+    assert.equal(f.build, 'heavy-set');
     assert.deepEqual(f.limits.width, [0.9, 1.2]);
     assert.deepEqual(f.overridden, ['width']);
     assert.equal(f.limits.height, LIMITS.height);
-    const bad = parseBodyFile('{"bodyType":"giant"}', 'y.body.json');
-    assert.equal(bad.type, 'average');
-    assert.match(bad.error ?? '', /giant/);
-    assert.equal(parseBodyFile('not json', 'z.body.json').type, 'average');
-    // The age class says who the model can be: an adult unless it says child or elderly.
-    assert.equal(f.ageClass, 'adult');
-    assert.equal(parseBodyFile('{"ageClass":"child"}', 'c.body.json').ageClass, 'child');
-    const odd = parseBodyFile('{"ageClass":"toddler"}', 't.body.json');
-    assert.equal(odd.ageClass, 'adult');
-    assert.match(odd.error ?? '', /toddler/);
 });
 
 /** A Mixamo-named rig: spine, neck and head up the middle, a left arm hanging, a left leg standing. */
