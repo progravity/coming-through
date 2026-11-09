@@ -1,0 +1,30 @@
+{
+    "id": "casual-man-low",
+    "label": "Casual man, remeshed",
+    "description": "The casual man remeshed to 2,591 triangles from 15,571, with the same rig, clips and garments. The remesh has no separate eye color.",
+    "version": 1,
+    "modelFile": "/models/people/Meshy_AI_casual_man_30s_remesh_rigged_20261107_animated_mixamo_All_animation.glb",
+    "ageClass": "adult",
+    "sex": "male",
+    "build": "average",
+    "occupation": "none",
+    "garments": { "tops": "t-shirt", "bottoms": "shorts", "footwear": "sneakers" },
+    "accessories": [],
+    "colorSlots": [
+        { "color": "#cc855a", "slot": "skin" },
+        { "color": "#2d539d", "slot": "tops" },
+        { "color": "#d3cdc8", "slot": "footwear" },
+        { "color": "#311901", "slot": "hair" },
+        { "color": "#86817b", "slot": "footwear" },
+        { "color": "#a58a67", "slot": "bottoms" }
+    ],
+    "bodyLimits": {},
+    "source": {
+        "plan": "unknown",
+        "generatorVersion": "unknown",
+        "date": "2026-11-07",
+        "prompt": "unknown",
+        "promptVersion": "unknown"
+    },
+    "license": { "model": "unknown", "clips": "unknown" }
+}

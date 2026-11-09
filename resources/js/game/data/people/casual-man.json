@@ -1,0 +1,31 @@
+{
+    "id": "casual-man",
+    "label": "Casual man",
+    "description": "A casual man in his thirties, generated with Meshy AI: the reference model the person spec measures other models against.",
+    "version": 1,
+    "modelFile": "/models/people/Meshy_AI_casual_man_30s_rigged_20261106_animated_mixamo_All_animation.glb",
+    "ageClass": "adult",
+    "sex": "male",
+    "build": "average",
+    "occupation": "none",
+    "garments": { "tops": "t-shirt", "bottoms": "shorts", "footwear": "sneakers" },
+    "accessories": [],
+    "colorSlots": [
+        { "color": "#cb8559", "slot": "skin" },
+        { "color": "#2d539d", "slot": "tops" },
+        { "color": "#311901", "slot": "hair" },
+        { "color": "#86817b", "slot": "footwear" },
+        { "color": "#d3cdc8", "slot": "footwear" },
+        { "color": "#a58a67", "slot": "bottoms" },
+        { "color": "#1f0700", "slot": "keep" }
+    ],
+    "bodyLimits": {},
+    "source": {
+        "plan": "unknown",
+        "generatorVersion": "unknown",
+        "date": "2026-11-06",
+        "prompt": "unknown",
+        "promptVersion": "unknown"
+    },
+    "license": { "model": "unknown", "clips": "unknown" }
+}

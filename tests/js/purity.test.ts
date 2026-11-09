@@ -96,8 +96,16 @@ function closure(entries: readonly string[]): Map<string, string[]> {
     return via;
 }
 
+/**
+ * The simulation's own files, and the model data it will read. Crowd composition is going to choose
+ * people by their model's facts from inside the fixed step, so `data/` is held to the same rule now,
+ * before anything in `sim/` imports it -- a data module that had quietly picked up a renderer by
+ * then would be found only when the first composition change went red for a reason nobody expected.
+ */
+const simAndData = (): string[] => [...sources(join(SRC, 'sim')), ...sources(join(SRC, 'data'))];
+
 test('the simulation reaches no renderer, however far down the chain', () => {
-    const entries = sources(join(SRC, 'sim'));
+    const entries = simAndData();
     const reached = closure(entries);
 
     // The closure has to be a real one before anything is concluded from it. A walk that quietly
@@ -127,7 +135,7 @@ test('the simulation reaches no DOM either', () => {
     const BANNED = /\b(document|window|navigator|localStorage|requestAnimationFrame|performance)\b/;
 
     const offenders: string[] = [];
-    for (const [node, path] of closure(sources(join(SRC, 'sim')))) {
+    for (const [node, path] of closure(simAndData())) {
         if (!node.endsWith('.ts')) continue;
         const hit = BANNED.exec(code(readFileSync(node, 'utf8')));
         if (hit !== null) offenders.push(`${rel(node)} uses ${hit[1]}, reached by ${path.join(' -> ')}`);
@@ -146,7 +154,7 @@ test('the simulation calls no Math function an engine is allowed to approximate'
     const APPROXIMATED =
         /\bMath\.(sin|cos|tan|asin|acos|atan2?|sinh|cosh|tanh|asinh|acosh|atanh|exp|expm1|log|log1p|log2|log10|pow|cbrt|hypot)\b|\*\*/;
 
-    const reached = closure(sources(join(SRC, 'sim')));
+    const reached = closure(simAndData());
     // The replacement has to be in the closure for this to mean anything: a walk that never reached
     // it would be guarding a simulation that does no trigonometry at all.
     assert.ok([...reached.keys()].some(n => n.endsWith('.ts') && rel(n) === 'core/dmath.ts'),
