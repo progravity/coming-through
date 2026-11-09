@@ -65,7 +65,7 @@ interface Slot {
     readonly material: THREE.MeshToonMaterial;
     /** This clone's repaint, when the model's regions can be painted. */
     readonly regions: RegionUniforms | null;
-    /** Age and build: the bones' bind matrices and joints, and the fullness on the body and its ink. */
+    /** Age and Body Type: the bones' bind matrices and joints, and the fullness on the body and its ink. */
     readonly shape: BodyRig;
     readonly full: FullnessUniforms;
     readonly inkFull: FullnessUniforms;
@@ -311,7 +311,7 @@ export class ModelCrowd {
 
     /**
      * Fit a clone to whoever now occupies its slot: colors, height, and the body their age and
-     * build ask for (`modelcrowd/body.ts`). Once per occupant, never per frame.
+     * Body Type ask for (`modelcrowd/body.ts`). Once per occupant, never per frame.
      */
     private dress(s: Slot, r: Recipe): void {
         s.recipe = r;

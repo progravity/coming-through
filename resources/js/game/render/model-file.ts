@@ -25,7 +25,7 @@ export const CROWD_MODEL = 'casual-man';
  *   `.seating` already use, so `placeStructure` turns them through the frame unchanged;
  * - **footprint** -- the solid box `footprintOf` would read off the solid parts, across and along,
  *   so a model's collider is still derived from one stated fact rather than authored twice;
- * - **regions** -- what a person data file's `colorSlots` are (`RoleFile` in
+ * - **regions** -- what a person data file's `colorSlots` are (`SlotFile` in
  *   `modelcrowd/regions.ts`), mapping the model's color groups to the archetype's paint slots
  *   (`base`, `trim`, `topper`, `accent`) so a livery can still roll.
  *

@@ -2,7 +2,7 @@
  * What the crowd is made of: the default weight of every choice a person is rolled from, in one
  * table.
  *
- * A person is a set of independent choices -- behavior, age, build, skin tone, hair, clothing
+ * A person is a set of independent choices -- behavior, age, Body Type, skin tone, hair, clothing
  * scheme and equipment, plus the model they are drawn from -- and `makeRecipe` rolls each one from
  * the person's own fork of the `recipe` stream, in a fixed order, selecting against these weights.
  * Retuning the crowd is editing numbers here. A weight is relative within its own choice; a zero
@@ -15,7 +15,7 @@
  * Walker, and a Group Walker's family can share the leader's clothing scheme.
  */
 import type { BehaviorKey } from './behaviors.ts';
-import type { Age, Build, Equipment } from './recipe.ts';
+import type { Age, BodyType, Equipment } from './recipe.ts';
 import type { HairKey, PooledKey, SkinToneKey } from './wardrobe.ts';
 
 export const COMPOSITION = {
@@ -24,7 +24,7 @@ export const COMPOSITION = {
     /** Mostly the model's own age, a fifth either side. */
     age: { young: 2, normal: 6, old: 2 } as Readonly<Record<Age, number>>,
     /** Even fifths, as the old continuous width roll was cut into the five presets. */
-    build: { slim: 1, trim: 1, average: 1, solid: 1, broad: 1 } as Readonly<Record<Build, number>>,
+    bodyType: { slim: 1, trim: 1, average: 1, solid: 1, broad: 1 } as Readonly<Record<BodyType, number>>,
     skinTone: { lightest: 1, light: 1, 'medium-light': 1, medium: 1, 'medium-deep': 1, deep: 1, deepest: 1 } as Readonly<Record<SkinToneKey, number>>,
     hair: { black: 3, 'dark-brown': 3, brown: 2.5, 'light-brown': 1.5, blond: 1.2, red: 0.5 } as Readonly<Record<HairKey, number>>,
     /**

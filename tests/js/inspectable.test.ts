@@ -162,7 +162,8 @@ test('a hypothetical entity is inspectable without the shell changing', () => {
 
 test('every person URL that worked before still works', () => {
     // Written when a person was an archetype: `arch` now arrives as the behavior profile that
-    // replaced it, the old ages as the adjustments that replaced them, `mob` as equipment.
+    // replaced it, the old ages as the adjustments that replaced them, `mob` as equipment, and
+    // `build` (the per-person preset, before it was called the Body Type) as `body-type`.
     const person = ENTITIES[0];
     const url = '?inspect=1&seed=3&arch=dave&age=older&build=broad&mob=cane&walk=1' +
         '&paused=1&yaw=45&phase=0.5&gizmos=1&ink=0';
@@ -170,7 +171,10 @@ test('every person URL that worked before still works', () => {
     assert.equal(s.seed, 3);
     assert.equal(s.controls.behavior, 'weaver');
     assert.equal(s.controls.age, 'old');
-    assert.equal(s.controls.build, 'broad');
+    assert.equal(s.controls['body-type'], 'broad');
+    assert.equal(s.controls.build, undefined);
+    // A key already in the new form wins over its old name.
+    assert.equal(stateFor(person, 'single', '?build=broad&body-type=slim').controls['body-type'], 'slim');
     assert.equal(s.controls.equipment, 'cane');
     for (const [arch, behavior] of [['tourist', 'typical'], ['mary', 'slow-walker'], ['kyle', 'distracted'], ['linda', 'sudden-stopper'], ['johnsons', 'group-walker'], ['timmy', 'darter']]) {
         assert.equal(stateFor(person, 'single', `?arch=${arch}`).controls.behavior, behavior, arch);

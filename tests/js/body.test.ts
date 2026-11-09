@@ -1,8 +1,8 @@
 /**
- * Model bodies (`modelcrowd/body.ts`): the recipe's age and build turned into bone changes and a
+ * Model bodies (`modelcrowd/body.ts`): the recipe's age and Body Type turned into bone changes and a
  * fullness displacement for the model crowd and the people lab.
  *
- * Checked on a small rig built in code with Mixamo's bone names: that the Build presets are the
+ * Checked on a small rig built in code with Mixamo's bone names: that the Body Types are the
  * crowd's own width roll cut into fifths and adjacent ones stay visibly apart; that the limits hold
  * and say what they held back; that a child is drawn as a teen; that widening the chest moves
  * nothing hung from it (the head stays put, the arms move only with the shoulders); that limbs
@@ -15,61 +15,61 @@ import { test } from 'node:test';
 import * as THREE from 'three';
 import { makeStreams } from '../../resources/js/game/core/rng.ts';
 import {
-    AGES, AGE_PRESETS, BUILDS, BUILD_PRESETS, BodyRig, CHILD_NOTE, LIMITS, bakeMask, buildAt, buildPosition, drawnHeight,
+    AGES, AGE_PRESETS, BODY_TYPES, BODY_TYPE_PRESETS, BodyRig, CHILD_NOTE, LIMITS, bakeMask, bodyTypeAt, bodyTypePosition, drawnHeight,
     bodyOf, drawsAsPrimitive, modelFallback, patchFullness, shape,
 } from '../../resources/js/game/modelcrowd/body.ts';
 import { personModel } from '../../resources/js/game/data/people.ts';
 import { Subject } from '../../resources/js/game/inspect/subject.ts';
 import type { Body } from '../../resources/js/game/modelcrowd/body.ts';
-import { BUILD_WIDTH, figureHeight, makeRecipe } from '../../resources/js/game/recipe.ts';
+import { BODY_TYPE_WIDTH, figureHeight, makeRecipe } from '../../resources/js/game/recipe.ts';
 
 const NEUTRAL: Body = { height: 1, width: 1, shoulders: 1, limbs: 1, fullness: 0, face: 0, neck: 1, head: 1, legs: 1, stoop: 0 };
 
-test("the Build presets are the crowd's own builds, each a fifth of it, visibly apart", () => {
-    // Build is a choice: the crowd rolls one of the five presets, and a person's width is that
-    // preset's, which is the width a model body is anchored to.
+test("the Body Types are the crowd's own, each a fifth of it, visibly apart", () => {
+    // The Body Type is a choice: the crowd rolls one of the five presets, and a person's width is
+    // that preset's, which is the width a model body is anchored to.
     const counts = new Map<string, number>();
     for (let seed = 1; seed <= 1000; seed++) {
         const r = makeRecipe(makeStreams(seed).recipe.fork('agent:0'));
-        assert.equal(r.w, BUILD_WIDTH[r.build]);
-        assert.equal(BUILD_PRESETS[r.build].w, r.w);
-        counts.set(r.build, (counts.get(r.build) ?? 0) + 1);
+        assert.equal(r.w, BODY_TYPE_WIDTH[r.bodyType]);
+        assert.equal(BODY_TYPE_PRESETS[r.bodyType].w, r.w);
+        counts.set(r.bodyType, (counts.get(r.bodyType) ?? 0) + 1);
     }
-    for (const b of BUILDS) assert.ok((counts.get(b) ?? 0) > 150, `only ${counts.get(b) ?? 0} of 1000 are ${b}`);
-    for (let i = 1; i < BUILDS.length; i++) {
-        const a = BUILD_PRESETS[BUILDS[i - 1]], b = BUILD_PRESETS[BUILDS[i]];
-        assert.ok(b.w > a.w, `${BUILDS[i]} sits below ${BUILDS[i - 1]} on the width axis`);
+    for (const b of BODY_TYPES) assert.ok((counts.get(b) ?? 0) > 150, `only ${counts.get(b) ?? 0} of 1000 are ${b}`);
+    for (let i = 1; i < BODY_TYPES.length; i++) {
+        const a = BODY_TYPE_PRESETS[BODY_TYPES[i - 1]], b = BODY_TYPE_PRESETS[BODY_TYPES[i]];
+        assert.ok(b.w > a.w, `${BODY_TYPES[i]} sits below ${BODY_TYPES[i - 1]} on the width axis`);
         // Visibly different neighbors: five to eight percent apart in width and in limb girth.
         for (const k of ['width', 'limbs'] as const) {
             const step = b[k] / a[k];
-            assert.ok(step > 1.04 && step < 1.09, `${BUILDS[i - 1]} to ${BUILDS[i]} ${k} steps ${step.toFixed(3)}`);
+            assert.ok(step > 1.04 && step < 1.09, `${BODY_TYPES[i - 1]} to ${BODY_TYPES[i]} ${k} steps ${step.toFixed(3)}`);
         }
-        assert.ok(b.fullness >= a.fullness, `${BUILDS[i]} is less full than ${BUILDS[i - 1]}`);
+        assert.ok(b.fullness >= a.fullness, `${BODY_TYPES[i]} is less full than ${BODY_TYPES[i - 1]}`);
     }
-    assert.equal(BUILD_PRESETS.slim.fullness, 0);
-    assert.equal(BUILD_PRESETS.trim.fullness, 0);
+    assert.equal(BODY_TYPE_PRESETS.slim.fullness, 0);
+    assert.equal(BODY_TYPE_PRESETS.trim.fullness, 0);
     // The face and the neck follow the body from Average up, and stay apart below it.
-    for (const b of ['slim', 'trim'] as const) { assert.equal(BUILD_PRESETS[b].face, 0); assert.equal(BUILD_PRESETS[b].neck, 1); }
-    assert.ok(BUILD_PRESETS.average.face > 0 && BUILD_PRESETS.solid.face > BUILD_PRESETS.average.face && BUILD_PRESETS.broad.face > BUILD_PRESETS.solid.face);
-    assert.ok(BUILD_PRESETS.average.neck > 1 && BUILD_PRESETS.solid.neck > BUILD_PRESETS.average.neck && BUILD_PRESETS.broad.neck > BUILD_PRESETS.solid.neck);
+    for (const b of ['slim', 'trim'] as const) { assert.equal(BODY_TYPE_PRESETS[b].face, 0); assert.equal(BODY_TYPE_PRESETS[b].neck, 1); }
+    assert.ok(BODY_TYPE_PRESETS.average.face > 0 && BODY_TYPE_PRESETS.solid.face > BODY_TYPE_PRESETS.average.face && BODY_TYPE_PRESETS.broad.face > BODY_TYPE_PRESETS.solid.face);
+    assert.ok(BODY_TYPE_PRESETS.average.neck > 1 && BODY_TYPE_PRESETS.solid.neck > BODY_TYPE_PRESETS.average.neck && BODY_TYPE_PRESETS.broad.neck > BODY_TYPE_PRESETS.solid.neck);
     // A face reads fuller by millimeters where a torso needs centimeters.
-    assert.ok(BUILD_PRESETS.broad.face < BUILD_PRESETS.broad.fullness / 3);
-    assert.ok(BUILD_PRESETS.broad.fullness > 2 * BUILD_PRESETS.average.fullness, 'Broad has to read as heavier-set, not just wide');
+    assert.ok(BODY_TYPE_PRESETS.broad.face < BODY_TYPE_PRESETS.broad.fullness / 3);
+    assert.ok(BODY_TYPE_PRESETS.broad.fullness > 2 * BODY_TYPE_PRESETS.average.fullness, 'Broad has to read as heavier-set, not just wide');
 });
 
 test("a crowd person's width lands between the presets and blends them", () => {
-    BUILDS.forEach((b, i) => assert.equal(buildPosition(BUILD_PRESETS[b].w), i));
-    assert.equal(buildPosition(0.5), 0);
-    assert.equal(buildPosition(2), BUILDS.length - 1);
-    const mid = buildAt(buildPosition((BUILD_PRESETS.solid.w + BUILD_PRESETS.broad.w) / 2));
-    assert.ok(Math.abs(mid.width - (BUILD_PRESETS.solid.width + BUILD_PRESETS.broad.width) / 2) < 1e-9);
+    BODY_TYPES.forEach((b, i) => assert.equal(bodyTypePosition(BODY_TYPE_PRESETS[b].w), i));
+    assert.equal(bodyTypePosition(0.5), 0);
+    assert.equal(bodyTypePosition(2), BODY_TYPES.length - 1);
+    const mid = bodyTypeAt(bodyTypePosition((BODY_TYPE_PRESETS.solid.w + BODY_TYPE_PRESETS.broad.w) / 2));
+    assert.ok(Math.abs(mid.width - (BODY_TYPE_PRESETS.solid.width + BODY_TYPE_PRESETS.broad.width) / 2) < 1e-9);
 });
 
 test('every preset combination stays inside the global limits, and the limits say what they hold', () => {
     for (const age of AGES) {
-        for (let pos = 0; pos < BUILDS.length; pos++) {
+        for (let pos = 0; pos < BODY_TYPES.length; pos++) {
             const s = shape(age, pos);
-            assert.deepEqual(s.held, [], `${age} ${BUILDS[pos]} is held back by the shipped limits`);
+            assert.deepEqual(s.held, [], `${age} ${BODY_TYPES[pos]} is held back by the shipped limits`);
         }
     }
     // A model that does not stretch well narrows its own: Broad is then held, and says by how much.
@@ -77,7 +77,7 @@ test('every preset combination stays inside the global limits, and the limits sa
     const s = shape('normal', 4, tight);
     assert.equal(s.body.width, 1.05);
     assert.deepEqual(s.held.map(h => h.key).sort(), ['fullness', 'width']);
-    assert.equal(s.held.find(h => h.key === 'width')?.wanted, BUILD_PRESETS.broad.width);
+    assert.equal(s.held.find(h => h.key === 'width')?.wanted, BODY_TYPE_PRESETS.broad.width);
 });
 
 test('age is a small adjustment to the model: Young a little shorter and slimmer, Old a little shorter and stooped', () => {

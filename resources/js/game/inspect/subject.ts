@@ -4,7 +4,7 @@
  * The person comes from `makeRecipe`, rolled from this person's own fork of the `recipe` stream
  * exactly as `Agent` rolls it -- same fork label, same recipe call -- so the figure on the
  * turntable is the figure the crowd builds for that seed and spawn index: their behavior, age,
- * build, colors, equipment and pace are the crowd's own rolls. This file adds no rolls of its own
+ * Body Type, colors, equipment and pace are the crowd's own rolls. This file adds no rolls of its own
  * and never reads the `spawn` or `behavior` streams, and the inspector never builds a `Simulation`.
  *
  * The lab's controls force choices (`RecipeOptions`): a forced choice still takes its roll, so the
@@ -15,7 +15,7 @@ import { BEHAVIORS, BEHAVIOR_KEYS } from '../behaviors.ts';
 import type { Behavior, BehaviorKey } from '../behaviors.ts';
 import { makeStreams } from '../core/rng.ts';
 import { SIM_DT } from '../core/time.ts';
-import { AGES, BUILDS, EQUIPMENT, makeRecipe } from '../recipe.ts';
+import { AGES, BODY_TYPES, EQUIPMENT, makeRecipe } from '../recipe.ts';
 import type { Choices, Recipe, RecipeOptions } from '../recipe.ts';
 import type { Poseable } from '../sim/agent.ts';
 import { SPEED_CAP } from '../sim/steering.ts';
@@ -26,7 +26,7 @@ const TAU = Math.PI * 2;
 /** Every choice's options for the lab, each with "seed" first: what the seed would roll. */
 export const BEHAVIOR_OPTIONS: readonly string[] = ['seed', ...BEHAVIOR_KEYS];
 export const AGE_OPTIONS: readonly string[] = ['seed', ...AGES];
-export const BUILD_OPTIONS: readonly string[] = ['seed', ...BUILDS];
+export const BODY_TYPE_OPTIONS: readonly string[] = ['seed', ...BODY_TYPES];
 export const SKIN_OPTIONS: readonly string[] = ['seed', ...SKIN_TONE_KEYS];
 export const HAIR_OPTIONS: readonly string[] = ['seed', ...HAIR_KEYS];
 /** Every scheme, the uniforms among them: the lab may put anyone in a uniform, the crowd never rolls one. */
@@ -36,7 +36,7 @@ export const EQUIPMENT_OPTIONS: readonly string[] = ['seed', ...EQUIPMENT];
 /** A choice forced by the lab, or `seed` for whatever the seed rolls. */
 export type Overrides = { [K in keyof Choices]: Choices[K] | 'seed' };
 export const ROLLED: Overrides = {
-    behavior: 'seed', age: 'seed', build: 'seed', skinTone: 'seed', hairTone: 'seed', scheme: 'seed', equipment: 'seed',
+    behavior: 'seed', age: 'seed', bodyType: 'seed', skinTone: 'seed', hairTone: 'seed', scheme: 'seed', equipment: 'seed',
 };
 
 /** The forced choices alone, as `makeRecipe` takes them. */

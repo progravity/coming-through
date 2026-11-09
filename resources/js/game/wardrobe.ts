@@ -3,22 +3,23 @@
  * from. All of it is data, in one table, `COLORS`, so the crowd's look is tuned here and nowhere
  * else.
  *
- * **Clothing is filled by role.** Every model's texture is divided into the same standard roles --
- * `headwear`, `tops`, `bottoms`, `footwear` and `accessory` (anything baked into the model, a bag or
- * a backpack), plus `skin`, `hair` and `keep` (details left as authored, like eyes) -- in the role
- * file beside it. A one-piece garment is `tops` with no `bottoms`; most models have no `headwear`.
- * Headwear means a hat baked into a model and a hat attached by code later alike: both wear the
+ * **Clothing is filled by clothing slot.** A scheme colors five clothing slots -- `tops`,
+ * `bottoms`, `footwear`, `accessory` (anything baked into the model, a bag or a backpack) and
+ * `headwear` -- and a model's data file says which of them its texture has, as color slots beside
+ * `skin`, `hair` and `keep` (details left as authored, like eyes). A one-piece garment is `tops`
+ * with no `bottoms`. `headwear` is the one clothing slot that is never a model's color slot: models
+ * are generated without hats, and a hat -- the primitives' today, a wearable later -- wears the
  * person's headwear color.
  *
  * **A scheme is one of two kinds**, and the format holds both so a staff uniform never needs it
  * reworked:
  *
- * - **pooled** -- a pool of colors and rules, never a fixed color per role. A person's roles are
+ * - **pooled** -- a pool of colors and rules, never a fixed color per slot. A person's slots are
  *   filled from the pool by an arrangement that depends on the person and on the model they are
  *   drawn from, so Bright Tropical gives one model a pink top and teal shoes and another a teal top
  *   and pink trousers. Every arrangement must meet `RULES`; one that does not is passed over for the
  *   next, deterministically. These are what the crowd is rolled from.
- * - **uniform** -- a fixed color per role. Skin and hair still vary per person, and the rules
+ * - **uniform** -- a fixed color per slot. Skin and hair still vary per person, and the rules
  *   comparing clothing with skin and hair are waived, so a uniform is never altered for anyone.
  *   Uniforms are never rolled for the crowd; they are assigned deliberately (staff, later). There
  *   is one today, Park Staff, and room for any number.
@@ -36,9 +37,9 @@
  */
 import { apart, mix } from './palette.ts';
 
-/** The clothing roles a person is dressed in, in the order they are filled: a model's are its data file's clothing color slots. */
-export type ClothingRole = 'headwear' | 'tops' | 'bottoms' | 'footwear' | 'accessory';
-export const CLOTHING_ROLES: readonly ClothingRole[] = ['tops', 'bottoms', 'footwear', 'accessory', 'headwear'];
+/** The clothing slots a scheme colors, in the order they are filled: a model has the ones its data file names as color slots. */
+export type ClothingSlot = 'headwear' | 'tops' | 'bottoms' | 'footwear' | 'accessory';
+export const CLOTHING_SLOTS: readonly ClothingSlot[] = ['tops', 'bottoms', 'footwear', 'accessory', 'headwear'];
 
 export type PooledKey = 'bright-tropical' | 'pastels' | 'neutrals' | 'earth-tones' | 'bold-primaries' | 'sporty' | 'denim-white' | 'park-merch';
 export type UniformKey = 'park-staff';
@@ -48,18 +49,18 @@ export interface PooledScheme {
     readonly key: PooledKey;
     readonly name: string;
     readonly kind: 'pooled';
-    /** The colors any role may be filled with. */
+    /** The colors any slot may be filled with. */
     readonly pool: readonly number[];
-    /** A role that may only take some of the pool, by index: the scheme's own rules, on top of `RULES`. */
-    readonly only?: Partial<Record<ClothingRole, readonly number[]>>;
+    /** A slot that may only take some of the pool, by index: the scheme's own rules, on top of `RULES`. */
+    readonly only?: Partial<Record<ClothingSlot, readonly number[]>>;
 }
 
 export interface UniformScheme {
     readonly key: UniformKey;
     readonly name: string;
     readonly kind: 'uniform';
-    /** One color per role, the same on everyone who wears it. */
-    readonly colors: Readonly<Record<ClothingRole, number>>;
+    /** One color per slot, the same on everyone who wears it. */
+    readonly colors: Readonly<Record<ClothingSlot, number>>;
 }
 
 export type Scheme = PooledScheme | UniformScheme;
@@ -216,8 +217,8 @@ export function isNeutral(c: number): boolean {
     return Math.max(r, g, b) - Math.min(r, g, b) <= RULES.neutral;
 }
 
-/** The colors a person wears, by role: only the roles asked for. */
-export type Clothing = Partial<Record<ClothingRole, number>>;
+/** The colors a person wears, by slot: only the slots asked for. */
+export type Clothing = Partial<Record<ClothingSlot, number>>;
 
 /** Every rule an arrangement breaks, in words; empty when it meets them all. */
 export function checkClothing(c: Clothing, skin: number, hair: number): string[] {
@@ -226,9 +227,9 @@ export function checkClothing(c: Clothing, skin: number, hair: number): string[]
     if (c.footwear !== undefined && c.bottoms !== undefined && !isNeutral(c.footwear) && apart(c.footwear, c.bottoms) < RULES.footwearBottoms) out.push('footwear matches the bottoms');
     if (c.accessory !== undefined && c.tops !== undefined && apart(c.accessory, c.tops) < RULES.accessoryTop) out.push('the accessory matches the top');
     if (c.headwear !== undefined && apart(c.headwear, hair) < RULES.headwearHair) out.push('headwear matches the hair');
-    for (const role of CLOTHING_ROLES) {
-        const v = c[role];
-        if (v !== undefined && apart(v, skin) < RULES.skin) out.push(`${role} is too close to the skin`);
+    for (const slot of CLOTHING_SLOTS) {
+        const v = c[slot];
+        if (v !== undefined && apart(v, skin) < RULES.skin) out.push(`${slot} is too close to the skin`);
     }
     return out;
 }
@@ -261,22 +262,22 @@ export interface Dressed {
 }
 
 /**
- * Dress a person: fill `roles` from their scheme.
+ * Dress a person: fill `slots` from their scheme.
  *
- * A uniform is its colors, exactly, on everyone. A pooled scheme fills the roles one at a time, in
- * `CLOTHING_ROLES` order, each trying the pool from its own starting color -- mixed out of the
- * person's `roll`, the model's `salt` and the role -- and keeping a color only if everything so far
- * still meets `RULES` against this person's skin and hair; a role with nothing left steps back and
- * moves the role before it on. So the same person comes out arranged differently on two models, two
+ * A uniform is its colors, exactly, on everyone. A pooled scheme fills the slots one at a time, in
+ * `CLOTHING_SLOTS` order, each trying the pool from its own starting color -- mixed out of the
+ * person's `roll`, the model's `salt` and the slot -- and keeping a color only if everything so far
+ * still meets `RULES` against this person's skin and hair; a slot with nothing left steps back and
+ * moves the slot before it on. So the same person comes out arranged differently on two models, two
  * people differently on one, and a rejected arrangement is passed over for the next in a fixed
  * order: no draw, no randomness, the same answer every time, found in a few tries even where the
  * rules leave little room (a pastel on the lightest skin). Every arrangement is reachable, so one is
  * found whenever one exists; should none, which `tests/js/wardrobe.test.ts` holds no shipped scheme
  * comes near, the starting arrangement is taken and says which rules it breaks.
  */
-export function dress(key: SchemeKey, roll: number, skin: number, hair: number, roles: readonly ClothingRole[], salt: number): Dressed {
+export function dress(key: SchemeKey, roll: number, skin: number, hair: number, slots: readonly ClothingSlot[], salt: number): Dressed {
     const scheme = schemeNamed(key);
-    const wanted = CLOTHING_ROLES.filter(r => roles.includes(r));
+    const wanted = CLOTHING_SLOTS.filter(r => slots.includes(r));
     if (scheme.kind === 'uniform') {
         const colors: Clothing = {};
         for (const r of wanted) colors[r] = scheme.colors[r];
@@ -288,14 +289,14 @@ export function dress(key: SchemeKey, roll: number, skin: number, hair: number, 
     let tries = 0;
     const fill = (j: number): boolean => {
         if (j === wanted.length) return true;
-        const o = options[j], role = wanted[j];
+        const o = options[j], slot = wanted[j];
         for (let t = 0; t < o.length; t++) {
-            colors[role] = o[(first[j] + t) % o.length];
+            colors[slot] = o[(first[j] + t) % o.length];
             tries++;
-            // Everything before this role already met the rules, so a break now is this role's.
+            // Everything before this slot already met the rules, so a break now is this slot's.
             if (checkClothing(colors, skin, hair).length === 0 && fill(j + 1)) return true;
         }
-        delete colors[role];
+        delete colors[slot];
         return false;
     };
     if (fill(0)) return { colors, kind: 'pooled', tries, broken: [] };

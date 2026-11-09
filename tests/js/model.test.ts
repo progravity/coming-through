@@ -130,7 +130,7 @@ test("the file's materials come back by identity, and only what the bench made i
     assert.ok(!shippedDisposed, "the file's own material was disposed");
 });
 
-test('the row is models only: the five Build presets, each a figure from the file, and no primitive person', () => {
+test('the row is models only: the five Body Types, each a figure from the file, and no primitive person', () => {
     const { root, clip } = figure();
     adopt(NAME, root, [clip]);
     const cast = MODEL.mount(new THREE.Scene());

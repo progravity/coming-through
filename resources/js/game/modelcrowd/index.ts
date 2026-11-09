@@ -47,7 +47,7 @@ export interface PeopleStats {
     clips: string;
     /** What the colour regions came to: how many groups, and whether the crowd is painted from them. */
     colours: string;
-    /** The model's build, from its data file; every clone's age and build preset come from its recipe. */
+    /** The model's build, from its data file; every clone's age and Body Type come from its recipe. */
     body: string;
     /** People the model renderer left to the primitives last frame: mobility aids and strollers. */
     fallback: number;
@@ -105,10 +105,10 @@ export async function startPeople(mode: PeopleMode, scene: THREE.Scene, params: 
             // Painted only when the regions are known and confidently separated; otherwise as authored, saying why.
             const regions = prepareRegions(model, got.scene);
             const body = bodyOf(model);
-            models = new ModelCrowd(scene, got, knobs, regions.roles?.usable === true ? regions.paint : null, body);
+            models = new ModelCrowd(scene, got, knobs, regions.slots?.usable === true ? regions.paint : null, body);
             Object.assign(stats, {
                 renderer: 'model', model: name, trisPerModel: models.trisPerModel, bones: models.bones, clips: models.clips,
-                colours: regions.summary, body: `${body.build} model; age and build from each recipe`,
+                colours: regions.summary, body: `${body.build} model; age and Body Type from each recipe`,
             });
         } catch (e) {
             stats.error = e instanceof Error ? e.message : String(e);

@@ -77,7 +77,7 @@ test('a choice moves only itself: the rest of the person keeps their rolls', () 
     const base = new Subject(3, 0, { age: 'normal', behavior: 'typical' });
     const old = new Subject(3, 0, { age: 'old', behavior: 'typical' });
     // hairColor is left out on purpose: Old shifts hair toward gray, the one color age changes.
-    for (const k of ['skin', 'shirt', 'pants', 'shoe', 'hatColor', 'bagColor', 'accColor', 'skinTone', 'hairTone', 'build'] as const) {
+    for (const k of ['skin', 'shirt', 'pants', 'shoe', 'hatColor', 'bagColor', 'accColor', 'skinTone', 'hairTone', 'bodyType'] as const) {
         assert.equal(old.recipe[k], base.recipe[k], `the age override changed ${k}`);
     }
     assert.notEqual(old.recipe.hairColor, base.recipe.hairColor, 'Old did not gray the hair');
@@ -89,7 +89,7 @@ test('a choice moves only itself: the rest of the person keeps their rolls', () 
 
     const weaver = new Subject(3, 0, { behavior: 'weaver' });
     const typical = new Subject(3, 0, { behavior: 'typical' });
-    for (const k of ['skin', 'hairColor', 'shirt', 'pants', 'age', 'build', 'skinTone'] as const) {
+    for (const k of ['skin', 'hairColor', 'shirt', 'pants', 'age', 'bodyType', 'skinTone'] as const) {
         assert.equal(weaver.recipe[k], typical.recipe[k], `the behavior override changed ${k}`);
     }
     assert.ok(weaver.speed > typical.speed);
@@ -114,10 +114,10 @@ test('every equipment override lands, at every age, and a stroller brings a Slow
     }
 });
 
-test('the build override reads the same whatever the behavior', () => {
-    const weaver = new Subject(3, 0, { behavior: 'weaver', build: 'broad' });
-    const slow = new Subject(3, 0, { behavior: 'slow-walker', build: 'broad' });
-    const slim = new Subject(3, 0, { behavior: 'weaver', build: 'slim' });
+test('the Body Type override reads the same whatever the behavior', () => {
+    const weaver = new Subject(3, 0, { behavior: 'weaver', bodyType: 'broad' });
+    const slow = new Subject(3, 0, { behavior: 'slow-walker', bodyType: 'broad' });
+    const slim = new Subject(3, 0, { behavior: 'weaver', bodyType: 'slim' });
     assert.equal(weaver.recipe.w, slow.recipe.w);
     assert.ok(slim.recipe.w < weaver.recipe.w);
 });

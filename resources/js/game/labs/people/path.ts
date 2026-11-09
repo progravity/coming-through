@@ -173,7 +173,7 @@ export async function startPath(lab: Lab): Promise<void> {
         const got = await fetchModel(model);
         const regions = prepareRegions(model, got.scene);
         const knobs: Knobs = { ink: false, throttle: false, far: 15, every: 3 };
-        models = new ModelCrowd(world.scene, got, knobs, regions.roles?.usable === true ? regions.paint : null, bodyOf(model));
+        models = new ModelCrowd(world.scene, got, knobs, regions.slots?.usable === true ? regions.paint : null, bodyOf(model));
         models.everyone = true;
         modelNote = `${modelName}, as the game draws people`;
     } catch (e) {

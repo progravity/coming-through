@@ -7,8 +7,9 @@
  *
  * None of it is written per entity. A control is carried under **its own id**, an overlay under its
  * own id, and that is the whole rule -- which is also why every URL the character turntable ever
- * wrote still reads: the person's controls are named `arch`, `age`, `build`, `mob`, `walk` and
- * `phase` because those were already the query keys. A scheme that could not reproduce them would
+ * wrote still reads: the person's controls were named `arch`, `age`, `build`, `mob`, `walk` and
+ * `phase` because those were already the query keys, and a key renamed since is read back by its
+ * entity's `legacy` (`build` is `body-type` now). A scheme that could not reproduce them would
  * have been the wrong scheme.
  */
 import { parseSeed } from '../core/rng.ts';

@@ -6,14 +6,14 @@
  * bench for an asset the game does not use yet, so there is no assembler for it to go through. The
  * rule it keeps instead is the next best one: **the game's half of the stage is still the game's.**
  * It is drawn *as a person* -- the controls choose a person exactly as the crowd rolls one -- painted
- * in that person's recipe, and shaped by their age and build through the same `modelcrowd/body.ts`
+ * in that person's recipe, and shaped by their age and Body Type through the same `modelcrowd/body.ts`
  * the game's crowd is shaped by. The primitive people are not shown here at all: they are the
  * game's fallback, and the people lab is for the way people are drawn.
  *
  * What the row compares is a control of its own (`compare`):
  *
- * - `build` (the default) -- the five Build presets on the same model and recipe, each exactly as the table has it.
- * - `age` -- Young, Normal and Old, the recipe's build held.
+ * - `body-type` (the default) -- the five Body Types on the same model and recipe, each exactly as the table has it.
+ * - `age` -- Young, Normal and Old, the recipe's Body Type held.
  * - `models` -- every chosen model at the same recipe, presets, pose and camera, with what each one
  *   costs: triangles, bones, file size, textures, texture memory and load time.
  *
@@ -42,7 +42,7 @@ import type { DataFile } from '../../data/people.ts';
 import { CROWD_MODEL, fetchModel } from '../../render/model-file.ts';
 import { standingHeight } from '../../render/person.ts';
 import {
-    AGES, AGE_PRESETS, BODY_KEYS, BUILDS, BUILD_PRESETS, BodyRig, CHILD_NOTE, LIMITS, NOT_ON_MODELS, bakeMask,
+    AGES, AGE_PRESETS, BODY_KEYS, BODY_TYPES, BODY_TYPE_PRESETS, BodyRig, CHILD_NOTE, LIMITS, NOT_ON_MODELS, bakeMask,
     NO_MODEL_BODY, bodyOf, drawnHeight, modelFallback, patchFullness, shape, skinSpace,
 } from '../../modelcrowd/body.ts';
 import type { Body, FullnessUniforms, Limits, ModelBody, Shaped } from '../../modelcrowd/body.ts';
@@ -63,7 +63,7 @@ import {
 export const POSE = 'pose';
 
 /** What the row compares. See the file comment. */
-export const COMPARE = ['build', 'age', 'models'] as const;
+export const COMPARE = ['body-type', 'age', 'models'] as const;
 export type Compare = (typeof COMPARE)[number];
 
 /** What stands on the stage when a file did not arrive: a person-sized box, so the frame still fits. */
@@ -96,7 +96,7 @@ interface Model {
     readonly verts: number;
     readonly bones: number;
     readonly bytes: number;
-    /** Its color regions and their roles, as the `?people=model` crowd paints them; null when not looked for. */
+    /** Its color regions and their color slots, as the `?people=model` crowd paints them; null when not looked for. */
     readonly regions: Regions | null;
     readonly triangles: number;
     /** Its height in the rest pose, which the crowd scales each recipe's standing height against. */
@@ -152,8 +152,8 @@ const _inv = new THREE.Matrix4();
 /**
  * The torso's half width, in the root's own space, from the vertices skinned mostly to the spine
  * and the hips: the arms, the legs and the head are other bones, so they fall out without a band of
- * heights having to guess where a sleeve ends. Read through the skinning as posed, so a Build
- * preset's girth is in it; the fullness displacement is the shader's, and is added by the caller.
+ * heights having to guess where a sleeve ends. Read through the skinning as posed, so a Body
+ * Type's girth is in it; the fullness displacement is the shader's, and is added by the caller.
  */
 function torsoHalf(meshes: readonly THREE.Mesh[], root: THREE.Object3D): { half: number; n: number } | null {
     root.updateMatrixWorld(true);
@@ -345,7 +345,7 @@ const _q = new THREE.Quaternion();
 const _local = new THREE.Matrix4();
 
 /** What one figure is asked to be: which model, and the body it wears. */
-interface Spec { name: string; age: Age; pos: number; exact: 'build' | 'age' | null; label: string }
+interface Spec { name: string; age: Age; pos: number; exact: 'body-type' | 'age' | null; label: string }
 
 /**
  * One model standing on the stage: the file's own root the first time a model is asked for in a
@@ -518,10 +518,10 @@ const chosen = (c: Controls): string[] => names.filter(n => c[comparing(n)] !== 
 
 /** How many stand in the row, by what it compares. */
 function rowFor(c: Controls): number {
-    const mode = (c.compare ?? 'build') as Compare;
+    const mode = (c.compare ?? 'body-type') as Compare;
     if (mode === 'age') return AGES.length;
     if (mode === 'models') return Math.max(1, chosen(c).length);
-    return BUILDS.length;
+    return BODY_TYPES.length;
 }
 
 class ModelCast implements Cast {
@@ -546,21 +546,21 @@ class ModelCast implements Cast {
         this.figures = [];
         // Every file back to rest first: a clone is taken of whatever its source is doing.
         for (const m of models.values()) for (const [o, p, q, s] of m.rest) { o.position.copy(p); o.quaternion.copy(q); o.scale.copy(s); }
-        for (const k of Object.keys(PERSON_CONTROLS)) if (c[k] !== undefined) this.pc[k] = c[k];
+        for (const { id } of Object.values(PERSON_CONTROLS)) if (c[id] !== undefined) this.pc[id] = c[id];
         const who = subjectFor(seed, 0, 1, this.pc);
         this.who = who;
         const r = who.recipe;
-        const mode = (count > 1 ? c.compare ?? 'build' : 'single') as Compare | 'single';
+        const mode = (count > 1 ? c.compare ?? 'body-type' : 'single') as Compare | 'single';
         // "Seed" is the model the game would draw this person from.
         const game = gameModelFor(who);
         const name = String(c.model) === 'seed' ? game.name : String(c.model);
         this.chosenModel = String(c.model) !== 'seed' ? { name, by: 'chosen in the lab' }
             : game.found ? { name, by: "the game's model for them" }
             : { name, by: `the game has no ${r.modelClass} model, so the crowd's stands in` };
-        // The Build preset exactly, as the crowd shapes it: the choice is the preset.
-        const pos = BUILDS.indexOf(r.build);
+        // The Body Type exactly, as the crowd shapes it: the choice is the preset.
+        const pos = BODY_TYPES.indexOf(r.bodyType);
         const specs: Spec[] =
-            mode === 'build' ? BUILDS.map((b, i) => ({ name, age: r.age, pos: i, exact: 'build' as const, label: title(b) }))
+            mode === 'body-type' ? BODY_TYPES.map((b, i) => ({ name, age: r.age, pos: i, exact: 'body-type' as const, label: title(b) }))
             : mode === 'age' ? AGES.map(a => ({ name, age: a, pos, exact: 'age' as const, label: title(a) }))
             : mode === 'models' ? chosen(c).map(n => ({ name: n, age: r.age, pos, exact: null, label: n }))
             : [{ name, age: r.age, pos, exact: null, label: name }];
@@ -592,7 +592,7 @@ class ModelCast implements Cast {
             f.rig?.pose();
             const paint = f.model?.regions?.paint ?? null, u = f.regionUniforms;
             if (paint !== null && u !== null) {
-                // Each model wears the person's scheme arranged on its own roles, salted by itself.
+                // Each model wears the person's scheme arranged on its own clothing slots, salted by itself.
                 paint.paint(u, c.recolour === true && who !== null ? personColors(who.recipe, paint.clothing, paint.salt) : null);
                 paint.showFalse(u, c.regions === true);
             }
@@ -669,18 +669,18 @@ class ModelCast implements Cast {
             + ` × ${n2(f.recipeHeight)} recipe height${this.c.fit === true ? '' : ' (crowd scale off)'}`;
         const fallback = modelFallback(who.recipe, m.body.ageClass);
         const r = who.recipe;
-        // The person's scheme arranged on this model's own clothing roles, as the crowd paints it.
+        // The person's scheme arranged on this model's own clothing slots, as the crowd paints it.
         const paint = m.regions?.paint ?? null;
-        const roles = paint?.clothing ?? [];
-        const dressed = dressOn(r, roles, paint?.salt ?? 0);
-        const a = AGE_PRESETS[r.age], b = BUILD_PRESETS[r.build];
+        const slots = paint?.clothing ?? [];
+        const dressed = dressOn(r, slots, paint?.salt ?? 0);
+        const a = AGE_PRESETS[r.age], b = BODY_TYPE_PRESETS[r.bodyType];
         const pace = who.speed;
         const contributes = {
             model: `age class ${m.body.ageClass} · ${m.body.build} build · ${count(m.triangles)} triangles`,
             age: `height ×${n2(a.height)}, width ×${n2(a.width)}, shoulders ×${n2(a.shoulders)}, head ×${n2(a.head)}, legs ×${n2(a.legs)}, stoop ${n2(a.stoop * 180 / Math.PI, 0)}°`,
-            build: `width ×${n2(b.width)}, shoulders ×${n2(b.shoulders)}, limbs ×${n2(b.limbs)}, fullness ${n2(b.fullness * 100, 1)}%, face ${n2(b.face * 100, 2)}%, neck ×${n2(b.neck)}`,
-            scheme: roles.length === 0 ? 'this model has no clothing roles to paint'
-                : roles.map(role => `${role} #${(dressed.colors[role] ?? 0).toString(16).padStart(6, '0')}`).join(', '),
+            bodyType: `width ×${n2(b.width)}, shoulders ×${n2(b.shoulders)}, limbs ×${n2(b.limbs)}, fullness ${n2(b.fullness * 100, 1)}%, face ${n2(b.face * 100, 2)}%, neck ×${n2(b.neck)}`,
+            scheme: slots.length === 0 ? 'this model has no clothing slots to paint'
+                : slots.map(slot => `${slot} #${(dressed.colors[slot] ?? 0).toString(16).padStart(6, '0')}`).join(', '),
             behavior: pace > RUN_ON ? `at ${n2(pace)} m/s the game runs them (above ${RUN_ON} m/s)` : `at ${n2(pace)} m/s the game walks them`,
             ...(r.equipment === 'none' ? {} : { equipment: `${NOT_ON_MODELS}: the game draws this person as primitives` }),
         };
@@ -688,25 +688,25 @@ class ModelCast implements Cast {
             title: f.spec.exact === null ? name : `${f.spec.label}`,
             sub: `${name} · as ${who.profile.name} · seed ${who.seed} · agent:${who.index}`,
             rows: [
-                ['person', [who.profile.name, title(r.age), title(r.build), skinToneNamed(r.skinTone).name, `${hairNamed(r.hairTone).name} hair`, schemeNamed(r.scheme).name].join(' · ')],
+                ['person', [who.profile.name, title(r.age), title(r.bodyType), skinToneNamed(r.skinTone).name, `${hairNamed(r.hairTone).name} hair`, schemeNamed(r.scheme).name].join(' · ')],
                 ['height', height],
-                ['body', `${title(f.shaped.shown)}${child ? ' (a child, on an adult model)' : ''} · ${buildLabel(f.spec)}`],
+                ['body', `${title(f.shaped.shown)}${child ? ' (a child, on an adult model)' : ''} · ${bodyTypeLabel(f.spec)}`],
                 ...(fallback === null ? [] : [['in the game', `${fallback}${r.equipment !== 'none' ? '; its collider is sized for the equipment' : ''}`] as const]),
                 ['clip', playing],
                 ['mesh', `${count(m.triangles)} triangles · ${m.bones} bones`],
                 ...(f.shaped.held.length > 0 ? [['held back', f.shaped.held.map(h => h.key).join(', ')] as const] : []),
                 ...failed,
             ],
-            swatches: [['skin', r.skin] as const, ['hair', r.hairColor] as const, ...roles.flatMap(role => {
-                const c = dressed.colors[role];
-                return c === undefined ? [] : [[role, c] as const];
+            swatches: [['skin', r.skin] as const, ['hair', r.hairColor] as const, ...slots.flatMap(slot => {
+                const c = dressed.colors[slot];
+                return c === undefined ? [] : [[slot, c] as const];
             })],
             line: `${f.spec.label} · ${n2(m.restHeight * body.height * f.recipeHeight)} m · w ${n2(body.width)} · full ${n2(body.fullness * 100, 1)}%${f.shaped.held.length > 0 ? ' · held' : ''}${childNote}`,
             sections: [
                 personIdentity(who),
                 personChoices(who, { forced: chosenBy(overridesOf(this.pc)), model: this.chosenModel, contributes }),
                 personBehavior(who),
-                clothingSection(r, dressed, roles, name, this.c.recolour === true ? '' : 'Recipe colors are off: the model shows its own texture.'),
+                clothingSection(r, dressed, slots, name, this.c.recolour === true ? '' : 'Recipe colors are off: the model shows its own texture.'),
                 bodySection(f, who, top),
                 personRecipe(who, '', 'model'),
                 personGeometry(who, { top, height, ...(f.torso === undefined ? {} : { torso: f.torso }) }),
@@ -734,20 +734,20 @@ class ModelCast implements Cast {
         const clip = f?.action?.getClip();
         const regions = f?.regionUniforms === null || f === undefined ? ''
             : this.c.regions === true ? ' · false color'
-            : this.c.recolour === true && f.model?.regions?.roles?.usable === true ? " · the recipe's colors" : ' · as authored';
+            : this.c.recolour === true && f.model?.regions?.slots?.usable === true ? " · the recipe's colors" : ' · as authored';
         if (clip === undefined) return `clip ${POSE}${regions}`;
         const p = wrap01(Number(this.c.phase));
         return `clip ${clip.name} ${(p * 100).toFixed(0)}%${this.c.freeze === true ? ' frozen' : ''}${regions}`;
     }
 }
 
-/** How a figure's build was chosen: a preset exactly, or the recipe's width placed among them. */
-function buildLabel(spec: Spec): string {
-    if (spec.exact === 'build') return `${spec.label} build, exactly`;
-    const i = Math.min(BUILDS.length - 2, Math.floor(spec.pos)), t = spec.pos - i;
-    if (t < 0.02) return `${title(BUILDS[i])} build`;
-    if (t > 0.98) return `${title(BUILDS[i + 1])} build`;
-    return `between ${title(BUILDS[i])} and ${title(BUILDS[i + 1])} (${Math.round(t * 100)}%)`;
+/** How a figure's Body Type was chosen: a preset exactly, or the recipe's width placed among them. */
+function bodyTypeLabel(spec: Spec): string {
+    if (spec.exact === 'body-type') return `${spec.label} Body Type, exactly`;
+    const i = Math.min(BODY_TYPES.length - 2, Math.floor(spec.pos)), t = spec.pos - i;
+    if (t < 0.02) return `${title(BODY_TYPES[i])} Body Type`;
+    if (t > 0.98) return `${title(BODY_TYPES[i + 1])} Body Type`;
+    return `between ${title(BODY_TYPES[i])} and ${title(BODY_TYPES[i + 1])} (${Math.round(t * 100)}%)`;
 }
 
 const fmt = (k: keyof Body, v: number, height: number): string =>
@@ -774,7 +774,7 @@ function bodySection(f: Figure, who: Subject, top: number): InfoSection {
     const out: InfoRow[] = [
         { k: 'model build', v: `${m.body.build} · ${m.body.path === '' ? 'no data file' : m.body.path}` },
         { k: 'age', v: `${title(f.shaped.shown)}${f.spec.exact === 'age' ? ', exactly' : ` (the recipe is ${who.recipe.age})`}` },
-        { k: 'build', v: `${buildLabel(f.spec)}${f.spec.exact === null ? ` · recipe width ${n2(who.recipe.w, 3)}` : ''}` },
+        { k: 'body type', v: `${bodyTypeLabel(f.spec)}${f.spec.exact === null ? ` · recipe width ${n2(who.recipe.w, 3)}` : ''}` },
         { k: 'limits', v: m.body.overridden.length === 0 ? 'the global limits' : `the global limits, with ${m.body.overridden.join(', ')} from this model's data file` },
     ];
     if (who.recipe.modelClass !== m.body.ageClass) out.push({ k: 'child', v: CHILD_NOTE });
@@ -825,25 +825,25 @@ function clipTable(m: Model): InfoTable {
 
 /**
  * The regions, for checking a model at a glance: one row per color group with its false color,
- * its own color, its share of the texture and its role, then anything that stops it being painted.
+ * its own color, its share of the texture and its color slot, then anything that stops it being painted.
  */
 function regionTables(rg: Regions | null): InfoTable[] {
     if (rg === null) return [];
-    const seg = rg.seg, roles = rg.roles;
-    if (seg === null || roles === null) return [{ caption: rg.summary, columns: ['regions'], rows: [] }];
+    const seg = rg.seg, slots = rg.slots;
+    if (seg === null || slots === null) return [{ caption: rg.summary, columns: ['regions'], rows: [] }];
     if (seg.failure !== null) return [{ caption: `not separable: ${seg.failure}`, columns: ['regions'], rows: [] }];
     const rows = seg.groups.map(g => [
         { text: String(g.index + 1), color: Number.parseInt(falseHex(g.index).slice(1), 16) },
         { text: g.hex, color: Number.parseInt(g.hex.slice(1), 16) },
         share(g.share),
-        roles.named[g.index] ? { text: roles.byGroup[g.index] ?? '', strong: true } : 'not in file',
+        slots.named[g.index] ? { text: slots.byGroup[g.index] ?? '', strong: true } : 'not in file',
     ]);
     const caption = `${seg.groups.length} color groups · bandwidth ${+seg.bandwidth.toFixed(4)} · ${rg.ms.toFixed(0)} ms · `
-        + (roles.usable ? 'painted from the recipe' : `not painted: ${roles.problems.join('; ')}`);
-    const out: InfoTable[] = [{ caption, columns: ['#', 'color', 'share', 'role'], rows }];
+        + (slots.usable ? 'painted from the recipe' : `not painted: ${slots.problems.join('; ')}`);
+    const out: InfoTable[] = [{ caption, columns: ['#', 'color', 'share', 'color slot'], rows }];
     const notes = [
         ...seg.blends.map(b => `blend ${b.a + 1}+${b.b + 1} covers ${share(b.share)}`),
-        ...roles.warnings, ...seg.notes,
+        ...slots.warnings, ...seg.notes,
     ];
     if (notes.length > 0) out.push({ caption: 'to check', columns: ['note'], rows: notes.map(n => [n]) });
     return out;
@@ -925,7 +925,7 @@ function modelProvenance(name: string, m: Model | null): InfoSection {
     const d = PERSON_MODELS[name];
     const rows: InfoRow[] = [
         { k: 'size', v: m === null || m.bytes === 0 ? 'not loaded' : `${n2(m.bytes / 1e6, 1)} MB` },
-        { k: 'body table', v: 'resources/js/game/modelcrowd/body.ts · BUILD_PRESETS, AGE_PRESETS, LIMITS', mono: true },
+        { k: 'body table', v: 'resources/js/game/modelcrowd/body.ts · BODY_TYPE_PRESETS, AGE_PRESETS, LIMITS', mono: true },
         ...(d === undefined ? [{ k: 'source', v: 'no data file' }] : [
             recorded('Meshy plan', d.source.plan),
             recorded('generator version', d.source.generatorVersion),
@@ -948,6 +948,15 @@ const MODEL_OVERLAYS: readonly OverlayDef[] = [
     { id: ANCHOR_OVERLAY, label: 'accessory anchors', key: 'j' },
 ];
 
+/**
+ * Read an old address: the person's old keys (`personLegacy`), and `compare=build`, the Body Type
+ * row from before the per-person preset was called the Body Type.
+ */
+function modelLegacy(q: URLSearchParams): void {
+    personLegacy(q);
+    if (q.get('compare') === 'build') q.set('compare', 'body-type');
+}
+
 /** The person's equipment control, without the key `M` already chooses the model by. */
 const { key: _equipKey, ...equipment } = PERSON_CONTROLS.equipment;
 
@@ -959,16 +968,16 @@ export const MODEL: Inspectable = {
     // The panel prints this over the seed box. The seed chooses the person the model is drawn as.
     title: 'Person',
     controls: [
-        // Every choice a person is made of, in the order a person is described: model, age, build,
+        // Every choice a person is made of, in the order a person is described: model, age, Body Type,
         // skin tone, hair, clothing scheme, behavior, equipment -- each with Seed for what the seed rolls.
         modelControl,
-        PERSON_CONTROLS.age, PERSON_CONTROLS.build, PERSON_CONTROLS.skin, PERSON_CONTROLS.hair, PERSON_CONTROLS.scheme,
+        PERSON_CONTROLS.age, PERSON_CONTROLS.bodyType, PERSON_CONTROLS.skin, PERSON_CONTROLS.hair, PERSON_CONTROLS.scheme,
         PERSON_CONTROLS.behavior,
         // Listed and greyed rather than hidden: the panel is also the list of what models still lack.
         { ...equipment, disabled: `strollers, wheelchairs, scooters and canes: ${NOT_ON_MODELS}; the game draws their users as primitives` },
         { kind: 'toggle', id: 'accessories', label: 'accessories', value: false, disabled: `hats, glasses, bags and carried things: ${NOT_ON_MODELS}` },
         // What the row stands side by side: see the file comment. Single view is always the one figure.
-        { kind: 'enum', id: 'compare', label: 'row compares', options: COMPARE, value: 'build', key: 'v', rebuilds: true },
+        { kind: 'enum', id: 'compare', label: 'row compares', options: COMPARE, value: 'body-type', key: 'v', rebuilds: true },
         clipControl,
         // A rebuild rather than a repaint, so the readout's shading row cannot go stale.
         { kind: 'toggle', id: 'own', label: 'own materials', value: false, key: 'n', rebuilds: true },
@@ -984,14 +993,14 @@ export const MODEL: Inspectable = {
         PERSON_CONTROLS.agent,
     ],
     overlays: MODEL_OVERLAYS,
-    legacy: personLegacy,
+    legacy: modelLegacy,
     // A model has meshes, not the primitives' parts: no part gizmos, no part origins, and no ink
     // shell on the stage to switch.
     universal: [RULER],
     // Seeds browse the game's people; `C` already cycles the clips.
     stepping: 'seed',
-    /** The five Build presets: the row's default, `compare=build`. */
-    row: BUILDS.length,
+    /** The five Body Types: the row's default, `compare=body-type`. */
+    row: BODY_TYPES.length,
     rowFor,
     load,
     mount: (scene: THREE.Scene): Cast => new ModelCast(scene),

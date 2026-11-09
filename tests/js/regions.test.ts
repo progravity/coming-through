@@ -8,16 +8,16 @@
  * that the mask labels every used texel including the edges left out of the grouping, that two
  * colours as close as this model's skin and khaki are pulled apart by the bandwidth search, that a
  * fixed bandwidth too wide to do so says so rather than painting one as the other, that color slots
- * are matched by colour and not by order, and that a blend is only a refusal across two roles.
+ * are matched by colour and not by order, and that a blend is only a refusal across two color slots.
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { personModel } from '../../resources/js/game/data/people.ts';
-import { RegionPaint, assignRoles, personColors, roleFileOf, segment } from '../../resources/js/game/modelcrowd/regions.ts';
+import { RegionPaint, assignSlots, personColors, slotFileOf, segment } from '../../resources/js/game/modelcrowd/regions.ts';
 import { makeRecipe } from '../../resources/js/game/recipe.ts';
 import { makeStreams } from '../../resources/js/game/core/rng.ts';
 import { dress, saltOf } from '../../resources/js/game/wardrobe.ts';
-import type { Pixels, RoleFile, Segmentation } from '../../resources/js/game/modelcrowd/regions.ts';
+import type { Pixels, SlotFile, Segmentation } from '../../resources/js/game/modelcrowd/regions.ts';
 
 const SIZE = 96, PATCH = 40, GAP = 6;
 
@@ -88,77 +88,77 @@ test('a bandwidth too wide to separate them says so, and painting is refused rat
     assert.equal(seg.failure, null);
     assert.equal(seg.groups.length, 3);
     assert.equal(seg.splits.length, 1, 'the merged group was not flagged');
-    const file: RoleFile = { regions: seg.groups.map(g => ({ colour: g.hex, role: 'skin' as const })) };
-    const roles = assignRoles(seg, file, null);
-    assert.equal(roles.usable, false);
-    assert.match(roles.problems.join(' '), /looks like two colours/);
+    const file: SlotFile = { slots: seg.groups.map(g => ({ color: g.hex, slot: 'skin' as const })) };
+    const slots = assignSlots(seg, file, null);
+    assert.equal(slots.usable, false);
+    assert.match(slots.problems.join(' '), /looks like two colours/);
 });
 
 test('color slots are matched by colour, not by order, and say what they do not cover', () => {
     const { px, uv, index } = atlas([SKIN, KHAKI, BLUE, WHITE]);
     const seg = segment(px, uv, index);
     // A data file's color slots, in an order that is not the detector's.
-    const file = roleFileOf({ ...personModel('casual-man'), colorSlots: [
+    const file = slotFileOf({ ...personModel('casual-man'), colorSlots: [
         { color: '#d3cdc8', slot: 'footwear' },
         { color: '#a58a67', slot: 'bottoms' },
         { color: '#cb8559', slot: 'skin' },
         { color: '#00ff00', slot: 'hair' },
     ] });
-    const roles = assignRoles(seg, file, null);
-    assert.equal(roles.usable, true, roles.problems.join('; '));
+    const slots = assignSlots(seg, file, null);
+    assert.equal(slots.usable, true, slots.problems.join('; '));
     // The group whose centre is nearest the colour a patch was painted.
     const rgb = (n: number): number[] => [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-    const roleOf = (hex: number): string => {
+    const slotOf = (hex: number): string => {
         const want = rgb(hex);
         const near = (g: { hex: string }): number => Math.hypot(...rgb(parseInt(g.hex.slice(1), 16)).map((v, k) => v - want[k]));
         const g = [...seg.groups].sort((a, b) => near(a) - near(b))[0];
-        return roles.byGroup[g.index];
+        return slots.byGroup[g.index];
     };
-    assert.equal(roleOf(SKIN), 'skin');
-    assert.equal(roleOf(KHAKI), 'bottoms');
-    assert.equal(roleOf(WHITE), 'footwear');
+    assert.equal(slotOf(SKIN), 'skin');
+    assert.equal(slotOf(KHAKI), 'bottoms');
+    assert.equal(slotOf(WHITE), 'footwear');
     // Blue is in the texture and not the file: left as authored, and said so.
-    assert.equal(roleOf(BLUE), 'keep');
-    assert.ok(roles.warnings.some(w => /not in the data file's color slots/.test(w)));
-    assert.ok(roles.warnings.some(w => /#00ff00.*matches no colour group/.test(w)));
+    assert.equal(slotOf(BLUE), 'keep');
+    assert.ok(slots.warnings.some(w => /not in the data file's color slots/.test(w)));
+    assert.ok(slots.warnings.some(w => /#00ff00.*matches no colour group/.test(w)));
 });
 
 
-test('a blend is harmless inside one role and a refusal across two', () => {
+test('a blend is harmless inside one color slot and a refusal across two', () => {
     const { px, uv, index } = atlas([SKIN, KHAKI, BLUE, WHITE]);
     const seg = { ...segment(px, uv, index), blends: [{ a: 0, b: 1, share: 0.05 }] };
     const g = seg.groups;
-    const same = assignRoles(seg, { regions: [{ colour: g[0].hex, role: 'tops' }, { colour: g[1].hex, role: 'tops' }] }, null);
+    const same = assignSlots(seg, { slots: [{ color: g[0].hex, slot: 'tops' }, { color: g[1].hex, slot: 'tops' }] }, null);
     assert.equal(same.usable, true, same.problems.join('; '));
-    const apart = assignRoles(seg, { regions: [{ colour: g[0].hex, role: 'skin' }, { colour: g[1].hex, role: 'bottoms' }] }, null);
+    const apart = assignSlots(seg, { slots: [{ color: g[0].hex, slot: 'skin' }, { color: g[1].hex, slot: 'bottoms' }] }, null);
     assert.equal(apart.usable, false);
     assert.match(apart.problems[0], /blend/);
 });
 
 test('with no color slots nothing is painted, and the reason is given', () => {
     const { px, uv, index } = atlas([SKIN, KHAKI, BLUE, WHITE]);
-    const roles = assignRoles(segment(px, uv, index), null, 'no color slots for x');
-    assert.equal(roles.usable, false);
-    assert.deepEqual(roles.problems, ['no color slots for x']);
+    const slots = assignSlots(segment(px, uv, index), null, 'no color slots for x');
+    assert.equal(slots.usable, false);
+    assert.deepEqual(slots.problems, ['no color slots for x']);
 });
 
 test('a data file\'s color slots reach the detector as they are, with its bandwidth', () => {
-    // What a slot may be, and what an old role name became, is checked when the file loads: see
+    // What a slot may be, and what an old slot name became, is checked when the file loads: see
     // tests/js/people-data.test.ts. Here: that what was checked is what the detector is handed.
     const m = personModel('casual-man');
-    assert.deepEqual(roleFileOf(m), { regions: m.colorSlots.map(c => ({ colour: c.color, role: c.slot })) });
-    assert.deepEqual(roleFileOf({ ...m, colorSlots: [{ color: '#654321', slot: 'accessory' }], regionBandwidth: 0.02 }),
-        { regions: [{ colour: '#654321', role: 'accessory' }], bandwidth: 0.02 });
+    assert.deepEqual(slotFileOf(m), { slots: m.colorSlots.map(c => ({ color: c.color, slot: c.slot })) });
+    assert.deepEqual(slotFileOf({ ...m, colorSlots: [{ color: '#654321', slot: 'accessory' }], regionBandwidth: 0.02 }),
+        { slots: [{ color: '#654321', slot: 'accessory' }], bandwidth: 0.02 });
 });
 
-test('a model is painted in the person\'s skin and hair, and their scheme arranged on the roles it has', () => {
+test('a model is painted in the person\'s skin and hair, and their scheme arranged on the clothing slots it has', () => {
     const { px, uv, index } = atlas([SKIN, KHAKI, BLUE, WHITE]);
     const seg = segment(px, uv, index);
     const g = seg.groups;
-    const roles = assignRoles(seg, { regions: [
-        { colour: g[0].hex, role: 'skin' }, { colour: g[1].hex, role: 'bottoms' }, { colour: g[2].hex, role: 'tops' }, { colour: g[3].hex, role: 'footwear' },
+    const slots = assignSlots(seg, { slots: [
+        { color: g[0].hex, slot: 'skin' }, { color: g[1].hex, slot: 'bottoms' }, { color: g[2].hex, slot: 'tops' }, { color: g[3].hex, slot: 'footwear' },
     ] }, null);
-    const paint = new RegionPaint(seg, roles, 'x.glb');
+    const paint = new RegionPaint(seg, slots, 'x.glb');
     // Only what the model has: no headwear and no accessory, so the scheme skips them.
     assert.deepEqual([...paint.clothing].sort(), ['bottoms', 'footwear', 'tops']);
     assert.equal(paint.salt, saltOf('x.glb'));

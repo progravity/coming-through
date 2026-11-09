@@ -1,5 +1,5 @@
 /**
- * How one rigged model becomes many bodies: the recipe's age and build, turned into bone changes
+ * How one rigged model becomes many bodies: the recipe's age and Body Type, turned into bone changes
  * and a fullness displacement, for the `?people=model` crowd and the people lab alike.
  *
  * **Renderer only.** It reads a recipe and writes bones, bind matrices and two uniforms. Nothing
@@ -28,19 +28,19 @@ import { BEHAVIORS } from '../behaviors.ts';
 import type { ModelClass } from '../behaviors.ts';
 import { BODY_LIMIT_KEYS } from '../data/people.ts';
 import type { ModelBuild, PersonModel } from '../data/people.ts';
-import { AGES, BUILDS, BUILD_WIDTH, figureHeight } from '../recipe.ts';
-import type { Age, Build, Recipe } from '../recipe.ts';
+import { AGES, BODY_TYPES, BODY_TYPE_WIDTH, figureHeight } from '../recipe.ts';
+import type { Age, BodyType, Recipe } from '../recipe.ts';
 
 // ---------- the tables ----------
 
-export { AGES, BUILDS };
-export type { Age, Build };
+export { AGES, BODY_TYPES };
+export type { Age, BodyType };
 
 /** The body values one preset contributes. Every field is a factor on the model as authored, except `fullness`. */
-export interface BuildPreset {
+export interface BodyTypePreset {
     /**
      * Where this preset sits on the width scale the primitive people are drawn with (`Recipe.w`,
-     * which is `BUILD_WIDTH` of the person's Build): a width between two presets blends them.
+     * which is `BODY_TYPE_WIDTH` of the person's Body Type): a width between two presets blends them.
      */
     w: number;
     /** Sideways girth of the hips, spine and chest, and how far apart the legs stand. */
@@ -61,12 +61,12 @@ export interface BuildPreset {
     neck: number;
 }
 
-export const BUILD_PRESETS: Readonly<Record<Build, BuildPreset>> = {
-    slim: { w: BUILD_WIDTH.slim, width: 0.88, shoulders: 0.94, limbs: 0.90, fullness: 0, face: 0, neck: 1 },
-    trim: { w: BUILD_WIDTH.trim, width: 0.94, shoulders: 0.97, limbs: 0.95, fullness: 0, face: 0, neck: 1 },
-    average: { w: BUILD_WIDTH.average, width: 1.00, shoulders: 1.00, limbs: 1.00, fullness: 0.005, face: 0.0012, neck: 1.02 },
-    solid: { w: BUILD_WIDTH.solid, width: 1.07, shoulders: 1.04, limbs: 1.06, fullness: 0.012, face: 0.003, neck: 1.05 },
-    broad: { w: BUILD_WIDTH.broad, width: 1.14, shoulders: 1.08, limbs: 1.12, fullness: 0.022, face: 0.0055, neck: 1.09 },
+export const BODY_TYPE_PRESETS: Readonly<Record<BodyType, BodyTypePreset>> = {
+    slim: { w: BODY_TYPE_WIDTH.slim, width: 0.88, shoulders: 0.94, limbs: 0.90, fullness: 0, face: 0, neck: 1 },
+    trim: { w: BODY_TYPE_WIDTH.trim, width: 0.94, shoulders: 0.97, limbs: 0.95, fullness: 0, face: 0, neck: 1 },
+    average: { w: BODY_TYPE_WIDTH.average, width: 1.00, shoulders: 1.00, limbs: 1.00, fullness: 0.005, face: 0.0012, neck: 1.02 },
+    solid: { w: BODY_TYPE_WIDTH.solid, width: 1.07, shoulders: 1.04, limbs: 1.06, fullness: 0.012, face: 0.003, neck: 1.05 },
+    broad: { w: BODY_TYPE_WIDTH.broad, width: 1.14, shoulders: 1.08, limbs: 1.12, fullness: 0.022, face: 0.0055, neck: 1.09 },
 };
 
 /**
@@ -77,7 +77,7 @@ export const BUILD_PRESETS: Readonly<Record<Build, BuildPreset>> = {
 export interface AgePreset {
     /** Uniform scale on the model, in place of the recipe's own figure height (the height roll stays). */
     height: number;
-    /** Multiplies the build's width and shoulders. */
+    /** Multiplies the Body Type's width and shoulders. */
     width: number;
     shoulders: number;
     /** Uniform scale of the head about the neck. */
@@ -140,20 +140,20 @@ export interface ModelBody {
 
 // ---------- from a recipe to a body ----------
 
-/** Where on the five Build presets a width falls: 0 is Slim, 4 is Broad, fractions blend. */
-export function buildPosition(w: number): number {
-    const a = BUILDS.map(b => BUILD_PRESETS[b].w);
+/** Where on the five Body Types a width falls: 0 is Slim, 4 is Broad, fractions blend. */
+export function bodyTypePosition(w: number): number {
+    const a = BODY_TYPES.map(b => BODY_TYPE_PRESETS[b].w);
     if (w <= a[0]) return 0;
     for (let i = 1; i < a.length; i++) if (w <= a[i]) return i - 1 + (w - a[i - 1]) / (a[i] - a[i - 1]);
     return a.length - 1;
 }
 
-/** The build at a position, blending the two presets either side of it. */
-export function buildAt(pos: number): BuildPreset {
-    const i = Math.max(0, Math.min(BUILDS.length - 2, Math.floor(pos)));
+/** The Body Type at a position, blending the two presets either side of it. */
+export function bodyTypeAt(pos: number): BodyTypePreset {
+    const i = Math.max(0, Math.min(BODY_TYPES.length - 2, Math.floor(pos)));
     const t = Math.max(0, Math.min(1, pos - i));
-    const lo = BUILD_PRESETS[BUILDS[i]], hi = BUILD_PRESETS[BUILDS[i + 1]];
-    const mix = (k: keyof BuildPreset): number => lo[k] + (hi[k] - lo[k]) * t;
+    const lo = BODY_TYPE_PRESETS[BODY_TYPES[i]], hi = BODY_TYPE_PRESETS[BODY_TYPES[i + 1]];
+    const mix = (k: keyof BodyTypePreset): number => lo[k] + (hi[k] - lo[k]) * t;
     return {
         w: mix('w'), width: mix('width'), shoulders: mix('shoulders'), limbs: mix('limbs'),
         fullness: mix('fullness'), face: mix('face'), neck: mix('neck'),
@@ -170,10 +170,10 @@ export interface Shaped {
     held: { key: keyof Body; wanted: number; limit: number }[];
 }
 
-/** The body an age and a build position ask for, inside `limits`. */
+/** The body an age and a Body Type position ask for, inside `limits`. */
 export function shape(age: Age, pos: number, limits: Limits = LIMITS): Shaped {
     const shown = age;
-    const a = AGE_PRESETS[shown], b = buildAt(pos);
+    const a = AGE_PRESETS[shown], b = bodyTypeAt(pos);
     const wanted: Body = {
         height: a.height, width: b.width * a.width, shoulders: b.shoulders * a.shoulders, limbs: b.limbs,
         fullness: b.fullness, face: b.face, neck: b.neck, head: a.head, legs: a.legs, stoop: a.stoop,
@@ -189,8 +189,8 @@ export function shape(age: Age, pos: number, limits: Limits = LIMITS): Shaped {
     return { body, wanted, shown, held };
 }
 
-/** The body a recipe gets in the crowd: its Age preset and its Build preset, exactly. */
-export const shapeRecipe = (r: Recipe, limits: Limits = LIMITS): Shaped => shape(r.age, BUILDS.indexOf(r.build), limits);
+/** The body a recipe gets in the crowd: its Age preset and its Body Type, exactly. */
+export const shapeRecipe = (r: Recipe, limits: Limits = LIMITS): Shaped => shape(r.age, BODY_TYPES.indexOf(r.bodyType), limits);
 
 /**
  * How tall to draw a recipe on a model: its standing height with its figure's own height taken

@@ -93,7 +93,7 @@ test('a value outside its list fails, naming the file, the field and what it may
     one(check({ clips: {} }), 'clips', /in the spec, but clip roles are not mapped yet/);
 });
 
-test('the color slots are the spec\'s, an old role name says what it became, and a slot the game cannot color is refused', () => {
+test('the color slots are the spec\'s, an old slot name says what it became, and a slot the game cannot color is refused', () => {
     for (const [old, now] of [['top', 'tops'], ['trousers', 'bottoms'], ['shoes', 'footwear']]) {
         one(check({ colorSlots: [{ color: '#123456', slot: old }] }), 'colorSlots[0].slot', new RegExp(`"${old}", which is now "${now}"`));
     }

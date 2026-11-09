@@ -192,7 +192,7 @@ The engine:
   model (`casual-man` unless `?model=` names another). `?people=prim` keeps the primitive people,
   which stay the fallback: for the player, for anyone with a mobility aid or a stroller, and for the
   whole crowd if the model fails to load. `regions.ts` finds a model's color regions and repaints
-  them per person, `body.ts` shapes each clone by its recipe's age and build and decides who falls
+  them per person, `body.ts` shapes each clone by its recipe's age and Body Type and decides who falls
   back (see "Model bodies"), and `index.ts` chooses the renderer and keeps the cost readout, shown
   under `?people=` or a stress run. The people lab, which shows only models, uses all of it.
   See "Models by default".
@@ -302,7 +302,7 @@ The engine:
   the file's materials come back by identity and only what the bench made is disposed, that the
   row's second exhibit is the game's own person, and that the card lists every data file that
   failed its check, by file and field.
-- `tests/js/body.test.ts` — model bodies, on a Mixamo-named rig built in code: that the Build presets
+- `tests/js/body.test.ts` — model bodies, on a Mixamo-named rig built in code: that the Body Types
   are the crowd's own width roll cut into fifths with neighbors visibly apart, that the limits hold
   and say what they held, that a child is drawn as a teen at the teen height, that widening the chest
   moves nothing hung from it, that the shoulders carry the arms and limbs thicken across the bone,
@@ -314,11 +314,11 @@ The engine:
   the patches and never the gutter, that every used texel is labelled, edges included, that two
   colours as close as the casual man's skin and khaki are pulled apart by the bandwidth search, that a
   bandwidth too wide to do so is reported and refused rather than painted, that color slots match
-  by color and not by order, that a blend only refuses painting across two roles, that a data file's
-  color slots reach the detector as they are, and that a model is painted in its person's scheme
-  arranged on the roles it has.
+  by color and not by order, that a blend only refuses painting across two color slots, that a data
+  file's color slots reach the detector as they are, and that a model is painted in its person's
+  scheme arranged on the clothing slots it has.
 - `tests/js/wardrobe.test.ts` — the color system: every pooled scheme meets the rules on every
-  model's color slots and the role sets to come, at every skin tone and hair color, young and old, in
+  model's color slots and the clothing slot sets to come, at every skin tone and hair color, young and old, in
   few tries; the crowd as rolled meets them on the models and the primitives; a pooled scheme
   arranges differently by model and by person, from its pool alone; a uniform is the same clothing
   on everyone and never rolled; skin tones are named by lightness alone and stay human; Old grays
@@ -384,7 +384,7 @@ time rather than sharing a constant: a default is a weld, and the first profile 
 `stationed` and `immobile` is the one it would stand in the way of.
 
 **People are where the independence is taken furthest.** A person's type is their behavior profile
-(`behaviors.ts`), and *nothing else about them is the type*: model, age, build, skin tone, hair,
+(`behaviors.ts`), and *nothing else about them is the type*: model, age, Body Type, skin tone, hair,
 clothing and equipment are separate choices rolled beside it (see "A person"). The old archetypes
 bundled a behavior with a look -- Dave was fast *and* orange *and* narrow -- which is the weld this
 section warns against, one level down.
@@ -1372,7 +1372,7 @@ the one table the crowd's makeup is tuned in:
 |---|---|---|
 | **Model** | the model, with its data file's age class (`adult` today; `child` and `elder` later) | `data/people/<id>.json`, `render/model-file.ts` (`CROWD_MODEL`) |
 | **Age** | Young, Normal, Old: small adjustments relative to the model | `AGES` in `recipe.ts`; `AGE_PRESETS` in `modelcrowd/body.ts` |
-| **Build** | Slim, Trim, Average, Solid, Broad | `BUILDS` in `recipe.ts`; `BUILD_PRESETS` in `modelcrowd/body.ts` |
+| **Body Type** | Slim, Trim, Average, Solid, Broad | `BODY_TYPES` in `recipe.ts`; `BODY_TYPE_PRESETS` in `modelcrowd/body.ts` |
 | **Skin tone** | Lightest, Light, Medium-Light, Medium, Medium-Deep, Deep, Deepest | `COLORS.skin` in `wardrobe.ts` |
 | **Hair** | black, dark brown, brown, light brown, blond, red | `COLORS.hair` in `wardrobe.ts` |
 | **Behavior** | Typical, Weaver, Slow Walker, Distracted, Sudden Stopper, Group Walker, Darter | `BEHAVIORS` in `behaviors.ts` |
@@ -1407,7 +1407,7 @@ the archetypes one for one, in the same order, each naming the archetype it was 
 **The default weights** (`COMPOSITION`): behavior 6/2/2/2/2/1/2 in that order -- the archetypes' own
 spawn weights, so the default crowd's behavior mix is today's archetype mix (measured over forty
 seeds: Typical 37.3% against Tourist 36.8%, Group Walker 16.3% against the Johnsons 16.7%, the rest
-within a point); age Young 2, Normal 6, Old 2; build even fifths; skin tone even sevenths; hair black 3,
+within a point); age Young 2, Normal 6, Old 2; Body Type even fifths; skin tone even sevenths; hair black 3,
 dark brown 3, brown 2.5, light brown 1.5, blond 1.2, red 0.5; equipment none 92.7, cane 3.1,
 wheelchair 2.7, scooter 1.5 (about 6.5% of the crowd on an aid, as before), and a stroller for 60%
 of Slow Walkers (5.4% of the crowd, down from Mary's 9.7%); a Group Walker family shares the leader's
@@ -1441,7 +1441,7 @@ A behavior profile also declares what kind of thing a person is -- see "The enti
 for a person the taxonomy's type is their profile. That is metadata about the *kind* rather than a
 roll: it reads no stream.
 
-Proportions come from one height axis and the Build preset: the height roll and the preset's width
+Proportions come from one height axis and the Body Type: the height roll and the preset's width
 feed height, width, head radius and shoulder width together, so a body reads as one person. The
 primitives' **figure** -- a child's for anyone who needs a child model, otherwise their age's --
 scales height, head-to-body ratio, **limb length** and a forward stoop. `h` is very nearly a stature
@@ -1476,14 +1476,17 @@ the warmth.
 in. Old shifts any of them 55-90% of the way toward a gray (one roll decides both, so the most
 grayed is the whitest); it is the only color age changes.
 
-**Clothing is filled by role.** Every model's data file divides its texture into the same color
-slots (`colorSlots`): the clothing slots **`tops`, `bottoms`, `footwear` and `accessory`** (anything
-baked into a model, a bag or a backpack), plus `skin`, `hair` and `keep` (details left as authored,
-like eyes and shoe soles). A one-piece garment is `tops` with no `bottoms`. **`headwear` is a
-clothing role but not a color slot**: models are generated without hats, and a hat -- the
+**Clothing is filled by clothing slot.** Every model's data file divides its texture into the same
+color slots (`colorSlots`): the clothing slots **`tops`, `bottoms`, `footwear` and `accessory`**
+(anything baked into a model, a bag or a backpack), plus `skin`, `hair` and `keep` (details left as
+authored, like eyes and shoe soles). A one-piece garment is `tops` with no `bottoms`. **`headwear` is
+a clothing slot but not a color slot**: models are generated without hats, and a hat -- the
 primitives' today, a wearable later -- takes the person's headwear color, so a data file naming it
-is refused. The spec's `accessory2` is refused too, with the reason, until `wardrobe.ts` can color a
-second accessory. The two casual-man models were migrated from the first role names (`top` ->
+is refused, and the region code (`RegionSlot` in `modelcrowd/regions.ts`) has no headwear either.
+The spec's `accessory2` is refused too, with the reason, until `wardrobe.ts` can color a second
+accessory. "Role" is not the word for any of this: it is the clip role's (see the spec), and the
+code says color slot and clothing slot throughout. The two casual-man models were migrated from the
+first slot names (`top` ->
 `tops`, `trousers` -> `bottoms`, `shoes` -> `footwear`, both shoe colors to `footwear`); a data
 file still using an old name is refused with the new one named. Both models have `tops`, `bottoms`
 and `footwear` and nothing else.
@@ -1491,16 +1494,16 @@ and `footwear` and nothing else.
 **A scheme is one of two kinds**, and the format holds both from the start so staff uniforms never
 need it reworked:
 
-- **Pooled** -- a pool of colors plus rules, never a fixed color per role: Bright Tropical, Pastels,
-  Neutrals, Earth Tones, Bold Primaries, Sporty, Denim & White, Park Merch. A person's roles are
+- **Pooled** -- a pool of colors plus rules, never a fixed color per slot: Bright Tropical, Pastels,
+  Neutrals, Earth Tones, Bold Primaries, Sporty, Denim & White, Park Merch. A person's clothing slots are
   filled from the pool by an arrangement that depends on the person (`Recipe.arrange`, a roll) and
   on the model (a salt from its file name), so the same person is arranged differently on each
   model and two people differently on one: with Bright Tropical, seed 1's first person (Deepest
   skin) is a deep-sea top, hot-pink bottoms and white shoes on `casual-man` and a coral top,
   sunshine bottoms and lime shoes on `casual-man-low`. The accessory and the headwear come from the
-  pool too. A scheme may narrow a role to part of its pool (`only`): Sporty's footwear is
+  pool too. A scheme may narrow a slot to part of its pool (`only`): Sporty's footwear is
   trainer-colored, Park Merch's caps are the park's green, navy or gold.
-- **Uniform** -- a fixed color per role. Skin and hair still vary per person, and the rules comparing
+- **Uniform** -- a fixed color per slot. Skin and hair still vary per person, and the rules comparing
   clothing with skin and hair are **waived**, so a uniform is never altered for anyone. Uniforms are
   **never rolled for the crowd** (`COMPOSITION.scheme` names only pooled schemes); they are assigned
   deliberately -- staff at vendors later, possibly per world or venue. There is one, **Park Staff**:
@@ -1511,17 +1514,17 @@ need it reworked:
 bottoms clearly contrast (150); footwear differs from the bottoms (100) or is a neutral; the
 accessory differs from the top (110); headwear clearly differs from the person's hair (130); and no
 clothing color is close to the person's skin (100), or it would read as bare skin. `dress()` fills
-the roles one at a time, each trying the pool from its own starting color, keeping a color only if
-everything so far still meets the rules and stepping back when a role runs out -- deterministic,
-complete (every arrangement is reachable), and quick: the hardest case the tests find, Pastels on
-the lightest skin with all five roles, takes about twenty tries. The test checks every pooled scheme
-against every model's color slots and the role sets models will have later, at every skin tone and
+the clothing slots one at a time, each trying the pool from its own starting color, keeping a color
+only if everything so far still meets the rules and stepping back when a slot runs out --
+deterministic, complete (every arrangement is reachable), and quick: the hardest case the tests
+find, Pastels on the lightest skin with all five slots, takes about twenty tries. The test checks
+every pooled scheme against every model's color slots and the clothing slot sets to come, at every skin tone and
 hair color, young and old, and that a uniform comes out identical on everyone.
 
-The **primitives** are dressed by the same `dress()`, at recipe time, on the roles they wear (a hat
+The **primitives** are dressed by the same `dress()`, at recipe time, on the clothing slots they wear (a hat
 and a bag only when worn), salted as `primitives`; a primitive jacket is the top, in the tops color.
-A model is dressed by the renderer on its own roles (`personColours` in `modelcrowd/regions.ts`),
-because only the renderer knows which roles a model has. The old `Outfit` table, the shoe and hair
+A model is dressed by the renderer on its own clothing slots (`personColors` in `modelcrowd/regions.ts`),
+because only the renderer knows which color slots a model has. The old `Outfit` table, the shoe and hair
 sets and the skin ramp have left `palette.ts`, which now holds only the world's colors.
 
 Equipment is people, not obstacles. Each piece carries a `MotionProfile` the simulation applies on
@@ -1701,7 +1704,7 @@ into two vocabularies.
 
 - **People, individual and row** — the person turntable, **drawn from the model only**, walking
   (the walk clip is the default, as it is the game's normal gait). **A control for every choice a
-  person is made of**, in the order a person is described: Model, Age, Build, Skin tone, Hair,
+  person is made of**, in the order a person is described: Model, Age, Body Type, Skin tone, Hair,
   Clothing scheme, Behavior and Equipment, each with **Seed** first -- what the seed rolls for agent
   N, exactly as the crowd rolls them (Model's Seed is the game's model for the class the person
   needs). Choices with more options than fit on a row are dropdowns, and every option shows its
@@ -1714,22 +1717,22 @@ into two vocabularies.
 
   **The card says what each choice contributes**: under **Choices**, each one with how it was
   chosen (rolled by the seed, or in the lab), its share of the default crowd, and what it does to
-  this figure -- the model's age class, body type and triangles; the Age preset's height, width,
-  shoulders, head, legs and stoop (and Old graying the hair); the Build preset's width, shoulders,
+  this figure -- the model's age class, build and triangles; the Age preset's height, width,
+  shoulders, head, legs and stoop (and Old graying the hair); the Body Type's width, shoulders,
   limbs, fullness, face and neck; the skin tone's place on the ramp and the color it landed on; the
-  hair color; the clothing scheme's kind (pooled or uniform) and the color each clothing role got
+  hair color; the clothing scheme's kind (pooled or uniform) and the color each clothing slot got
   on this model; the behavior in a line, and whether the game walks or runs them at their speed;
   the equipment and that the game draws them as primitives. **Behavior** spells out the profile's
   settings: speed, acceleration, weaving, separation, avoiding the player, stops, grouping,
-  collider and gait. **Clothing on <model>** lists every clothing role with its color (or that the
+  collider and gait. **Clothing on <model>** lists every clothing slot with its color (or that the
   model has none), the scheme and its pool, which arrangement was taken, and the rules it meets (a
   uniform's are waived). Then the body against the presets and limits, the rolls, geometry, the
   model's clips, color regions, anchors and costs, provenance. A Darter shows on the adult model
   with a note that it needs a child model, and the game's fallback is on any card it applies to.
 
-  `compare=` chooses what the row stands side by side: `build` (the default: the five Build
-  presets exactly), `age` (Young, Normal, Old) or `models` (every model chosen by its `cmp-<name>`
-  switch, at the same recipe, presets, pose and camera, with what each costs); `crowd scale` fits
+  `compare=` chooses what the row stands side by side: `body-type` (the default: the five Body
+  Types exactly; `compare=build`, from before the rename, still opens it), `age` (Young, Normal,
+  Old) or `models` (every model chosen by its `cmp-<name>` switch, at the same recipe, presets, pose and camera, with what each costs); `crowd scale` fits
   the model as the model crowd does. The primitives' part gizmos and part origins are not offered
   (`Inspectable.universal`). **Height** reads as its parts, `1.70 m = 1.75 base × 0.97 Old × 1.00
   recipe height`, and the **height ruler** (`ruler`, `E`, on by default, a shell overlay every lab
@@ -1849,11 +1852,12 @@ Four things about that interface are load-bearing:
   *is* its bounding box — for a thigh and for a kiosk wheel alike. That single fact is why the
   bounding boxes, the origin crosses, the measured height and the ground shadow are universal, and
   it is what keeps the interface small enough to be worth having.
-- **A control is carried in the URL under its own id.** The person's controls are named `arch`,
+- **A control is carried in the URL under its own id.** The person's controls were named `arch`,
   `age`, `build`, `mob`, `walk` and `phase` because those were already the query keys, so the
-  generic scheme reproduces every URL the character turntable ever wrote. `gate` is why `?phase=`
-  still means a frozen gait: a gated scalar is written only while its gate is on, and reading one
-  turns the gate on.
+  generic scheme reproduces every URL the character turntable ever wrote; a key renamed since is
+  read back by the entity's `legacy` (`build` is `body-type`, the Body Type, now). `gate` is why
+  `?phase=` still means a frozen gait: a gated scalar is written only while its gate is on, and
+  reading one turns the gate on.
 - **`rebuilds` on a control is the difference between a choice and a slider.** Changing a person's
   behavior has to build a new person; dragging the gait phase must not build seven of them a frame.
 - **A cast may write back a scalar it drives.** The gait slider tracks a walking figure that way.
@@ -2022,7 +2026,7 @@ game's -- rolled exactly as the crowd rolls agent N of the seed, and shaped by t
   colour, numbered as the readout lists them; `P` paints the model in the recipe of the adult the
   seed stands beside it, so in the row the two wear the same colours and a region painted the wrong
   one shows against its neighbour. `[`/`]` repaint live. The readout lists every group with its
-  colour, share and role, and says why when nothing is painted. See "The model renderer".
+  colour, share and color slot, and says why when nothing is painted. See "The model renderer".
 
 ### Models by default
 
@@ -2068,8 +2072,8 @@ neither hash can move, and nothing under `resources/js/game/sim/` imports it. Fi
   sideways and forward travel pinned and every constant translation track dropped. Above 2.2 m/s a
   body runs (back to walking below 1.9); anyone with a mobility aid walks.
 - **Variation is the person's own colors and body**: skin and hair from the recipe, the clothing
-  scheme arranged on the clothing roles this model has (`personColours`, salted by the model -- see
-  "Colors" above), and the recipe's age and build shaped into the clone by `modelcrowd/body.ts` --
+  scheme arranged on the clothing slots this model has (`personColors`, salted by the model -- see
+  "Colors" above), and the recipe's age and Body Type shaped into the clone by `modelcrowd/body.ts` --
   see "Model bodies" below.
 - **Colour regions are found, not authored** (`regions.ts`). The mesh's UV triangles are rasterised
   to find the texels it uses, those are grouped by colour with a mean shift in Oklab, and a mask
@@ -2089,9 +2093,9 @@ neither hash can move, and nothing under `resources/js/game/sim/` imports it. Fi
   console. `R` in the people lab shows the groups in false color; their numbers follow the
   detector's order, not the file's.
 - **It refuses rather than guesses.** A group still two colours at the narrowest kernel, or two
-  groups of different roles with more than 1% of the texture sitting between them, turn painting off
-  and say why -- in the inspector's readout and the crowd's. Painting keeps the texture's light and
-  dark: target colour times texel luminance over the role's centre luminance, in the material's own
+  groups of different color slots with more than 1% of the texture sitting between them, turn
+  painting off and say why -- in the inspector's readout and the crowd's. Painting keeps the
+  texture's light and dark: target colour times texel luminance over the slot's centre luminance, in the material's own
   shader, so it costs a texture read per pixel and no draw calls.
 - **Ink is the game's own switch** (`O`): a second skinned mesh per figure sharing the skeleton,
   pushed out along its skinned normal by `SHELL_OVER`, back faces only. `?look=current` turns it on
@@ -2107,7 +2111,7 @@ neither hash can move, and nothing under `resources/js/game/sim/` imports it. Fi
 
 ### Model bodies
 
-`modelcrowd/body.ts` turns a recipe's **age** and **build** into a body for a rigged model, for the
+`modelcrowd/body.ts` turns a recipe's **age** and **Body Type** into a body for a rigged model, for the
 `?people=model` crowd and the people lab alike. **Renderer only**: it reads the recipe and writes
 bones, bind matrices and two uniforms. Nothing rolls, nothing reaches the simulation, the collider
 is unchanged, and neither hash can move. Three mechanisms, chosen so nothing costs more per frame:
@@ -2132,9 +2136,9 @@ is unchanged, and neither hash can move. Three mechanisms, chosen so nothing cos
   seams swell as one surface rather than opening into cracks. One uniform per figure; the crowd's
   ink became a material per figure for it, all sharing one program.
 
-**The presets**, every number in `BUILD_PRESETS`, `AGE_PRESETS` and `LIMITS`:
+**The presets**, every number in `BODY_TYPE_PRESETS`, `AGE_PRESETS` and `LIMITS`:
 
-| Build | recipe width | width | shoulders | limbs | fullness | face | neck |
+| Body Type | recipe width | width | shoulders | limbs | fullness | face | neck |
 |---|---|---|---|---|---|---|---|
 | Slim | 0.84 | 0.88 | 0.94 | 0.90 | none | none | 1 |
 | Trim | 0.93 | 0.94 | 0.97 | 0.95 | none | none | 1 |
@@ -2159,8 +2163,8 @@ Age is a small adjustment relative to the model, never a change of model: Young 
 slimmer with a slightly larger head and longer legs, Normal the model as authored, Old slightly
 shorter with a gentle stoop. Old also grays the hair, which is the recipe's (see "Colors").
 
-- **Build is a choice, drawn exactly.** The crowd rolls one of the five presets (even fifths by
-  default), a person's width is that preset's (`BUILD_WIDTH`, the scale the "recipe width" column is
+- **The Body Type is a choice, drawn exactly.** The crowd rolls one of the five presets (even fifths by
+  default), a person's width is that preset's (`BODY_TYPE_WIDTH`, the scale the "recipe width" column is
   on), and the model wears the preset exactly; a width between two anchors would blend them, which
   only an explicit width does now.
 - **Age replaces the recipe's figure height** rather than stacking on it: a model is drawn at
@@ -2186,11 +2190,14 @@ shorter with a gentle stoop. Old also grays the hair, which is the recipe's (see
   only (some models stretch better than others); `{}` for none. The lab marks which limits came
   from the file.
 
-**The words differ between the spec and the code, and that is known.** The spec's *Build* is the
-model's shape (average or heavy-set) and its *Body Type* is the preset rolled per person (Slim to
-Broad); in the code the preset is `Build` (`BUILDS` in `recipe.ts`) and the model's shape is
-`ModelBody.build`. Renaming the code's `Build` is its own change; the data file uses the spec's
-words.
+**Build and Body Type are two different things, named as the spec names them.** *Build* is only
+the shape a model was generated with -- average or heavy-set -- declared in its data file and read
+as `ModelBody.build`; the lab shows it as "model build". *Body Type* is the preset rolled per person,
+Slim to Broad (`BodyType`, `BODY_TYPES` and `BODY_TYPE_WIDTH` in `recipe.ts`, `Recipe.bodyType`,
+`BODY_TYPE_PRESETS` here), and the lab's control and rows say "body type". The preset was called
+Build until the two were told apart; a lab address written then (`build=broad`, `compare=build`)
+still opens what it opened. The state hash stores the preset's value (`slim` ... `broad`), never the
+field's name, which is why the rename moved neither hash.
 
 Measured in a visible tab at a full 120 Hz frame (the frame time sits on the vsync cap either way),
 `?stress=1&people=model`: at 80 people pose 0.82 → 0.71 ms and render 1.65 → 1.52 ms; at 190, pose

@@ -68,7 +68,7 @@ const CASES: readonly Case[] = [
     { label: 'scooter', o: { behavior: 'typical', equipment: 'scooter' }, grounded: true },
     { label: 'stroller', o: { equipment: 'stroller' }, grounded: true },
     { label: 'child in a wheelchair', o: { behavior: 'darter', equipment: 'wheelchair' }, grounded: true },
-    { label: 'broad build with a cane', o: { ...NONE, build: 'broad', equipment: 'cane' }, grounded: true },
+    { label: 'broad Body Type with a cane', o: { ...NONE, bodyType: 'broad', equipment: 'cane' }, grounded: true },
     { label: 'older on a scooter', o: { ...NONE, age: 'old', equipment: 'scooter' }, grounded: true },
 ];
 

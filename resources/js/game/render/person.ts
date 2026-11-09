@@ -135,7 +135,7 @@ const PHONE_RISE = 0.105, PHONE_OUT = 0.03;
  * handle rather than an arm pointing at one.
  *
  * `tests/js/elbow.test.ts` measures this off the drawn bones rather than off these numbers, so it also
- * covers whatever the age and build axes do to the arm underneath them.
+ * covers whatever the age and Body Type axes do to the arm underneath them.
  */
 /** A stroller handle: the upper arm hangs at the ribs and only the forearm goes out to the bar. */
 const STROLLER_ARM = -0.05, STROLLER_FOREARM = -1.25;
@@ -169,7 +169,7 @@ const RIM_ARM = -0.02, RIM_FOREARM = -0.10;
  * which is a point no one ever sees -- the collar is over it.
  *
  * Both being scales of the chest, the whole garment is a fixed fraction of the body: the same coat
- * on a broad adult, a child and a stooped rider, with no per-build tuning.
+ * on a broad adult, a child and a stooped rider, with no per-Body-Type tuning.
  *
  * It must also be drawn from the chest's *own* pool, and that is not a tidiness point. Pool spheres
  * are polyhedra, and a coarser one sags further inside the sphere it approximates: `ball` is 10 by
@@ -450,7 +450,7 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
     // ---- collar, neck ----
     // The neck spans whatever gap the chest and head leave, overlapping into both so it cannot gape.
     const neckTop = HEAD_Y + drop + bob + 0.03, neckBot = chestY + chestH / 2 - 0.06;
-    // Sized from the head, not from build: a broad body with a small head would otherwise get a
+    // Sized from the head, not from the Body Type: a broad body with a small head would otherwise get a
     // neck wider than the skull it meets, and the join would show as a disc above the collar.
     const neckW = 1.1 * r.headR;
     // The collar rides the chest's crown, so it is placed by swinging a point up the chest's own
@@ -765,7 +765,7 @@ export function drawPerson(pools: PartPools, slot: number, who: Poseable, pose: 
         // and it is the reason for taking the ends off the deck's and the pad's thicknesses rather
         // than off their surfaces: the ink shell stands about 3% of a part's length plus 0.0125
         // proud of each end, so an end merely touching a surface surfaces its own outline through
-        // it. Half the deck and half the pad is more than that at every build.
+        // it. Half the deck and half the pad is more than that at every Body Type.
         //
         // Narrow against the pad it carries -- a post as wide as the seat would be a plinth, and
         // the deck would stop reading as something a foot rests on. In frame colour, not ink,

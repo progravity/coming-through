@@ -2,7 +2,7 @@
  * Who one person is, rolled from that person's own fork of the `recipe` stream.
  *
  * A person is a set of **independent choices**: the behavior profile they move by, their age and
- * build, their skin tone, hair and clothing, the equipment they use, and the class of model they
+ * Body Type, their skin tone, hair and clothing, the equipment they use, and the class of model they
  * have to be drawn from. Each is rolled against its default weight in `composition.ts`, one after
  * another, and none of them is decided by another -- except the two pairings that are tied on
  * purpose: a stroller only ever comes with a Slow Walker, and a Darter needs a child model.
@@ -33,20 +33,23 @@ import type { Rng } from './core/rng.ts';
 import { FRAME, fromFamily, fromList } from './palette.ts';
 import type { Range } from './util.ts';
 import { HAIR_KEYS, POOLED_KEYS, PRIMITIVE_SALT, SKIN_TONE_KEYS, dress, hairColor, skinColor } from './wardrobe.ts';
-import type { ClothingRole, HairKey, SchemeKey, SkinToneKey } from './wardrobe.ts';
+import type { ClothingSlot, HairKey, SchemeKey, SkinToneKey } from './wardrobe.ts';
 
 /** Small adjustments relative to the model: a little younger, the model's own age, or older. */
 export type Age = 'young' | 'normal' | 'old';
 export const AGES: readonly Age[] = ['young', 'normal', 'old'];
 
-/** The five Build presets, slim to broad. */
-export type Build = 'slim' | 'trim' | 'average' | 'solid' | 'broad';
-export const BUILDS: readonly Build[] = ['slim', 'trim', 'average', 'solid', 'broad'];
+/**
+ * The five Body Types, slim to broad: the preset rolled per person. Not a model's build, which is
+ * the shape it was generated with (average or heavy-set) and is its data file's (`data/people.ts`).
+ */
+export type BodyType = 'slim' | 'trim' | 'average' | 'solid' | 'broad';
+export const BODY_TYPES: readonly BodyType[] = ['slim', 'trim', 'average', 'solid', 'broad'];
 /**
  * Each preset's width, on the width scale the primitive people are drawn with and the model bodies
  * are anchored to: the old continuous roll's range (0.84 to 1.2) in even steps.
  */
-export const BUILD_WIDTH: Readonly<Record<Build, number>> = { slim: 0.84, trim: 0.93, average: 1.02, solid: 1.11, broad: 1.2 };
+export const BODY_TYPE_WIDTH: Readonly<Record<BodyType, number>> = { slim: 0.84, trim: 0.93, average: 1.02, solid: 1.11, broad: 1.2 };
 
 /** Equipment a person uses. Not yet supported on models: anyone with some is drawn as primitives. */
 export type Equipment = 'none' | 'stroller' | 'cane' | 'wheelchair' | 'scooter';
@@ -68,7 +71,7 @@ export type BeardType = 'none' | 'stubble' | 'full';
 export interface Choices {
     behavior: BehaviorKey;
     age: Age;
-    build: Build;
+    bodyType: BodyType;
     skinTone: SkinToneKey;
     hairTone: HairKey;
     /** The clothing scheme: pooled for the crowd, a uniform only when assigned (`wardrobe.ts`). */
@@ -106,7 +109,7 @@ export interface Recipe extends Choices {
     modelClass: ModelClass;
     /** Whether a Group Walker leader's family wears their scheme. Rolled for everyone, read for leaders. */
     sharesScheme: boolean;
-    // ---- proportions, all from one height axis and the build ----
+    // ---- proportions, all from one height axis and the Body Type ----
     h: number;
     w: number;
     headR: number;
@@ -123,7 +126,7 @@ export interface Recipe extends Choices {
     // ---- color ----
     /**
      * The roll a pooled scheme's arrangement starts from. The arrangement itself is the renderer's
-     * to work out per model (`dress` in `wardrobe.ts`), since it depends on which roles the model
+     * to work out per model (`dress` in `wardrobe.ts`), since it depends on which color slots the model
      * has; the colors below are the arrangement for the primitive figure.
      */
     arrange: number;
@@ -268,7 +271,7 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
     const behavior0 = rng.next();
     const motion = rng.fork('motion');
     const stroller0 = motion.next(), equip0 = motion.next(), pace0 = motion.next();
-    const age0 = rng.next(), build0 = rng.next();
+    const age0 = rng.next(), bodyType0 = rng.next();
     const skin0 = rng.next(), skinVar0 = rng.next(), hair0 = rng.next(), hairVar0 = rng.next(), gray0 = rng.next();
     const scheme0 = rng.next(), arrange0 = rng.next(), share0 = rng.next();
     const height0 = rng.next(), headR0 = rng.next();
@@ -283,7 +286,7 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
         : opts.behavior ?? pick(behaviorWeights(opts.mix), BEHAVIOR_KEYS, behavior0);
     const B = BEHAVIORS[behavior];
     const age = opts.age ?? pick(COMPOSITION.age, AGES, age0);
-    const build = opts.build ?? pick(COMPOSITION.build, BUILDS, build0);
+    const bodyType = opts.bodyType ?? pick(COMPOSITION.bodyType, BODY_TYPES, bodyType0);
     const skinTone = opts.skinTone ?? pick(COMPOSITION.skinTone, SKIN_TONE_KEYS, skin0);
     const hairTone = opts.hairTone ?? pick(COMPOSITION.hair, HAIR_KEYS, hair0);
     // The crowd is rolled from the pooled schemes only: a uniform is assigned, never rolled.
@@ -299,9 +302,9 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
     const fig = FIGURE[figureOf({ modelClass, age })];
     const child = modelClass === 'child';
 
-    // ---- proportions: one height axis, the build preset's width ----
-    const w = BUILD_WIDTH[build];
-    const across = (w - BUILD_WIDTH.slim) / (BUILD_WIDTH.broad - BUILD_WIDTH.slim);
+    // ---- proportions: one height axis, the Body Type's width ----
+    const w = BODY_TYPE_WIDTH[bodyType];
+    const across = (w - BODY_TYPE_WIDTH.slim) / (BODY_TYPE_WIDTH.broad - BODY_TYPE_WIDTH.slim);
     // Taller bodies carry relatively smaller heads; a child's figure pushes the other way. Sized so
     // an adult lands near five and a half heads tall against the skeleton in person.ts.
     const headR = ((0.179 - 0.025 * height0) * fig.head * (1 + 0.06 * (w - 1))) + 0.004 * headR0;
@@ -316,20 +319,20 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
     const jacket = jacket0 < PARTS.jacket;
     const bag = bag0 < PARTS.bag && equipment !== 'stroller';
 
-    // ---- colors: skin and hair, then the scheme arranged on the primitive figure's roles ----
+    // ---- colors: skin and hair, then the scheme arranged on the primitive figure's clothing slots ----
     const skin = skinColor(skinTone, skinVar0);
     const hairCol = hairColor(hairTone, hairVar0, age === 'old' ? gray0 : null);
-    // The primitives wear every role, but a hat or a bag only when they have one: an empty role
+    // The primitives wear every clothing slot, but a hat or a bag only when they have one: an empty slot
     // is not a constraint on the others.
     const carries = bag || acc === 'backpack' || acc === 'balloon';
-    const roles: ClothingRole[] = ['tops', 'bottoms', 'footwear'];
-    if (hat !== 'none') roles.push('headwear');
-    if (carries) roles.push('accessory');
-    const worn = dress(scheme, arrange0, skin, hairCol, roles, PRIMITIVE_SALT).colors;
+    const slots: ClothingSlot[] = ['tops', 'bottoms', 'footwear'];
+    if (hat !== 'none') slots.push('headwear');
+    if (carries) slots.push('accessory');
+    const worn = dress(scheme, arrange0, skin, hairCol, slots, PRIMITIVE_SALT).colors;
     const top = worn.tops ?? 0xffffff, bottom = worn.bottoms ?? top, accessory = worn.accessory ?? bottom;
 
     return {
-        behavior, age, build, skinTone, hairTone, scheme, equipment,
+        behavior, age, bodyType, skinTone, hairTone, scheme, equipment,
         modelClass,
         sharesScheme: share0 < COMPOSITION.groupSharesScheme,
 

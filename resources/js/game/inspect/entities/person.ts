@@ -29,8 +29,8 @@ import { drawPerson, eyeHeight, standingHeight } from '../../render/person.ts';
 import { PER } from '../../render/pools.ts';
 import { SPEED_CAP } from '../../sim/steering.ts';
 import type { PoolName } from '../../render/pools.ts';
-import { CLOTHING_ROLES, PRIMITIVE_SALT, RULES, dress, hairNamed, schemeNamed, skinAt, skinToneNamed } from '../../wardrobe.ts';
-import type { ClothingRole, Dressed } from '../../wardrobe.ts';
+import { CLOTHING_SLOTS, PRIMITIVE_SALT, RULES, dress, hairNamed, schemeNamed, skinAt, skinToneNamed } from '../../wardrobe.ts';
+import type { ClothingSlot, Dressed } from '../../wardrobe.ts';
 import { colorRow, count, identitySection, n2 } from '../describe.ts';
 import type { PartRecord } from '../gizmos.ts';
 import { RecordingPools } from '../gizmos.ts';
@@ -38,7 +38,7 @@ import { INK } from '../inspectable.ts';
 import type { Cast, Controls, DrawnPart, InfoRow, InfoSection, Inspectable, OverlayDef, Readout } from '../inspectable.ts';
 import { MARK, arrow, ring } from '../markers.ts';
 import {
-    AGE_OPTIONS, BEHAVIOR_OPTIONS, BUILD_OPTIONS, EQUIPMENT_OPTIONS, HAIR_OPTIONS, SCHEME_OPTIONS, SKIN_OPTIONS, Subject,
+    AGE_OPTIONS, BEHAVIOR_OPTIONS, BODY_TYPE_OPTIONS, EQUIPMENT_OPTIONS, HAIR_OPTIONS, SCHEME_OPTIONS, SKIN_OPTIONS, Subject,
 } from '../subject.ts';
 import type { Overrides } from '../subject.ts';
 
@@ -153,7 +153,7 @@ export function behaviorLine(B: Behavior): string {
 }
 
 /**
- * Every choice this person is made of -- model, age, build, skin tone, hair, clothing scheme,
+ * Every choice this person is made of -- model, age, Body Type, skin tone, hair, clothing scheme,
  * behavior, equipment -- how it was chosen, how often the default crowd makes the same one, and what
  * it contributes to the figure on stage.
  */
@@ -166,7 +166,7 @@ export function personChoices(w: Who, o: ChoicesOptions = {}): InfoSection {
         ...(o.model === undefined ? [] : [{ k: 'model', v: `${o.model.name} · ${o.model.by}${more('model')}` }]),
         { k: 'model class', v: r.modelClass === 'adult' ? 'adult' : `${r.modelClass}: a ${B.name} needs a ${r.modelClass} model` },
         { k: 'age', v: `${title(r.age)} · ${by('age')} · ${shareOf(COMPOSITION.age, r.age)}${r.age === 'old' ? ' · grays the hair' : ''}${more('age')}` },
-        { k: 'build', v: `${title(r.build)} · ${by('build')} · ${shareOf(COMPOSITION.build, r.build)} · width ${n2(r.w)}${more('build')}` },
+        { k: 'body type', v: `${title(r.bodyType)} · ${by('bodyType')} · ${shareOf(COMPOSITION.bodyType, r.bodyType)} · width ${n2(r.w)}${more('bodyType')}` },
         { k: 'skin tone', color: r.skin, v: `${tone.name} · ${by('skinTone')} · ${shareOf(COMPOSITION.skinTone, r.skinTone)} · ${n2(skinAt(r.skinTone, 0.5))} on the ramp, this one ${hexOf(r.skin)}${more('skinTone')}` },
         { k: 'hair', color: r.hairColor, v: `${hair.name}${r.age === 'old' ? ', grayed with age' : ''} · ${by('hairTone')} · ${shareOf(COMPOSITION.hair, r.hairTone)}${more('hairTone')}` },
         { k: 'clothing scheme', v: `${schemeLine(r, by('scheme'))}${more('scheme')}` },
@@ -187,25 +187,25 @@ function schemeLine(r: Recipe, by: string): string {
         : `${s.name} · pooled: ${s.pool.length} colors, arranged per person and per model · ${by} · ${shareOf(COMPOSITION.scheme, s.key)}`;
 }
 
-/** The roles the primitive figure wears, as `makeRecipe` dressed it: a hat and a bag only when worn. */
-export function primitiveRoles(r: Recipe): ClothingRole[] {
-    const roles: ClothingRole[] = ['tops', 'bottoms', 'footwear'];
-    if (r.hat !== 'none') roles.push('headwear');
-    if (r.bag || r.acc === 'backpack' || r.acc === 'balloon') roles.push('accessory');
-    return roles;
+/** The clothing slots the primitive figure wears, as `makeRecipe` dressed it: a hat and a bag only when worn. */
+export function primitiveSlots(r: Recipe): ClothingSlot[] {
+    const slots: ClothingSlot[] = ['tops', 'bottoms', 'footwear'];
+    if (r.hat !== 'none') slots.push('headwear');
+    if (r.bag || r.acc === 'backpack' || r.acc === 'balloon') slots.push('accessory');
+    return slots;
 }
 
 /**
- * The colors a scheme put on each clothing role, for the card: one row per role the figure has,
+ * The colors a scheme put on each clothing slot, for the card: one row per slot the figure has,
  * then the arrangement, how many were looked at to find it, and the rules it meets.
  */
-export function clothingSection(r: Recipe, d: Dressed, roles: readonly ClothingRole[], on: string, aside = ''): InfoSection {
+export function clothingSection(r: Recipe, d: Dressed, slots: readonly ClothingSlot[], on: string, aside = ''): InfoSection {
     const s = schemeNamed(r.scheme);
-    const rows: InfoRow[] = CLOTHING_ROLES.map(role => {
-        const c = d.colors[role];
+    const rows: InfoRow[] = CLOTHING_SLOTS.map(slot => {
+        const c = d.colors[slot];
         return c === undefined
-            ? { k: role, v: roles.includes(role) ? 'none' : `none: ${on} has no ${role}` }
-            : { k: role, color: c, v: hexOf(c) };
+            ? { k: slot, v: slots.includes(slot) ? 'none' : `none: ${on} has no ${slot}` }
+            : { k: slot, color: c, v: hexOf(c) };
     });
     rows.push({ k: 'scheme', v: `${s.name} (${s.kind})` });
     if (s.kind === 'pooled') {
@@ -284,7 +284,7 @@ export function personRecipe(w: Who, note = '', figure: 'primitives' | 'model' =
         r.acc === 'none' ? { k: 'carrying', v: '' } : colorRow('carrying', r.accColor, r.acc),
         r.mobility === 'none' ? { k: 'mobility', v: 'none' } : colorRow('mobility', r.frameColor, `${r.mobility}${r.seated ? ' · seated' : ''}`),
         { k: 'height', v: `h ${n2(r.h, 3)} (× the 1.86-unit skeleton)` },
-        { k: 'build', v: `w ${n2(r.w, 3)} · shoulder ${n2(r.shoulder, 3)}` },
+        { k: 'body type', v: `w ${n2(r.w, 3)} · shoulder ${n2(r.shoulder, 3)}` },
         { k: 'head', v: `r ${n2(r.headR, 3)} · pitch ${n2(r.headPitch)} rad` },
         { k: 'limb', v: `× ${n2(r.limb, 3)}` },
         { k: 'stoop', v: `${n2(r.stoop, 3)} rad` },
@@ -424,8 +424,9 @@ const OLD_AGES: Readonly<Record<string, string>> = { child: 'young', teen: 'youn
 
 /**
  * Read an address written before people were choices: `arch` (an archetype) as `behavior`, the old
- * ages as the new ones, and `mob` (a mobility aid) as `equipment`. A key already in the new form
- * wins over its old name.
+ * ages as the new ones, `mob` (a mobility aid) as `equipment`, and `build` (the per-person preset,
+ * before it was called the Body Type) as `body-type`. A key already in the new form wins over its
+ * old name.
  */
 export function personLegacy(q: URLSearchParams): void {
     const arch = q.get('arch');
@@ -436,6 +437,9 @@ export function personLegacy(q: URLSearchParams): void {
     const mob = q.get('mob');
     if (mob !== null && q.get('equipment') === null) q.set('equipment', mob);
     q.delete('mob');
+    const build = q.get('build');
+    if (build !== null && q.get('body-type') === null) q.set('body-type', build);
+    q.delete('build');
 }
 
 /** The choices a set of controls forces, under the control ids the address bar carries. */
@@ -443,7 +447,7 @@ export function overridesOf(c: Controls): Partial<Overrides> {
     return {
         behavior: (c.behavior ?? 'seed') as Overrides['behavior'],
         age: (c.age ?? 'seed') as Overrides['age'],
-        build: (c.build ?? 'seed') as Overrides['build'],
+        bodyType: (c['body-type'] ?? 'seed') as Overrides['bodyType'],
         skinTone: (c.skin ?? 'seed') as Overrides['skinTone'],
         hairTone: (c.hair ?? 'seed') as Overrides['hairTone'],
         // A control the panel shows disabled is not in `c` at all, so it rolls with the seed.
@@ -582,13 +586,13 @@ class PersonCast implements Cast {
         const pace = this.c.run === true ? `running ${n2(s.pace(true))} m/s`
             : this.c.walk === true ? `walking ${n2(s.speed)} m/s` : 'idle';
         const scheme = schemeNamed(r.scheme).name;
-        const roles = primitiveRoles(r);
+        const slots = primitiveSlots(r);
         return {
             title: s.profile.name,
             sub: `seed ${s.seed} · agent:${s.index}`,
             rows: [
                 ['age', `${r.age}${r.modelClass === 'child' ? ' · a child' : ''}`],
-                ['build', r.build],
+                ['body type', r.bodyType],
                 ['scheme', scheme],
                 ['height', primitiveHeight(r)],
                 ['mobility', `${r.mobility}${r.seated ? ' · seated' : ''}`],
@@ -601,7 +605,7 @@ class PersonCast implements Cast {
                 personIdentity(s),
                 personChoices(s, { forced: chosenBy(overridesOf(this.c)) }),
                 personBehavior(s),
-                clothingSection(r, dress(r.scheme, r.arrange, r.skin, r.hairColor, roles, PRIMITIVE_SALT), roles, 'the primitive figure'),
+                clothingSection(r, dress(r.scheme, r.arrange, r.skin, r.hairColor, slots, PRIMITIVE_SALT), slots, 'the primitive figure'),
                 personRecipe(s),
                 personGeometry(s, { top, ...widths }),
                 personProvenance(s),
@@ -627,7 +631,7 @@ export const PERSON_CONTROLS = {
     behavior: { kind: 'enum', id: 'behavior', label: 'behavior', options: BEHAVIOR_OPTIONS, value: 'seed', key: 't', rebuilds: true,
         titles: titled(BEHAVIOR_OPTIONS, k => BEHAVIORS[k as BehaviorKey].name) },
     age: { kind: 'enum', id: 'age', label: 'age', options: AGE_OPTIONS, value: 'seed', key: 'a', rebuilds: true, titles: titled(AGE_OPTIONS, words) },
-    build: { kind: 'enum', id: 'build', label: 'build', options: BUILD_OPTIONS, value: 'seed', key: 'b', rebuilds: true, titles: titled(BUILD_OPTIONS, words) },
+    bodyType: { kind: 'enum', id: 'body-type', label: 'body type', options: BODY_TYPE_OPTIONS, value: 'seed', key: 'b', rebuilds: true, titles: titled(BODY_TYPE_OPTIONS, words) },
     skin: { kind: 'enum', id: 'skin', label: 'skin tone', options: SKIN_OPTIONS, value: 'seed', rebuilds: true,
         titles: titled(SKIN_OPTIONS, k => skinToneNamed(k as Parameters<typeof skinToneNamed>[0]).name) },
     hair: { kind: 'enum', id: 'hair', label: 'hair', options: HAIR_OPTIONS, value: 'seed', rebuilds: true,
@@ -644,7 +648,7 @@ export const PERSON: Inspectable = {
     family: 'person',
     title: 'Person',
     controls: [
-        PERSON_CONTROLS.behavior, PERSON_CONTROLS.age, PERSON_CONTROLS.build, PERSON_CONTROLS.skin, PERSON_CONTROLS.hair,
+        PERSON_CONTROLS.behavior, PERSON_CONTROLS.age, PERSON_CONTROLS.bodyType, PERSON_CONTROLS.skin, PERSON_CONTROLS.hair,
         PERSON_CONTROLS.scheme, PERSON_CONTROLS.equipment,
         { kind: 'toggle', id: 'walk', label: 'walk', value: false, key: 'w' },
         { kind: 'toggle', id: 'run', label: 'run', value: false, key: 'u' },

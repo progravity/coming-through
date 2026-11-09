@@ -122,10 +122,12 @@ test('a lab writes its address without naming its default, and a model as its so
 test('a row remembers which figure its card describes, and single mode has only one', () => {
     assert.equal(readState('row', '?sel=3', LABS.people).sel, 3);
     assert.equal(readState('single', '?sel=3', LABS.people).sel, 0);
-    // Clamped to the row, whose length follows a control: the default Build row is five long...
+    // Clamped to the row, whose length follows a control: the default Body Type row is five long...
     assert.equal(readState('row', '?sel=9', LABS.people).sel, 4);
     // ...and the Age row three.
     assert.equal(readState('row', '?compare=age&sel=9', LABS.people).sel, 2);
+    // An old Build row, from before the per-person preset was called the Body Type, is the Body Type row.
+    assert.equal(readState('row', '?compare=build', LABS.people).controls.compare, 'body-type');
 });
 
 test('a view a lab does not offer opens its individual view', () => {
@@ -250,7 +252,7 @@ test('a person shows each choice apart, the behavior with its settings, and a he
     assert.match(String(behavior.rows.find(r => r[0] === 'stops')?.[1]), /every 4–8 s, for 1.5–3 s/);
     // Every choice on the card, and only behavior's settings in the behavior section.
     const choices = personChoices(who).rows?.map(r => r.k) ?? [];
-    for (const k of ['behavior', 'age', 'build', 'skin tone', 'hair', 'equipment']) assert.ok(choices.includes(k), `no ${k} choice`);
+    for (const k of ['behavior', 'age', 'body type', 'skin tone', 'hair', 'equipment']) assert.ok(choices.includes(k), `no ${k} choice`);
     assert.ok(!keys.includes('color family') && !keys.includes('height'), 'appearance crept into the behavior');
     // The height adds up: skeleton × height roll × the figure's share, to the standing height it states.
     const h = primitiveHeight(who.recipe);
@@ -262,7 +264,7 @@ test('a person shows each choice apart, the behavior with its settings, and a he
 test("the Individual view offers every choice, in order, each with the seed's own roll first", () => {
     const m = ENTITIES.find(e => e.id === 'model');
     assert.ok(m !== undefined);
-    const choices = ['model', 'age', 'build', 'skin', 'hair', 'scheme', 'behavior', 'equipment'];
+    const choices = ['model', 'age', 'body-type', 'skin', 'hair', 'scheme', 'behavior', 'equipment'];
     const ids = m.controls.map(c => c.id).filter(id => choices.includes(id));
     assert.deepEqual(ids, choices);
     for (const id of choices) {

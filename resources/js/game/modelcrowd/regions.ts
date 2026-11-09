@@ -17,23 +17,28 @@
  * group by raising or lowering `regionBandwidth` there.
  *
  * **It says so when it cannot tell.** Two groups whose texels sit between each other in quantity
- * are a *blend*. A blend inside one role is harmless; a blend across two roles means a recolour
+ * are a *blend*. A blend inside one slot is harmless; a blend across two slots means a recolour
  * would paint part of one region as the other, and painting is refused with the reason given.
  *
  * Painting keeps the texture's light and dark: a texel is repainted as the target colour scaled by
- * its luminance over the luminance of its role's centre, so folds and baked shadows survive.
+ * its luminance over the luminance of its slot's centre, so folds and baked shadows survive.
  */
 import * as THREE from 'three';
-import type { PersonModel } from '../data/people.ts';
+import { COLOR_SLOTS } from '../data/people.ts';
+import type { ColorSlot, PersonModel } from '../data/people.ts';
 import type { Recipe } from '../recipe.ts';
 import { modelFileName } from '../render/model-file.ts';
-import { CLOTHING_ROLES, dress, saltOf } from '../wardrobe.ts';
-import type { ClothingRole, Dressed } from '../wardrobe.ts';
+import { CLOTHING_SLOTS, dress, saltOf } from '../wardrobe.ts';
+import type { ClothingSlot, Dressed } from '../wardrobe.ts';
 
-export const ROLES = ['skin', 'hair', 'headwear', 'tops', 'bottoms', 'footwear', 'accessory', 'keep'] as const;
-export type Role = (typeof ROLES)[number];
-/** The roles a person has a color for; `keep` is left as the file painted it. */
-export type PaintRole = Exclude<Role, 'keep'>;
+/**
+ * The color slots a detected region can be assigned and painted as: a data file's own
+ * (`COLOR_SLOTS` in `data/people.ts`), less `accessory2`, which nothing colors yet.
+ */
+export type RegionSlot = Exclude<ColorSlot, 'accessory2'>;
+export const REGION_SLOTS: readonly RegionSlot[] = COLOR_SLOTS.filter((s): s is RegionSlot => s !== 'accessory2');
+/** The color slots a person has a color for; `keep` is left as the file painted it. */
+export type PaintSlot = Exclude<RegionSlot, 'keep'>;
 
 /** How many groups the shader can tell apart. A texture with more distinct colours than this is refused. */
 export const REGION_MAX = 12;
@@ -476,18 +481,18 @@ function splitOf(members: readonly number[], pts: Float64Array, counts: readonly
 
 const pct = (v: number): string => `${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%`;
 
-// ---------------------------------------------------------------- roles
+// ---------------------------------------------------------------- color slots
 
-/** A model's color slots as the detector reads them: what a data file's `colorSlots` hold (`roleFileOf`). */
-export interface RoleFile {
-    readonly regions: readonly { readonly colour: string; readonly role: Role }[];
+/** A model's color slots as the detector reads them: its data file's `colorSlots` (`slotFileOf`). */
+export interface SlotFile {
+    readonly slots: readonly { readonly color: string; readonly slot: RegionSlot }[];
     /** Overrides the mean-shift width for this model: lower splits near colours, higher merges them. */
     readonly bandwidth?: number;
 }
 
-export interface Roles {
-    /** Each detected group's role; `keep` where the file says so or does not say. */
-    readonly byGroup: readonly Role[];
+export interface GroupSlots {
+    /** Each detected group's color slot; `keep` where the file says so or does not say. */
+    readonly byGroup: readonly RegionSlot[];
     /** Whether the file named each group. */
     readonly named: readonly boolean[];
     /** Why painting is refused. Empty when it is not. */
@@ -502,18 +507,18 @@ export interface Roles {
  * every slot is one the game can color: `accessory2`, which the spec allows and the renderer cannot
  * paint yet, never reaches here.
  */
-export function roleFileOf(m: PersonModel): RoleFile {
-    const regions = m.colorSlots.flatMap(c => (c.slot === 'accessory2' ? [] : [{ colour: c.color, role: c.slot }]));
-    return m.regionBandwidth === undefined ? { regions } : { regions, bandwidth: m.regionBandwidth };
+export function slotFileOf(m: PersonModel): SlotFile {
+    const slots = m.colorSlots.flatMap(c => (c.slot === 'accessory2' ? [] : [{ color: c.color, slot: c.slot }]));
+    return m.regionBandwidth === undefined ? { slots } : { slots, bandwidth: m.regionBandwidth };
 }
 
 /**
- * Give each detected group the role of the file entry nearest its colour, and decide whether the
- * result can be painted: only if every pair of groups that blend into each other share a role.
+ * Give each detected group the color slot of the file entry nearest its color, and decide whether
+ * the result can be painted: only if every pair of groups that blend into each other share a slot.
  */
-export function assignRoles(seg: Segmentation, file: RoleFile | null, missing: string | null): Roles {
+export function assignSlots(seg: Segmentation, file: SlotFile | null, missing: string | null): GroupSlots {
     const n = seg.groups.length;
-    const byGroup: Role[] = new Array<Role>(n).fill('keep');
+    const byGroup: RegionSlot[] = new Array<RegionSlot>(n).fill('keep');
     const named = new Array<boolean>(n).fill(false);
     const problems: string[] = [], warnings: string[] = [];
     if (seg.failure !== null) problems.push(seg.failure);
@@ -524,7 +529,7 @@ export function assignRoles(seg: Segmentation, file: RoleFile | null, missing: s
     }
     if (file === null) problems.push(missing ?? 'no color slots');
     else {
-        const entries = file.regions.map(e => ({ ...e, lab: labOfHex(e.colour) as Lab }));
+        const entries = file.slots.map(e => ({ ...e, lab: labOfHex(e.color) as Lab }));
         const claimed = new Array<boolean>(entries.length).fill(false);
         for (const g of seg.groups) {
             let best = -1, bestD = Infinity;
@@ -533,13 +538,13 @@ export function assignRoles(seg: Segmentation, file: RoleFile | null, missing: s
                 if (d < bestD) { bestD = d; best = i; }
             });
             if (best >= 0 && bestD <= MATCH) {
-                byGroup[g.index] = entries[best].role; named[g.index] = true; claimed[best] = true;
+                byGroup[g.index] = entries[best].slot; named[g.index] = true; claimed[best] = true;
             } else {
                 warnings.push(`${g.hex} (${pct(g.share)}) is not in the data file's color slots, so it is left as authored`);
             }
         }
         entries.forEach((e, i) => {
-            if (!claimed[i]) warnings.push(`${e.colour} in the data file's color slots matches no colour group in this texture`);
+            if (!claimed[i]) warnings.push(`${e.color} in the data file's color slots matches no colour group in this texture`);
         });
         for (const b of seg.blends) {
             const ra = byGroup[b.a], rb = byGroup[b.b];
@@ -552,11 +557,11 @@ export function assignRoles(seg: Segmentation, file: RoleFile | null, missing: s
 }
 
 /**
- * Color slots to start from: every detected group, with the slot the data file gives it or `keep`,
+ * Color slots to start from: every detected group, with the color slot the data file gives it or `keep`,
  * written as a data file's `colorSlots`. Printed to the console when the file misses a group.
  */
-export function starterRoles(seg: Segmentation, roles: Roles): string {
-    const lines = seg.groups.map(g => `        { "color": "${g.hex}", "slot": "${roles.byGroup[g.index]}" }`);
+export function starterSlots(seg: Segmentation, slots: GroupSlots): string {
+    const lines = seg.groups.map(g => `        { "color": "${g.hex}", "slot": "${slots.byGroup[g.index]}" }`);
     return `    "colorSlots": [\n${lines.join(',\n')}\n    ],\n`;
 }
 
@@ -580,20 +585,20 @@ export function readPixels(tex: THREE.Texture): Pixels | null {
 
 /**
  * What one person wears on one model: their skin and hair, and their clothing scheme arranged on the
- * clothing roles this model has -- salted by the model, so the same person is arranged differently
- * on another. A role the model lacks is left out of the arrangement, so it constrains nothing.
+ * clothing slots this model has -- salted by the model, so the same person is arranged differently
+ * on another. A slot the model lacks is left out of the arrangement, so it constrains nothing.
  */
-export function dressOn(r: Recipe, roles: readonly ClothingRole[], salt: number): Dressed {
-    return dress(r.scheme, r.arrange, r.skin, r.hairColor, roles, salt);
+export function dressOn(r: Recipe, slots: readonly ClothingSlot[], salt: number): Dressed {
+    return dress(r.scheme, r.arrange, r.skin, r.hairColor, slots, salt);
 }
 
-/** The color each role is painted, for one person on one model. */
-export function personColors(r: Recipe, roles: readonly ClothingRole[], salt: number): Record<PaintRole, number> {
-    const c = dressOn(r, roles, salt).colors;
+/** The color each color slot is painted, for one person on one model. */
+export function personColors(r: Recipe, slots: readonly ClothingSlot[], salt: number): Record<PaintSlot, number> {
+    const c = dressOn(r, slots, salt).colors;
     const fill = c.tops ?? r.shirt;
     return {
         skin: r.skin, hair: r.hairColor,
-        headwear: c.headwear ?? fill, tops: fill, bottoms: c.bottoms ?? fill, footwear: c.footwear ?? fill, accessory: c.accessory ?? fill,
+        tops: fill, bottoms: c.bottoms ?? fill, footwear: c.footwear ?? fill, accessory: c.accessory ?? fill,
     };
 }
 
@@ -631,38 +636,38 @@ const MAP_FRAGMENT = `#ifdef USE_MAP
 #endif`;
 
 /**
- * A model's regions, ready to paint: the mask as a texture, each group's role, and the luminance
- * each role is measured against. One per model, shared by every material that paints it.
+ * A model's regions, ready to paint: the mask as a texture, each group's color slot, and the
+ * luminance each slot is measured against. One per model, shared by every material that paints it.
  */
 export class RegionPaint {
     readonly seg: Segmentation;
-    readonly roles: Roles;
-    /** The clothing roles this model has, which is what a scheme is arranged on. */
-    readonly clothing: readonly ClothingRole[];
+    readonly slots: GroupSlots;
+    /** The clothing slots this model has, which is what a scheme is arranged on. */
+    readonly clothing: readonly ClothingSlot[];
     /** The model's own salt for an arrangement, from its GLB's file name: the same in the lab and the game. */
     readonly salt: number;
     private readonly shared: Record<string, { value: unknown }>;
 
-    constructor(seg: Segmentation, roles: Roles, file = '') {
-        this.seg = seg; this.roles = roles;
-        this.clothing = CLOTHING_ROLES.filter(r => roles.byGroup.includes(r));
+    constructor(seg: Segmentation, slots: GroupSlots, file = '') {
+        this.seg = seg; this.slots = slots;
+        this.clothing = CLOTHING_SLOTS.filter(r => (slots.byGroup as readonly string[]).includes(r));
         this.salt = saltOf(file);
         const mask = new THREE.DataTexture(seg.mask, seg.width, seg.height, THREE.RedFormat, THREE.UnsignedByteType);
         mask.magFilter = mask.minFilter = THREE.NearestFilter;
         mask.generateMipmaps = false;
         mask.unpackAlignment = 1;
         mask.needsUpdate = true;
-        // Every group of one role is measured against the role's centre, so a shirt split into a lit
+        // Every group of one slot is measured against the slot's centre, so a shirt split into a lit
         // group and a shaded one keeps that difference when both are repainted the same colour.
         const lum = seg.groups.map(g => { const [r, gg, b] = linearOf(g.lab[0], g.lab[1], g.lab[2]); return 0.2126 * r + 0.7152 * gg + 0.0722 * b; });
-        const roleY = new Map<Role, number>();
-        for (const role of ROLES) {
+        const slotY = new Map<RegionSlot, number>();
+        for (const slot of REGION_SLOTS) {
             let w = 0, y = 0;
-            seg.groups.forEach((g, i) => { if (roles.byGroup[i] === role) { w += g.share; y += g.share * lum[i]; } });
-            if (w > 0) roleY.set(role, y / w);
+            seg.groups.forEach((g, i) => { if (slots.byGroup[i] === slot) { w += g.share; y += g.share * lum[i]; } });
+            if (w > 0) slotY.set(slot, y / w);
         }
         const regionY = Array.from({ length: REGION_MAX }, (_, i) =>
-            i < seg.groups.length ? roleY.get(roles.byGroup[i]) ?? lum[i] : 1);
+            i < seg.groups.length ? slotY.get(slots.byGroup[i]) ?? lum[i] : 1);
         const c = new THREE.Color();
         const regionFalse = Array.from({ length: REGION_MAX }, (_, i) => { c.setHex(FALSE[i % FALSE.length]); return new THREE.Vector3(c.r, c.g, c.b); });
         this.shared = { regionMap: { value: mask }, regionY: { value: regionY }, regionFalse: { value: regionFalse } };
@@ -685,13 +690,13 @@ export class RegionPaint {
     }
 
     /** Paint with these colours, or `null` for the texture as authored. Refused groups stay authored. */
-    paint(u: RegionUniforms, colours: Record<PaintRole, number> | null): void {
+    paint(u: RegionUniforms, colours: Record<PaintSlot, number> | null): void {
         const c = new THREE.Color();
         for (let i = 0; i < REGION_MAX; i++) {
-            const role = i < this.seg.groups.length ? this.roles.byGroup[i] : 'keep';
-            const on = colours !== null && this.roles.usable && role !== 'keep';
+            const slot = i < this.seg.groups.length ? this.slots.byGroup[i] : 'keep';
+            const on = colours !== null && this.slots.usable && slot !== 'keep';
             u.regionMix.value[i] = on ? 1 : 0;
-            if (on) { c.setHex(colours[role as PaintRole]); u.regionTarget.value[i].set(c.r, c.g, c.b); }
+            if (on) { c.setHex(colours[slot as PaintSlot]); u.regionTarget.value[i].set(c.r, c.g, c.b); }
         }
     }
 
@@ -711,7 +716,7 @@ function texturedMesh(root: THREE.Object3D): THREE.Mesh | null {
 /** Everything known about one model's regions, and the paint, when there is something to paint with. */
 export interface Regions {
     readonly seg: Segmentation | null;
-    readonly roles: Roles | null;
+    readonly slots: GroupSlots | null;
     /** Null only when there is no segmentation at all; a refused one still shows its false colour. */
     readonly paint: RegionPaint | null;
     /** The textured mesh the regions belong to. */
@@ -729,7 +734,7 @@ export interface Regions {
  */
 export function prepareRegions(m: PersonModel, root: THREE.Object3D): Regions {
     const mesh = texturedMesh(root);
-    const none = (summary: string): Regions => ({ seg: null, roles: null, paint: null, mesh, file: m.path, ms: 0, summary });
+    const none = (summary: string): Regions => ({ seg: null, slots: null, paint: null, mesh, file: m.path, ms: 0, summary });
     if (mesh === null) return none('no textured mesh to find regions in');
     const px = readPixels((mesh.material as THREE.MeshStandardMaterial).map as THREE.Texture);
     const attr = mesh.geometry.getAttribute('uv');
@@ -738,17 +743,17 @@ export function prepareRegions(m: PersonModel, root: THREE.Object3D): Regions {
     // Through getX/getY, so a file storing its coordinates as normalised integers reads as 0..1.
     const uv = new Float32Array(2 * attr.count);
     for (let i = 0; i < attr.count; i++) { uv[2 * i] = attr.getX(i); uv[2 * i + 1] = attr.getY(i); }
-    const roleFile = roleFileOf(m);
+    const slotFile = slotFileOf(m);
     const t0 = performance.now();
-    const seg = segment(px, uv, mesh.geometry.index?.array ?? null, roleFile.bandwidth);
+    const seg = segment(px, uv, mesh.geometry.index?.array ?? null, slotFile.bandwidth);
     const ms = performance.now() - t0;
-    const roles = assignRoles(seg, roleFile, null);
-    const paint = seg.failure === null ? new RegionPaint(seg, roles, modelFileName(m)) : null;
+    const slots = assignSlots(seg, slotFile, null);
+    const paint = seg.failure === null ? new RegionPaint(seg, slots, modelFileName(m)) : null;
     const found = seg.failure !== null ? seg.failure : `${seg.groups.length} colour groups`;
-    const summary = roles.usable ? `${found}, painted from the recipe` : `${found}; not painted: ${roles.problems[0]}`;
-    if (seg.failure === null && (!roles.usable || roles.warnings.length > 0)) {
-        console.info(`Colour regions of ${m.id}: ${summary}\n${[...roles.problems, ...roles.warnings].map(s => `- ${s}`).join('\n')}\n`
-            + `A starting point for the colorSlots in ${m.path}:\n${starterRoles(seg, roles)}`);
+    const summary = slots.usable ? `${found}, painted from the recipe` : `${found}; not painted: ${slots.problems[0]}`;
+    if (seg.failure === null && (!slots.usable || slots.warnings.length > 0)) {
+        console.info(`Colour regions of ${m.id}: ${summary}\n${[...slots.problems, ...slots.warnings].map(s => `- ${s}`).join('\n')}\n`
+            + `A starting point for the colorSlots in ${m.path}:\n${starterSlots(seg, slots)}`);
     }
-    return { seg, roles, paint, mesh, file: m.path, ms, summary };
+    return { seg, slots, paint, mesh, file: m.path, ms, summary };
 }

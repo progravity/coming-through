@@ -75,9 +75,9 @@ export type ColorSlot = (typeof COLOR_SLOTS)[number];
  * wrong: the region would be painted as nothing at all.
  */
 const NOT_COLORED_YET: Readonly<Partial<Record<ColorSlot, string>>> = {
-    accessory2: 'the game cannot color a second accessory yet (wardrobe.ts has no accessory2 role)',
+    accessory2: 'the game cannot color a second accessory yet (wardrobe.ts has no accessory2 clothing slot)',
 };
-/** The names the first role files used, and what each became. */
+/** The names the first region files (`.regions.json`) gave their color slots, and what each became. */
 const RENAMED_SLOTS: Readonly<Record<string, ColorSlot>> = { top: 'tops', trousers: 'bottoms', shoes: 'footwear' };
 
 /** The body values a model may set its own limits for (`LIMITS` in `modelcrowd/body.ts`). */
