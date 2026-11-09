@@ -30,7 +30,7 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   incoming connections for `php` and `node` the first time. Two dev servers for one checkout fight
   over `public/hot`, which is why the other one has to stop.
 - **Tests:** `npm test` type-checks the engine and its tests, runs the Math.random check, and then
-  runs everything under `tests/js/` with `node --test` (282 tests). `npm run lint` is the first two
+  runs everything under `tests/js/` with `node --test` (292 tests). `npm run lint` is the first two
   on their own. `composer test` is the Laravel side: Pint, PHPStan and Pest (`tests/Feature/`,
   `tests/Unit/`), against SQLite in memory. Both are plain commands and both must pass.
 - **Node is pinned to 26.13.0** in `.nvmrc` (and `^26.13.0` in `package.json` `engines`). Herd's
@@ -112,7 +112,9 @@ The Laravel side is the starter kit's, plus:
   with, served by Laravel from its web root at `/models/people/`. Everything known about each one
   is in its data file (`resources/js/game/data/people/`), never beside the GLB. See "Person model
   data files" below.
-- `scripts/` — the Math.random check and the stress and bench scripts.
+- `scripts/` — the Math.random check, the stress and bench scripts, and `measure-clips.mjs`, which
+  lists every clip in each person model's GLB with the clip role it fills and measures the speed
+  each walk and run was authored at (`--write` records it in the data file). See "Clip roles".
 - `vite.config.js` — the starter kit's, with the game's stylesheet and entry added as inputs and the
   LAN switch for phone testing.
 
@@ -193,7 +195,9 @@ The engine:
   which stay the fallback: for the player, for anyone with a mobility aid or a stroller, and for the
   whole crowd if the model fails to load. `regions.ts` finds a model's color regions and repaints
   them per person, `body.ts` shapes each clone by its recipe's Body Type and decides who falls
-  back (see "Model bodies"), and `index.ts` chooses the renderer and keeps the cost readout, shown
+  back (see "Model bodies"), `clips.ts` plays each model's clips by role -- walk and run by the
+  ground covered, idle when someone stops (see "Clip roles") -- and `index.ts` chooses the
+  renderer and keeps the cost readout, shown
   under `?people=` or a stress run. The people lab, which shows only models, uses all of it.
   See "Models by default".
 - `resources/js/game/compare/` — the render-direction comparator. The six rendering directions it shows side by
@@ -301,8 +305,9 @@ The engine:
   figure is measured in its pose rather than its bind pose, that the rest pose comes back at its own
   size on an armature scaled by 0.01 (where `Skeleton.pose()` measurably makes a 17 mm figure), that
   the file's materials come back by identity and only what the bench made is disposed, that the
-  row's second exhibit is the game's own person, and that the card lists every data file that
-  failed its check, by file and field.
+  row's second exhibit is the game's own person, that the card lists every data file that failed
+  its check, by file and field, and that it lists every clip role, present with its clip or
+  missing, a missing walk, run or idle or a clip the GLB does not have as an error.
 - `tests/js/body.test.ts` — model bodies, on a Mixamo-named rig built in code: that the Body Types
   are the crowd's own width roll cut into fifths with neighbors visibly apart, that the limits hold
   and say what they held, that a body is its Body Type and nothing else (no age in it: the broadest
@@ -330,8 +335,17 @@ The engine:
   that casual-man and casual-man-low state their facts and leave what nobody knows as `unknown`;
   that a missing field, a value outside its list, a field nothing reads yet, an ID that breaks the
   rule or disagrees with the facts, garments or accessories with no color region, and `accessory2`
-  each fail with a message naming the file and the field; and that a file dropped into a folder is
-  found with no code change.
+  each fail with a message naming the file and the field; that the two models map walk and run to
+  their GLBs' clips by name, and a clip map holds only the spec's roles, clips that loop when the
+  role does, a speed for walk and run alone (an override winning over the measurement) and props on
+  a timeline; and that a file dropped into a folder is found with no code change.
+- `tests/js/clips.test.ts` — clip roles, on a two-footed rig built in code and on the real GLBs: that
+  a walk's authored speed is read off the planted foot whether the clip carries its travel or not;
+  that every GLB has the clips its data file names and its walk and run still measure what the file
+  records; that a missing clip, a stale speed or a prop past the clip's end is an error; that with
+  no idle a person stands in the walk's average pose, feet side by side on the ground; and that the
+  crowd's timing plays walk and run at the rate speed and size call for, blends into idle by speed,
+  and cross-fades walk and run lined up by the left foot, with hysteresis and never for a mobility aid.
 - `tests/js/recipe-streams.test.ts` — that a person's appearance rolls are contained to appearance.
   It adds a dummy roll to every person's recipe fork without touching `makeRecipe` (a swapped
   recipe stream whose forks take one extra draw at a chosen position), runs the same crowd with
@@ -1738,7 +1752,9 @@ into two vocabularies.
   collider and gait. **Clothing on <model>** lists every clothing slot with its color (or that the
   model has none), the scheme and its pool, which arrangement was taken, and the rules it meets (a
   uniform's are waived). Then the body against the presets and limits, the rolls, geometry, the
-  model's clips, color regions, anchors and costs, provenance. A Darter shows on the adult model
+  model's clip roles (every role the spec names, present with its clip, loop and authored speed or
+  missing, with a missing walk, run or idle marked as an error), clips, color regions, anchors and
+  costs, provenance. A Darter shows on the adult model
   with a note that it needs a child model, and the game's fallback is on any card it applies to.
 
   `compare=` chooses what the row stands side by side: `body-type` (the default: the five Body
@@ -1968,7 +1984,8 @@ files, and the data file") is the source of truth for the fields and their value
   required, `bottoms` absent under a one-piece), `accessories` (`[{ "accessory", "slot" }]`, at most
   two);
 - **rendering** -- `colorSlots` (`[{ "color": "#rrggbb", "slot" }]`), an optional `regionBandwidth`,
-  and `bodyLimits`;
+  `clips` (each clip role mapped to the clip in the GLB that fills it: see "Clip roles" below), and
+  `bodyLimits`;
 - **provenance** -- `source` (`plan`, `generatorVersion`, `date` as `YYYY-MM-DD`, `prompt`,
   `promptVersion`) and `license` (`model`, `clips`). Every field is required, and `"unknown"` is an
   answer: what nobody has recorded is written as unknown, never made up, and the lab marks it
@@ -1994,9 +2011,9 @@ Five things the spec leaves open or the code does not do yet, decided here:
 - **Open lists are closed in code.** The spec's occupations and garments end in "and so on"; the
   validator allows the ones the spec names (`OCCUPATIONS`, `GARMENTS`), and the accessories its
   accessory table lists (`ACCESSORIES`). A new one is a line in `data/people.ts`.
-- **Fields the spec describes that nothing reads yet are refused, with the reason**: `clips` and
-  `clipRoles` (the next task maps clip roles; until then clips come from the GLB as they are),
-  `anchors`, `colliderWidth` (measured, later) and `stats` (computed at load, never written).
+- **Fields the spec describes that nothing reads yet are refused, with the reason**: `anchors`,
+  `colliderWidth` (measured, later) and `stats` (computed at load, never written). `clipRoles` is
+  refused too, as derived: it is worked out from `clips` when the file loads (`PersonModel.clipRoles`).
 - **`version` goes on the GLB's address** (`?v=1`), so a regenerated file is never served stale.
 - **A model's clothing arrangement is salted by its GLB's file name** (`modelFileName`), as it was
   before the data files, so moving the files dressed nobody differently. Regenerating a character
@@ -2007,6 +2024,74 @@ Five things the spec leaves open or the code does not do yet, decided here:
 
 Models are listed in ID order, which is not file name order: `casual-man-low.json` sorts before
 `casual-man.json`.
+
+### Clip roles
+
+**A model's clips are mapped by role in its data file** (`clips`): the game asks for `walk`, `run`,
+`idle`, `look-around` and the rest of the spec's roles (`CLIP_ROLES` in `data/people.ts`), and the
+file names the clip in the GLB that fills each, exactly as Meshy named it -- nothing is renamed or
+guessed from a name any more. Each entry is `{ "clip", "loop", "speed"?, "props"? }`:
+
+```json
+"clips": {
+    "walk": { "clip": "Walking", "loop": true, "speed": { "measured": 1.41 } },
+    "run": { "clip": "Running", "loop": true, "speed": { "measured": 4.7 } }
+}
+```
+
+- **`speed` is the speed a walk or run was authored at**, in m/s at the model's authored size, and
+  only walk and run carry one. `measured` is read off the clip as it is in the file, before the game
+  strips its travel: while a foot is planted it moves back under the hips at exactly the speed the
+  body would have to travel for it to stay put, so that is what `measureGait` reads (the median over
+  the planted part of the cycle) -- which works whether the clip carries its forward motion or, as
+  Meshy's do, was exported in place. `node scripts/measure-clips.mjs --write` records it;
+  `tests/js/clips.test.ts` fails when a GLB no longer measures what its file says, and so does the
+  lab card. A hand-set `override` wins over the measurement and leaves it on record.
+- **`loop`** is the file's to say, except that walk, run, idle, push and sit always loop, as the spec
+  says, and a file saying otherwise is refused.
+- **`props`** says when a prop shows, in seconds into the clip (`[{ "prop", "appears", "disappears" }]`),
+  with the prop from the item spec's list (`PROPS`). Nothing draws props yet; a prop after the
+  clip's end is an error on the card.
+- **Walk, run and idle are required**, but a model missing one still loads. The lab card lists every
+  role, present with its clip or missing, and a missing required role -- or a clip the GLB does not
+  have, or a stale speed -- is an error there and on the console; any other missing role is just
+  listed. Without a walk the game cannot draw the model and falls back to the primitives.
+
+**How the crowd plays them** (`GaitState` and `prepareClips` in `modelcrowd/clips.ts`, presentation
+only: neither hash moves and nothing under `sim/` reads a clip):
+
+- **Walk and run are timed by the ground covered, not by a clock.** The simulation advances `phase`
+  by speed times cadence, so `phase / cadence` is the distance walked; a clip's cycle is its stride
+  -- authored speed times its length -- at the size the person is drawn, so it plays at exactly the
+  rate their speed calls for (`speed / (authored speed × scale)`) and a planted foot stays planted.
+  It is stateless, which is what keeps it right for a throttled far person and in a paused lab.
+- **Someone who stops blends into idle**, by speed: idle at full weight below `STAND_ON` (0.12 m/s),
+  the walk at full weight above `STAND_OFF` (0.45), blended between. The simulation eases a stopping
+  person's speed down, so the blend follows it in and out with no clock of its own. Idle runs on the
+  person's simulation time, each slot from its own point.
+- **While a model has no idle, the walk's average pose stands in** (`standPose`): every track at its
+  mean over the cycle, lifted until its feet sit where a planted foot does -- feet side by side,
+  arms hanging, a slight forward lean kept from the walk. A pose in the spec's sense, made by the
+  game from a clip, and only until the model has its own idle. The lab offers it in the clip control.
+- **Walk and run cross-fade over `GAIT_FADE` (0.25 s of simulation time)**, with the hysteresis that
+  was there before (run above 2.2 m/s, walk below 1.9). The incoming clip starts where its left foot
+  is at the same point as the outgoing one's (`contact`, measured beside the speed), and a change
+  part-way through a fade carries on from the weights already showing.
+
+**The two models today** have two clips each, "Walking" (1.033 s, measured 1.41 m/s on
+`casual-man` and 1.42 on `casual-man-low`, a 1.46 m cycle) and "Running" (0.633 s, 4.70 m/s, a 2.98 m
+cycle), mapped to walk and run. Neither has an idle, which is the one error on both cards, so
+standing people hold the stand-in. What that leaves looking wrong in motion:
+
+- **The run is a sprint.** It was authored at 4.7 m/s, and the crowd's runners go 2.2 to 2.8 m/s, so
+  it plays at about half speed: long, floaty, bounding strides for someone covering jogging ground.
+  The fix is a jog clip authored near 2.5 m/s, not a different playback rate, which would slide.
+- **A slow walker takes a fast walker's strides.** At 0.7 to 0.9 m/s the walk plays at half to two
+  thirds speed with its full 0.73 m step, which reads as slow motion rather than a shorter step.
+- **Standing is a held pose**: no breathing, no weight shift. An idle clip replaces it.
+- **Sideways and turning motion slides.** The clip plays by distance in any direction, so a person
+  pushed sideways in a crowd, or turning sharply at low speed, walks forward on the spot while moving
+  another way.
 
 ### Models from files
 
@@ -2022,8 +2107,10 @@ game's -- rolled exactly as the crowd rolls agent N of the seed, and shaped by t
   `fetchModel` in `render/model-file.ts` is the one loader, shared with the model renderer that
   draws the crowd.
 - **Its clips are its controls.** `load` fetches every listed file and fills the `clip` control with
-  the clip names it found, ahead of `pose` (the file's rest pose). The clip plays through an
-  `AnimationMixer` advanced by `SIM_DT` in `step`, so pause and `freeze clip` work as the gait does.
+  the clip names it found, then the stand-in pose while a model has no idle, ahead of `pose` (the
+  file's rest pose); the walk role's clip is the default. The clip plays through an
+  `AnimationMixer` advanced by `SIM_DT` in `step`, so pause and `freeze clip` work as the gait does,
+  at the rate it was authored at: the figure stands on the spot.
 - **"Pose" restores each node's transform as the file left it, not `Skeleton.pose()`.** That
   rebuilds a root bone's local matrix from its bind-time world one, which applies a scaled armature
   twice -- and a Mixamo export's armature is scaled by 0.01.
@@ -2081,9 +2168,10 @@ neither hash can move, and nothing under `resources/js/game/sim/` imports it. Fi
   scene; only the skinned mesh is placed, in detached bind mode with identity bind matrices. That is
   what lets a far person skip animation frames without being left behind -- their pose goes stale,
   their position never does -- and it lets the skipped frames skip the bone-texture upload too.
-- **The clip is driven by the gait phase**, one turn of `phase` per clip cycle, with the hips'
-  sideways and forward travel pinned and every constant translation track dropped. Above 2.2 m/s a
-  body runs (back to walking below 1.9); anyone with a mobility aid walks.
+- **The clips are the data file's, by role**, and walk and run are timed by the ground covered: see
+  "Clip roles" below. The hips' sideways and forward travel is pinned and every constant translation
+  track dropped (`inPlace`). Above 2.2 m/s a body runs (back to walking below 1.9); anyone with a
+  mobility aid walks.
 - **Variation is the person's own colors and body**: skin and hair from the recipe, the clothing
   scheme arranged on the clothing slots this model has (`personColors`, salted by the model -- see
   "Colors" above), and the recipe's Body Type shaped into the clone by `modelcrowd/body.ts` --
