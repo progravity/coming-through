@@ -9,7 +9,7 @@
  * their neighbours afterwards, so a blend of two colours cannot become a third group.
  *
  * **What each group *is* lives in a data file beside the model**, `<model>.regions.json` in
- * `public/models/`, which maps colors to the standard roles every model shares: the clothing roles
+ * `public/models/people/`, which maps colors to the standard roles every model shares: the clothing roles
  * (headwear, tops, bottoms, footwear, accessory -- see `wardrobe.ts`), skin, hair, and keep. Entries
  * are matched by colour rather than by position in a list, so a file keeps working when the
  * detector's ordering changes and largely carries over to a regeneration in the same garments. A
@@ -25,7 +25,7 @@
  */
 import * as THREE from 'three';
 import type { Recipe } from '../recipe.ts';
-import { MODEL_DIR } from '../render/model-file.ts';
+import { PERSON_MODEL_DIR as MODEL_DIR } from '../render/model-file.ts';
 import { CLOTHING_ROLES, dress, saltOf } from '../wardrobe.ts';
 import type { ClothingRole, Dressed } from '../wardrobe.ts';
 

@@ -3,11 +3,11 @@
  *
  * Shared by the inspector's model bench and the `?people=model` crowd experiment, so both stand up
  * the same file through the same loader. Nothing in a browser can list `public/`, so a list it is:
- * drop the file in `public/models/` and add a line under the name `?model=` uses.
+ * drop a person's file in `public/models/people/` and add a line under the name `?model=` uses.
  */
 import type * as THREE from 'three';
 
-/** Every file that can be shown, by the name `?model=` uses, as a path under `public/models/`. */
+/** Every person file that can be shown, by the name `?model=` uses, as a path under `public/models/people/`. */
 export const MODELS: Readonly<Record<string, string>> = {
     'casual-man': 'Meshy_AI_casual_man_30s_rigged_20261106_animated_mixamo_All_animation.glb',
     // The same figure remeshed: 2,591 triangles against 15,571, the same rig and the same clips.
@@ -70,6 +70,8 @@ export const STRUCTURE_MODELS: Readonly<Record<string, StructureModel>> = {};
  * rather than a file beside the models, so a page-relative path would move with the route.
  */
 export const MODEL_DIR = '/models/';
+/** Where the person models are, under it. */
+export const PERSON_MODEL_DIR = `${MODEL_DIR}people/`;
 
 /** A parsed file: its scene, its clips, and how big it was on the wire. */
 export interface ModelFile {
@@ -88,11 +90,11 @@ export interface ModelFile {
  */
 export async function fetchModel(file: string): Promise<ModelFile> {
     const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
-    const res = await fetch(MODEL_DIR + file);
+    const res = await fetch(PERSON_MODEL_DIR + file);
     if (!res.ok || (res.headers.get('content-type') ?? '').includes('text/html')) {
-        throw new Error(`not found at public${MODEL_DIR}${file}`);
+        throw new Error(`not found at public${PERSON_MODEL_DIR}${file}`);
     }
     const buf = await res.arrayBuffer();
-    const gltf = await new GLTFLoader().parseAsync(buf, MODEL_DIR);
+    const gltf = await new GLTFLoader().parseAsync(buf, PERSON_MODEL_DIR);
     return { scene: gltf.scene, animations: gltf.animations, bytes: buf.byteLength };
 }

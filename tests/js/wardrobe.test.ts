@@ -22,7 +22,7 @@ import {
 } from '../../resources/js/game/wardrobe.ts';
 import type { ClothingRole } from '../../resources/js/game/wardrobe.ts';
 
-const MODELS = new URL('../../public/models/', import.meta.url);
+const MODELS = new URL('../../public/models/people/', import.meta.url);
 
 /** Every model's clothing roles, read from its own role file, keyed by the file its salt comes from. */
 function modelRoles(): { file: string; roles: ClothingRole[] }[] {

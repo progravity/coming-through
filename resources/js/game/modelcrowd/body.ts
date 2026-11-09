@@ -28,7 +28,7 @@ import { BEHAVIORS } from '../behaviors.ts';
 import type { ModelClass } from '../behaviors.ts';
 import { AGES, BUILDS, BUILD_WIDTH, figureHeight } from '../recipe.ts';
 import type { Age, Build, Recipe } from '../recipe.ts';
-import { MODEL_DIR } from '../render/model-file.ts';
+import { PERSON_MODEL_DIR as MODEL_DIR } from '../render/model-file.ts';
 
 // ---------- the tables ----------
 

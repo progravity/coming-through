@@ -36,7 +36,7 @@ import { hairNamed, schemeNamed, skinToneNamed } from '../../wardrobe.ts';
 import type { Age } from '../../recipe.ts';
 import type { Look } from '../../render/look.ts';
 import { makeToonGradient } from '../../render/materials.ts';
-import { MODELS, MODEL_DIR as DIR, MODEL_SOURCES, fetchModel } from '../../render/model-file.ts';
+import { MODELS, PERSON_MODEL_DIR as DIR, MODEL_SOURCES, fetchModel } from '../../render/model-file.ts';
 import { standingHeight } from '../../render/person.ts';
 import {
     AGES, AGE_PRESETS, BODY_KEYS, BUILDS, BUILD_PRESETS, BodyRig, CHILD_NOTE, LIMITS, NOT_ON_MODELS, bakeMask,
