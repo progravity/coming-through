@@ -15,12 +15,17 @@
  *   mode with identity bind matrices, so the skinning is in model space and the mesh's own matrix
  *   carries it to where the agent is. That is what lets a far person skip animation frames without
  *   being left behind: their pose goes stale, their position never does.
- * - **The clip is driven by the gait phase, not by a clock.** The simulation advances `phase` by
- *   speed times cadence, so one turn of it is one full stride and the feet keep the body's tempo.
- *   Root translation is stripped from the clips: position comes from the simulation alone.
+ * - **Walk and run are timed by the ground covered, not by a clock.** The simulation advances
+ *   `phase` by speed times cadence, so the phase over the cadence is the distance walked; a clip's
+ *   cycle is its authored speed times its length, at the size the person is drawn, so it plays at
+ *   exactly the rate their speed calls for and a planted foot stays planted (`GaitState` in
+ *   `clips.ts`). Someone who stops blends into idle -- or, while the model has none, the walk's
+ *   average pose -- by speed. Root translation is stripped from the clips: position comes from the
+ *   simulation alone. The clips are the data file's, by role (`prepareClips`).
  */
 import * as THREE from 'three';
 import { clone as cloneSkinned } from 'three/examples/jsm/utils/SkeletonUtils.js';
+import { SIM_DT } from '../core/time.ts';
 import type { Recipe } from '../recipe.ts';
 import { SHELL_OVER } from '../render/look.ts';
 import { INK_LINE, makeToonGradient } from '../render/materials.ts';
@@ -33,15 +38,13 @@ import { PATH } from '../world/path.ts';
 import { BodyRig, LIMITS, bakeMask, drawnHeight, drawsAsPrimitive, patchFullness, shapeRecipe } from './body.ts';
 import type { FullnessUniforms, Limits, ModelBody } from './body.ts';
 import type { ModelClass } from '../behaviors.ts';
+import { GaitState, newMix } from './clips.ts';
+import type { ModelClips } from './clips.ts';
 import { personColors } from './regions.ts';
 import type { RegionPaint, RegionUniforms } from './regions.ts';
 
-const TAU = Math.PI * 2;
-/** Run above this speed in m/s, and walk again only below the second, so nobody flickers between clips. */
-export const RUN_ON = 2.2, RUN_OFF = 1.9;
+export { RUN_ON, RUN_OFF } from './clips.ts';
 const IDENTITY = new THREE.Matrix4();
-
-const wrap01 = (v: number): number => ((v % 1) + 1) % 1;
 
 /** The two cheap mitigations being measured, both switchable while the game runs. */
 export interface Knobs {
@@ -62,6 +65,12 @@ interface Slot {
     readonly mixer: THREE.AnimationMixer;
     readonly walk: THREE.AnimationAction;
     readonly run: THREE.AnimationAction | null;
+    /** Idle, or the stand-in for it. */
+    readonly idle: THREE.AnimationAction | null;
+    /** Where this person is in their walk and run, and which they are in. */
+    readonly gait: GaitState;
+    /** So a crowd of idlers is not one idler: each slot's idle starts at its own point. */
+    readonly idleOffset: number;
     readonly material: THREE.MeshToonMaterial;
     /** This clone's repaint, when the model's regions can be painted. */
     readonly regions: RegionUniforms | null;
@@ -71,39 +80,13 @@ interface Slot {
     readonly inkFull: FullnessUniforms;
     /** Whose recipe this clone is dressed for, so a reused slot is re-dressed once and not every frame. */
     recipe: Recipe | null;
-    running: boolean;
+    /** A new occupant: their gait starts fresh on the next frame they are animated. */
+    restart: boolean;
     /** Must animate this frame whatever the throttle says: new occupant, or never posed. */
     fresh: boolean;
     /** Bones moved since the skeleton was last uploaded. */
     dirty: boolean;
     used: boolean;
-}
-
-/**
- * A clip with the root's travel taken out and the tracks that never move dropped.
- *
- * The hips keep their height, which is the bob, and lose their sideways and forward drift, which
- * is the animation trying to walk the body somewhere. Every other bone's translation track in a
- * Mixamo export holds its rest value on every key; those are dropped, since evaluating them every
- * frame changes nothing -- but only when that is measurably true of the file in hand.
- */
-function inPlace(clip: THREE.AnimationClip, rig: THREE.Object3D): THREE.AnimationClip {
-    const out = clip.clone();
-    out.tracks = out.tracks.filter(track => {
-        if (!track.name.endsWith('.position')) return true;
-        const node = rig.getObjectByName(track.name.slice(0, -'.position'.length));
-        if (node === undefined) return true;
-        const v = track.values, rest = node.position;
-        if (/hips$/i.test(node.name)) {
-            for (let i = 0; i < v.length; i += 3) { v[i] = rest.x; v[i + 2] = rest.z; }
-            return true;
-        }
-        for (let i = 0; i < v.length; i += 3) {
-            if (Math.abs(v[i] - rest.x) + Math.abs(v[i + 1] - rest.y) + Math.abs(v[i + 2] - rest.z) > 1e-4) return true;
-        }
-        return false;
-    });
-    return out;
 }
 
 /**
@@ -118,6 +101,13 @@ function inkMaterial(): THREE.MeshBasicMaterial {
             `#include <skinning_vertex>\n\ttransformed += normalize( objectNormal ) * ${SHELL_OVER.toFixed(5)};`);
     };
     return m;
+}
+
+/** Put an action at a time and a weight; one with no weight is not evaluated at all. */
+function pose(a: THREE.AnimationAction, time: number, weight: number): void {
+    a.enabled = weight > 1e-4;
+    a.weight = weight;
+    a.time = time;
 }
 
 export class ModelCrowd {
@@ -154,30 +144,32 @@ export class ModelCrowd {
     private frame = 0;
 
     private readonly paint: RegionPaint | null;
+    private readonly model: ModelClips;
+    private readonly mix = newMix();
     /** How far this model may be pushed, from its data file or the global table. */
     readonly limits: Limits;
 
     /**
-     * `paint` repaints each clone's regions in its recipe's colours; null draws the texture as
-     * authored. `body` is the model's own body (`bodyOf` its data file), whose limits every clone is
-     * shaped inside.
+     * `clips` are the model's clips by role (`prepareClips`); a model with no walk cannot be drawn
+     * walking, and throws so the caller falls back to the primitives. `paint` repaints each clone's
+     * regions in its recipe's colours; null draws the texture as authored. `body` is the model's own
+     * body (`bodyOf` its data file), whose limits every clone is shaped inside.
      */
-    constructor(scene: THREE.Scene, file: ModelFile, knobs: Knobs, paint: RegionPaint | null, body: ModelBody | null = null) {
+    constructor(scene: THREE.Scene, file: ModelFile, clips: ModelClips, knobs: Knobs, paint: RegionPaint | null, body: ModelBody | null = null) {
         this.knobs = knobs;
         this.paint = paint;
+        this.model = clips;
         this.limits = body?.limits ?? LIMITS;
         this.drawable = body?.ageClass ?? 'adult';
         let source: THREE.SkinnedMesh | null = null;
         file.scene.traverse(o => { if (source === null && (o as THREE.SkinnedMesh).isSkinnedMesh) source = o as THREE.SkinnedMesh; });
         if (source === null) throw new Error('the file has no skinned mesh');
         const src: THREE.SkinnedMesh = source;
-        const clips = file.animations;
-        const walkClip = clips.find(c => /walk/i.test(c.name)) ?? clips[0];
-        if (walkClip === undefined) throw new Error('the file has no animation clips');
-        const runClip = clips.find(c => /run/i.test(c.name) && c !== walkClip) ?? null;
-        const walk = inPlace(walkClip, file.scene);
-        const run = runClip === null ? null : inPlace(runClip, file.scene);
-        this.clips = `${walk.name} ${walk.tracks.length} tracks` + (run === null ? ', no run clip' : ` · ${run.name} ${run.tracks.length} tracks`);
+        if (clips.walk === null) throw new Error(`no walk to play: ${clips.problems.join('; ') || 'the walk could not be measured'}`);
+        const walk = clips.walk, run = clips.run, idle = clips.idle;
+        const role = (r: string, g: { clip: THREE.AnimationClip; speed: number }): string => `${r} "${g.clip.name}" at ${g.speed} m/s`;
+        this.clips = [role('walk', walk), run === null ? 'no run' : role('run', run),
+            idle === null ? 'no idle' : clips.standIn ? 'idle: the walk\'s average pose, standing in' : `idle "${idle.name}"`].join(' · ');
 
         const geo = src.geometry;
         geo.computeBoundingBox();
@@ -225,15 +217,20 @@ export class ModelCrowd {
             rig.updateMatrixWorld(true);
 
             const mixer = new THREE.AnimationMixer(rig);
-            const walkAction = mixer.clipAction(walk);
-            walkAction.play();
-            const runAction = run === null ? null : mixer.clipAction(run);
-            if (runAction !== null) { runAction.play(); runAction.weight = 0; }
+            const action = (clip: THREE.AnimationClip | null): THREE.AnimationAction | null => {
+                if (clip === null) return null;
+                const a = mixer.clipAction(clip);
+                a.play();
+                a.weight = 0;
+                return a;
+            };
+            const walkAction = action(walk.clip) as THREE.AnimationAction;
 
             const s: Slot = {
-                group, body: mesh, ink: shell, rig, mixer, walk: walkAction, run: runAction, material, regions,
-                shape: new BodyRig(rig, [mesh]), full, inkFull,
-                recipe: null, running: false, fresh: true, dirty: true, used: false,
+                group, body: mesh, ink: shell, rig, mixer, walk: walkAction, run: action(run?.clip ?? null), idle: action(idle),
+                gait: new GaitState(), idleOffset: ((slot * 0.618034) % 1) * (idle?.duration ?? 0),
+                material, regions, shape: new BodyRig(rig, [mesh]), full, inkFull,
+                recipe: null, restart: true, fresh: true, dirty: true, used: false,
             };
             // The renderer uploads every visible skeleton every frame. A throttled person's bones
             // have not moved, so the upload is skipped too, not only the evaluation.
@@ -284,15 +281,15 @@ export class ModelCrowd {
             if (k.throttle && !s.fresh && dx * dx + dz * dz > far2 && (frame + a.slot) % every !== 0) continue;
             s.fresh = false;
             // A mobility aid is out of scope here, so its user walks rather than running past.
-            const speed = Math.hypot(a.vx, a.vz);
-            const run = s.run !== null && a.recipe.mobility === 'none' && speed > (s.running ? RUN_OFF : RUN_ON);
-            if (run !== s.running && s.run !== null) {
-                s.running = run;
-                s.walk.weight = run ? 0 : 1;
-                s.run.weight = run ? 1 : 0;
-            }
-            const action = run && s.run !== null ? s.run : s.walk;
-            action.time = wrap01(view.phase / TAU) * action.getClip().duration;
+            const go = {
+                distance: view.phase / a.recipe.gait.cadence, time: a.t - (1 - alpha) * SIM_DT,
+                speed: Math.hypot(a.vx, a.vz), scale: g.scale.y, mayRun: a.recipe.mobility === 'none',
+            };
+            if (s.restart) { s.gait.reset(this.model, go); s.restart = false; }
+            const m = s.gait.update(this.model, go, s.idleOffset, this.mix);
+            pose(s.walk, m.walkTime, m.walkWeight);
+            if (s.run !== null) pose(s.run, m.runTime, m.runWeight);
+            if (s.idle !== null) pose(s.idle, m.idleTime, m.idleWeight);
             s.mixer.update(0);
             // The body's joints, onto the pose the clip just wrote.
             s.shape.pose();
@@ -315,6 +312,7 @@ export class ModelCrowd {
     private dress(s: Slot, r: Recipe): void {
         s.recipe = r;
         s.fresh = true;
+        s.restart = true;
         if (this.paint !== null && s.regions !== null) this.paint.paint(s.regions, personColors(r, this.paint.clothing, this.paint.salt));
         const { body } = shapeRecipe(r, this.limits);
         s.shape.apply(body);

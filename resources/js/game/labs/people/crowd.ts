@@ -30,6 +30,7 @@ import type { InfoRow, InfoSection, Readout } from '../../inspect/inspectable.ts
 import { ModelCrowd } from '../../modelcrowd/crowd.ts';
 import type { Knobs } from '../../modelcrowd/crowd.ts';
 import { bodyOf, drawsAsPrimitive, modelFallback } from '../../modelcrowd/body.ts';
+import { prepareClips, reportClips } from '../../modelcrowd/clips.ts';
 import { prepareRegions } from '../../modelcrowd/regions.ts';
 import { lookNamed } from '../../render/look.ts';
 import { personModel } from '../../data/people.ts';
@@ -108,7 +109,8 @@ export async function startCrowd(lab: Lab): Promise<void> {
             const regions = prepareRegions(model, got.scene);
             const knobs: Knobs = { ink: false, throttle: false, far: 15, every: 3 };
             const body = bodyOf(model);
-            models = new ModelCrowd(world.scene, got, knobs, regions.slots?.usable === true ? regions.paint : null, body);
+            const clips = reportClips(prepareClips(model, got.scene, got.animations));
+            models = new ModelCrowd(world.scene, got, clips, knobs, regions.slots?.usable === true ? regions.paint : null, body);
             modelNote = `${state.model} · ${count(models.trisPerModel)} triangles and ${models.bones} bones each · ${regions.summary} · a ${body.build} ${body.ageClass} model, Body Type from each recipe`;
         } catch (e) {
             modelNote = `the model did not load, so the crowd is primitives: ${e instanceof Error ? e.message : String(e)}`;

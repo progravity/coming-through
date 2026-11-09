@@ -33,6 +33,7 @@ import { Subject, forced } from '../../inspect/subject.ts';
 import { ModelCrowd } from '../../modelcrowd/crowd.ts';
 import type { Knobs } from '../../modelcrowd/crowd.ts';
 import { bodyOf, modelFallback } from '../../modelcrowd/body.ts';
+import { prepareClips, reportClips } from '../../modelcrowd/clips.ts';
 import { prepareRegions } from '../../modelcrowd/regions.ts';
 import { lookNamed } from '../../render/look.ts';
 import { PERSON_MODELS, personModel } from '../../data/people.ts';
@@ -173,7 +174,8 @@ export async function startPath(lab: Lab): Promise<void> {
         const got = await fetchModel(model);
         const regions = prepareRegions(model, got.scene);
         const knobs: Knobs = { ink: false, throttle: false, far: 15, every: 3 };
-        models = new ModelCrowd(world.scene, got, knobs, regions.slots?.usable === true ? regions.paint : null, bodyOf(model));
+        const clips = reportClips(prepareClips(model, got.scene, got.animations));
+        models = new ModelCrowd(world.scene, got, clips, knobs, regions.slots?.usable === true ? regions.paint : null, bodyOf(model));
         models.everyone = true;
         modelNote = `${modelName}, as the game draws people`;
     } catch (e) {

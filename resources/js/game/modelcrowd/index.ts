@@ -14,6 +14,7 @@ import { personModel } from '../data/people.ts';
 import { CROWD_MODEL, fetchModel } from '../render/model-file.ts';
 import { bodyOf } from './body.ts';
 import { ModelCrowd } from './crowd.ts';
+import { prepareClips, reportClips } from './clips.ts';
 import { prepareRegions } from './regions.ts';
 import type { Knobs } from './crowd.ts';
 
@@ -105,7 +106,8 @@ export async function startPeople(mode: PeopleMode, scene: THREE.Scene, params: 
             // Painted only when the regions are known and confidently separated; otherwise as authored, saying why.
             const regions = prepareRegions(model, got.scene);
             const body = bodyOf(model);
-            models = new ModelCrowd(scene, got, knobs, regions.slots?.usable === true ? regions.paint : null, body);
+            const clips = reportClips(prepareClips(model, got.scene, got.animations));
+            models = new ModelCrowd(scene, got, clips, knobs, regions.slots?.usable === true ? regions.paint : null, body);
             Object.assign(stats, {
                 renderer: 'model', model: name, trisPerModel: models.trisPerModel, bones: models.bones, clips: models.clips,
                 colours: regions.summary, body: `${body.build} ${body.ageClass} model; Body Type from each recipe`,
