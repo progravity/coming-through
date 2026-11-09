@@ -10,9 +10,11 @@
  * second exhibit is the game's own person.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import * as THREE from 'three';
-import { MODEL, POSE, adopt } from '../../resources/js/game/inspect/entities/model.ts';
+import { DATA_DIR, readAll } from '../../resources/js/game/data/people.ts';
+import { MODEL, POSE, adopt, dataProblems } from '../../resources/js/game/inspect/entities/model.ts';
 import { measure, newBounds } from '../../resources/js/game/inspect/gizmos.ts';
 import { controlOf, defaultControls } from '../../resources/js/game/inspect/inspectable.ts';
 import type { Cast, Controls } from '../../resources/js/game/inspect/inspectable.ts';
@@ -143,4 +145,21 @@ test('the row is models only: the five Build presets, each a figure from the fil
     }
     assert.equal(cast.parts(5).length, 0, 'something stands beside the row');
     assert.doesNotMatch(cast.readout(1, 1.8).sub, /primitives|for scale/);
+});
+
+test('the model card lists every data file that failed its check, by file and field', () => {
+    // Every file in the repo is valid, so a card today has no problems section at all.
+    assert.equal(dataProblems(), null);
+    const good = JSON.parse(readFileSync(new URL(`../../${DATA_DIR}casual-man.json`, import.meta.url), 'utf8')) as Record<string, unknown>;
+    const files = readAll({
+        './people/casual-man.json': good,
+        './people/adult-man-02.json': { ...good, id: 'adult-man-02', build: 'chunky', sex: undefined },
+    }, () => {});
+    const p = dataProblems(files);
+    assert.equal(p?.count, 1);
+    assert.match(p?.section.tables?.[0].caption ?? '', /1 data file failed its check/);
+    assert.deepEqual(p?.section.tables?.[0].rows, [
+        ['adult-man-02.json', '"sex" is missing; use one of male, female'],
+        ['adult-man-02.json', '"build" is "chunky"; use one of average, heavy-set'],
+    ]);
 });

@@ -37,7 +37,8 @@ import { hairNamed, schemeNamed, skinToneNamed } from '../../wardrobe.ts';
 import type { Age } from '../../recipe.ts';
 import type { Look } from '../../render/look.ts';
 import { makeToonGradient } from '../../render/materials.ts';
-import { PERSON_MODELS, UNKNOWN } from '../../data/people.ts';
+import { DATA_DIR, DATA_FILES, PERSON_MODELS, UNKNOWN } from '../../data/people.ts';
+import type { DataFile } from '../../data/people.ts';
 import { CROWD_MODEL, fetchModel } from '../../render/model-file.ts';
 import { standingHeight } from '../../render/person.ts';
 import {
@@ -201,6 +202,8 @@ function texturesOf(meshes: readonly THREE.Mesh[]): TextureInfo[] {
 
 const models = new Map<string, Model>();
 const failures = new Map<string, string>();
+// A model whose data file failed its check is not on any stage; asked for by name, it says why.
+for (const f of DATA_FILES) if (f.model === null) failures.set(f.path.slice(DATA_DIR.length).replace(/\.json$/, ''), f.errors.join('; '));
 
 const names = Object.keys(PERSON_MODELS);
 /**
@@ -628,13 +631,15 @@ class ModelCast implements Cast {
         const m = f.model, who = this.who;
         const dataFile = dataFileSection(name);
         const provenance = modelProvenance(name, m);
+        const problems = dataProblems();
+        const failed = problems === null ? [] : [['data files', `${problems.count} failed its check: see Data file problems`] as const];
         if (m === null || who === null) {
             const why = failures.get(name) ?? 'not loaded';
             return {
                 title: name, sub: 'no model on stage',
-                rows: [['data file', data?.path ?? 'none'], ['model file', data === undefined ? 'none' : `public${data.modelFile}`], ['status', why]],
+                rows: [['data file', data?.path ?? 'none'], ['model file', data === undefined ? 'none' : `public${data.modelFile}`], ['status', why], ...failed],
                 line: `${name} · ${why}`,
-                sections: [dataFile, provenance],
+                sections: [...(problems === null ? [] : [problems.section]), dataFile, provenance],
             };
         }
         const clip = f.action?.getClip();
@@ -690,6 +695,7 @@ class ModelCast implements Cast {
                 ['clip', playing],
                 ['mesh', `${count(m.triangles)} triangles · ${m.bones} bones`],
                 ...(f.shaped.held.length > 0 ? [['held back', f.shaped.held.map(h => h.key).join(', ')] as const] : []),
+                ...failed,
             ],
             swatches: [['skin', r.skin] as const, ['hair', r.hairColor] as const, ...roles.flatMap(role => {
                 const c = dressed.colors[role];
@@ -704,6 +710,7 @@ class ModelCast implements Cast {
                 bodySection(f, who, top),
                 personRecipe(who, '', 'model'),
                 personGeometry(who, { top, height, ...(f.torso === undefined ? {} : { torso: f.torso }) }),
+                ...(problems === null ? [] : [problems.section]),
                 dataFile,
                 model,
                 provenance,
@@ -851,6 +858,28 @@ function anchorTable(root: THREE.Object3D | null): InfoTable {
             a.bones.length === 0 ? 'not found' : a.bones.map(b => b.name).join(' + '),
             a.def.prim,
         ]),
+    };
+}
+
+/**
+ * Every data file in `data/people/` that failed its check, and each of its problems. Shown on every
+ * card, because a model whose file failed is on no stage to show it; null when every file is valid.
+ * The same messages went to the console when the files loaded.
+ */
+export function dataProblems(files: readonly DataFile[] = DATA_FILES): { count: number; section: InfoSection } | null {
+    const bad = files.filter(f => f.model === null);
+    if (bad.length === 0) return null;
+    return {
+        count: bad.length,
+        section: {
+            id: 'model', title: 'Data file problems',
+            tables: [{
+                caption: `${bad.length} data file${bad.length === 1 ? '' : 's'} failed ${bad.length === 1 ? 'its' : 'their'} check, so the game cannot draw ${bad.length === 1 ? 'that model' : 'those models'}`,
+                columns: ['file', 'problem'],
+                rows: bad.flatMap(f => f.errors.map(e => [f.path.slice(DATA_DIR.length), e.startsWith(`${f.path}: `) ? e.slice(f.path.length + 2) : e])),
+            }],
+            note: `Fix the file in ${DATA_DIR}; every problem names the field.`,
+        },
     };
 }
 
