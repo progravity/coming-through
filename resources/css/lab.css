@@ -103,7 +103,7 @@ a{color:var(--accent)}
 .tbl th{text-align:left;font-weight:500;color:var(--dim);font-size:10.5px;padding:2px 6px 2px 0;border-bottom:1px solid var(--line)}
 .tbl td{padding:2px 6px 2px 0;border-bottom:1px solid rgba(255,255,255,.04);white-space:nowrap}
 /* The last column is where a sentence goes; let it wrap rather than run off the card. */
-.tbl td:last-child{white-space:normal}
+.tbl td:last-child{white-space:normal;overflow-wrap:anywhere}
 .info .actions{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px}
 
 /* ---------- the crowd view's mix, and links dressed as buttons ---------- */

@@ -201,3 +201,23 @@ test('the model card lists every clip role, present with its clip or missing, an
     // A stand-in to stand people in, offered in the clip control.
     assert.ok((controlOf(MODEL, 'clip') as { options: readonly string[] }).options.some(o => /average pose/.test(o)));
 });
+
+test('the model card carries the spec checks, the whole checklist in one section, with the verdicts at its head', () => {
+    const { root, clip } = figure();
+    adopt(NAME, root, [clip]);
+    const cast = MODEL.mount(new THREE.Scene());
+    cast.rebuild(1, 1, { ...defaultControls(MODEL), model: NAME, clip: 'Hop' });
+    cast.draw(0, [0], 0);
+    const r = cast.readout(0, 1.8);
+    const spec = r.sections?.find(s => s.title === 'Spec checks');
+    assert.ok(spec !== undefined, 'no spec checks section');
+    const rows = spec.tables?.[0].rows ?? [];
+    const text = (c: unknown): string => (typeof c === 'string' ? c : (c as { text: string }).text);
+    const checks = rows.map(row => text(row[0]));
+    for (const c of ['skeleton', 'triangles', 'geometry', 'textures', 'data file', 'color slots', 'color rules', 'clip roles', 'provenance', 'Body Type row', 'on a phone']) {
+        assert.ok(checks.includes(c), `no "${c}" check`);
+    }
+    // A figure built in code has no GLB bytes and no data file: it says so rather than passing.
+    assert.equal(text(rows.find(row => text(row[0]) === 'data file')?.[1]), 'fail');
+    assert.match(String(new Map(r.rows).get('spec checks')), /failed · 7 manual$/);
+});

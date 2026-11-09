@@ -7,6 +7,8 @@
  */
 import type * as THREE from 'three';
 import type { PersonModel } from '../data/people.ts';
+import { readGlb } from './glb-facts.ts';
+import type { GlbFacts } from './glb-facts.ts';
 
 /**
  * The model the game's crowd is drawn from unless `?model=` names another. Crowd composition will
@@ -53,11 +55,13 @@ export const STRUCTURE_MODELS: Readonly<Record<string, StructureModel>> = {};
  */
 export const MODEL_DIR = '/models/';
 
-/** A parsed file: its scene, its clips, and how big it was on the wire. */
+/** A parsed file: its scene, its clips, how big it was on the wire, and what its bytes say it holds. */
 export interface ModelFile {
     readonly scene: THREE.Group;
     readonly animations: THREE.AnimationClip[];
     readonly bytes: number;
+    /** Meshes, triangles, materials, textures and bones, read off the GLB itself (`readGlb`); null if it could not be. */
+    readonly facts: GlbFacts | null;
 }
 
 /** The GLB's own file name, as Meshy exported it. A model's clothing arrangement is salted by it. */
@@ -91,5 +95,7 @@ export async function fetchModel(m: PersonModel): Promise<ModelFile> {
 export async function parseModel(buf: ArrayBuffer, m: PersonModel): Promise<ModelFile> {
     const { GLTFLoader } = await import('three/examples/jsm/loaders/GLTFLoader.js');
     const gltf = await new GLTFLoader().parseAsync(buf, m.modelFile.slice(0, m.modelFile.lastIndexOf('/') + 1));
-    return { scene: gltf.scene, animations: gltf.animations, bytes: buf.byteLength };
+    let facts: GlbFacts | null = null;
+    try { facts = readGlb(buf); } catch { /* the loader read it, so this cannot fail on a real GLB; a check then says it could not look */ }
+    return { scene: gltf.scene, animations: gltf.animations, bytes: buf.byteLength, facts };
 }

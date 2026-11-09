@@ -45,6 +45,9 @@ import {
 import type { Body, FullnessUniforms, Limits, ModelBody, Shaped } from '../../modelcrowd/body.ts';
 import { RUN_ON, STAND_IN, prepareClips, reportClips, speedText } from '../../modelcrowd/clips.ts';
 import type { ModelClips } from '../../modelcrowd/clips.ts';
+import type { GlbFacts } from '../../render/glb-facts.ts';
+import { REFERENCE_MODEL, TEXTURE_MAX, TRIANGLE_RANGE, checkSummary, regionFacts, specChecks } from './spec-checks.ts';
+import type { CheckStatus, SpecCheck } from './spec-checks.ts';
 import { dressOn, falseHex, personColors, prepareRegions } from '../../modelcrowd/regions.ts';
 import type { RegionUniforms, Regions } from '../../modelcrowd/regions.ts';
 import { count, n2 } from '../describe.ts';
@@ -105,6 +108,8 @@ interface Model {
     readonly body: ModelBody;
     /** Its clips by role, as the game plays them (`prepareClips`); null for a figure with no data file. */
     readonly roles: ModelClips | null;
+    /** What its GLB holds, read off its bytes (`readGlb`); null for a figure that did not come from one. */
+    readonly facts: GlbFacts | null;
 }
 
 /**
@@ -202,6 +207,8 @@ function texturesOf(meshes: readonly THREE.Mesh[]): TextureInfo[] {
 
 const models = new Map<string, Model>();
 const failures = new Map<string, string>();
+/** Each model's spec checks, worked out once: nothing they read changes while the page is open. */
+const checked = new Map<string, readonly SpecCheck[]>();
 // A model whose data file failed its check is not on any stage; asked for by name, it says why.
 for (const f of DATA_FILES) if (f.model === null) failures.set(f.path.slice(DATA_DIR.length).replace(/\.json$/, ''), f.errors.join('; '));
 
@@ -256,7 +263,7 @@ function refreshClips(): void {
  * What a loaded file brings beside its scene: its body, from its data file, its clips by role, and
  * how long it took to arrive.
  */
-export interface Arrival { body?: ModelBody; clips?: ModelClips; loadMs?: number }
+export interface Arrival { body?: ModelBody; clips?: ModelClips; facts?: GlbFacts | null; loadMs?: number }
 
 /**
  * Take a loaded figure into the bench under `name`. What `load` does with each file that arrives,
@@ -294,9 +301,11 @@ export function adopt(name: string, root: THREE.Object3D, clips: readonly THREE.
     models.set(name, {
         name, root, clips, meshes, shipped, rest, pristine, verts, bones: bones.size, bytes, regions, triangles, restHeight,
         textures: texturesOf(meshes), loadMs: arrival.loadMs ?? 0,
-        body: arrival.body ?? NO_MODEL_BODY, roles: arrival.clips ?? null,
+        body: arrival.body ?? NO_MODEL_BODY, roles: arrival.clips ?? null, facts: arrival.facts ?? null,
     });
     failures.delete(name);
+    // Another model's checks read this one's skeleton when it is the reference: work them all out afresh.
+    checked.clear();
     refreshClips();
 }
 
@@ -312,9 +321,10 @@ async function load(): Promise<void> {
             const loadMs = performance.now() - t0;
             const regions = prepareRegions(model, got.scene);
             const clips = reportClips(prepareClips(model, got.scene, got.animations));
-            adopt(name, got.scene, got.animations, got.bytes, regions, { body: bodyOf(model), clips, loadMs });
+            adopt(name, got.scene, got.animations, got.bytes, regions, { body: bodyOf(model), clips, facts: got.facts, loadMs });
         } catch (e) {
             failures.set(name, e instanceof Error ? e.message : String(e));
+            checked.clear();
         }
     }
 }
@@ -633,13 +643,14 @@ class ModelCast implements Cast {
         const provenance = modelProvenance(name, m);
         const problems = dataProblems();
         const failed = problems === null ? [] : [['data files', `${problems.count} failed its check: see Data file problems`] as const];
+        const spec = specSection(name);
         if (m === null || who === null) {
             const why = failures.get(name) ?? 'not loaded';
             return {
                 title: name, sub: 'no model on stage',
-                rows: [['data file', data?.path ?? 'none'], ['model file', data === undefined ? 'none' : `public${data.modelFile}`], ['status', why], ...failed],
+                rows: [['data file', data?.path ?? 'none'], ['model file', data === undefined ? 'none' : `public${data.modelFile}`], ['status', why], ['spec checks', spec.summary], ...failed],
                 line: `${name} · ${why}`,
-                sections: [...(problems === null ? [] : [problems.section]), dataFile, provenance],
+                sections: [...(problems === null ? [] : [problems.section]), spec.section, dataFile, provenance],
             };
         }
         const clip = f.action?.getClip();
@@ -693,6 +704,7 @@ class ModelCast implements Cast {
                 ['body', `${m.body.ageClass} model${child ? ` (a ${r.modelClass}, on an ${m.body.ageClass} model)` : ''} · ${bodyTypeLabel(f.spec)}`],
                 ...(fallback === null ? [] : [['in the game', `${fallback}${r.equipment !== 'none' ? '; its collider is sized for the equipment' : ''}`] as const]),
                 ['clip', playing],
+                ['spec checks', spec.summary],
                 ...(roles === null ? [] : [['clip roles', roles.summary] as const]),
                 ['mesh', `${count(m.triangles)} triangles · ${m.bones} bones`],
                 ...(f.shaped.held.length > 0 ? [['held back', f.shaped.held.map(h => h.key).join(', ')] as const] : []),
@@ -712,6 +724,7 @@ class ModelCast implements Cast {
                 personRecipe(who, '', 'model'),
                 personGeometry(who, { top, height, ...(f.torso === undefined ? {} : { torso: f.torso }) }),
                 ...(problems === null ? [] : [problems.section]),
+                spec.section,
                 dataFile,
                 ...(roles === null ? [] : [roles.section]),
                 model,
@@ -815,6 +828,52 @@ function comparisonTable(current: string): InfoTable {
 }
 
 const share = (v: number): string => `${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%`;
+
+/** The color each verdict is shown with. */
+const VERDICT: Readonly<Record<CheckStatus, number>> = { pass: 0x4caf50, warning: 0xe0a030, fail: 0xd9534f, info: 0x8a8f98, manual: 0x6b8fd6 };
+
+/** A model's spec checks: worked out from what it loaded as, once per model. */
+function checksFor(name: string): readonly SpecCheck[] {
+    let out = checked.get(name);
+    if (out === undefined) {
+        const m = models.get(name) ?? null;
+        out = specChecks({
+            id: name,
+            data: DATA_FILES.find(f => f.path === `${DATA_DIR}${name}.json`),
+            facts: m?.facts ?? null,
+            ...(m === null ? { failure: failures.get(name) ?? 'not loaded' } : m.facts === null ? { failure: 'its bytes were not read' } : {}),
+            reference: models.get(REFERENCE_MODEL)?.facts ?? null,
+            regions: regionFacts(m?.regions ?? null),
+            clips: m?.roles ?? null,
+            loadMs: m?.loadMs ?? 0,
+        });
+        checked.set(name, out);
+    }
+    return out;
+}
+
+/**
+ * The model against the spec's acceptance checklist: pass, warning or fail for everything the lab
+ * can read, with the numbers behind each, then the items only a person can judge, so the whole
+ * checklist is on the card (`spec-checks.ts`).
+ */
+function specSection(name: string): { section: InfoSection; summary: string } {
+    const checks = checksFor(name);
+    const summary = checkSummary(checks);
+    return {
+        summary,
+        section: {
+            id: 'model', title: 'Spec checks',
+            rows: [{ k: 'result', v: `${name} · ${summary}` }],
+            tables: [{
+                caption: 'docs/specs/person-model.md, acceptance checklist',
+                columns: ['check', 'result', ''],
+                rows: checks.map(c => [c.check, { text: c.status, color: VERDICT[c.status], strong: c.status === 'fail' }, c.detail]),
+            }],
+            note: `Triangles ${TRIANGLE_RANGE[0].toLocaleString('en-US')} to ${TRIANGLE_RANGE[1].toLocaleString('en-US')}; one mesh, one material; one base color texture at ${TEXTURE_MAX}×${TEXTURE_MAX} or smaller and no metallic, roughness or normal map; the skeleton compared with ${REFERENCE_MODEL}'s. An unknown provenance field is a warning; a model that falls short is reported, not hidden.`,
+        },
+    };
+}
 
 /**
  * Each clip role, present with the clip that fills it or missing, as the card's own section, and a
