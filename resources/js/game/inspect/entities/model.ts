@@ -36,7 +36,8 @@ import type { Look } from '../../render/look.ts';
 import { makeToonGradient } from '../../render/materials.ts';
 import { DATA_DIR, DATA_FILES, PERSON_MODELS, UNKNOWN } from '../../data/people.ts';
 import type { DataFile } from '../../data/people.ts';
-import { CROWD_MODEL, fetchModel } from '../../render/model-file.ts';
+import { CROWD_MODEL, crowdModels } from '../../composition.ts';
+import { fetchModel } from '../../render/model-file.ts';
 import { standingHeight } from '../../render/person.ts';
 import {
     BODY_KEYS, BODY_TYPES, BODY_TYPE_PRESETS, BodyRig, CHILD_NOTE, LIMITS, NOT_ON_MODELS, bakeMask,
@@ -225,13 +226,13 @@ const modelControl: Control = {
 };
 
 /**
- * The model the game would draw this person from: the crowd's model when it is of the class they
- * need, else the first model of that class, else the crowd's. Read off the data files, so it is
- * known before anything has loaded.
+ * The model the game would draw this person from: the crowd's model of the class they need
+ * (`crowdModels`, which the game loads), else the crowd's adult one. Read off the data files, so it
+ * is known before anything has loaded.
  */
 function gameModelFor(who: Subject): { name: string; found: boolean } {
-    const of = [CROWD_MODEL, ...names].find(n => PERSON_MODELS[n]?.ageClass === who.recipe.modelClass);
-    return { name: of ?? CROWD_MODEL, found: of !== undefined };
+    const of = crowdModels()[who.recipe.modelClass];
+    return { name: of?.id ?? CROWD_MODEL, found: of !== undefined };
 }
 /**
  * The clip names are the file's, so this control is only complete once `load` has run: it starts as
@@ -1076,8 +1077,9 @@ export const MODEL: Inspectable = {
         modelControl,
         PERSON_CONTROLS.bodyType, PERSON_CONTROLS.skin, PERSON_CONTROLS.hair, PERSON_CONTROLS.scheme,
         PERSON_CONTROLS.behavior,
-        // Listed and greyed rather than hidden: the panel is also the list of what models still lack.
-        { ...equipment, disabled: `strollers, wheelchairs, scooters and canes: ${NOT_ON_MODELS}; the game draws their users as primitives` },
+        // Each piece listed and greyed rather than hidden, with the reason: the panel is also the
+        // list of what models still lack, and the crowd has nobody using one until a model can.
+        equipment,
         { kind: 'toggle', id: 'accessories', label: 'accessories', value: false, disabled: `hats, glasses, bags and carried things: ${NOT_ON_MODELS}` },
         // What the row stands side by side: see the file comment. Single view is always the one figure.
         { kind: 'enum', id: 'compare', label: 'row compares', options: COMPARE, value: 'body-type', key: 'v', rebuilds: true },

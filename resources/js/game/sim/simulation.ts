@@ -4,6 +4,7 @@
  */
 import { BEHAVIOR_KEYS } from '../behaviors.ts';
 import type { BehaviorMix } from '../behaviors.ts';
+import type { Drawable } from '../composition.ts';
 import { Hasher } from '../core/hash.ts';
 import { makeStreams } from '../core/rng.ts';
 import type { Streams } from '../core/rng.ts';
@@ -63,11 +64,15 @@ export class Simulation {
      *   view is the only caller that passes one; a run of the game never does, so it changes
      *   nothing either determinism hash reads. It changes what each person's behavior roll selects,
      *   never how many rolls are taken.
+     * @param options.drawable What the game can draw a person with, in place of what the data files
+     *   say (`DRAWABLE` in `composition.ts`): how a test asks what a child model or an equipment
+     *   item would bring back into the crowd. The game never passes one either, and like the mix it
+     *   changes only what the rolls select.
      */
-    constructor(seed: number, options: { mix?: BehaviorMix } = {}) {
+    constructor(seed: number, options: { mix?: BehaviorMix; drawable?: Drawable } = {}) {
         this.seed = seed >>> 0;
         this.streams = makeStreams(this.seed);
-        this.crowd = new Crowd(this.streams, options.mix);
+        this.crowd = new Crowd(this.streams, options.mix, options.drawable);
     }
 
     /**

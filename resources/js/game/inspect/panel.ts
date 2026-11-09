@@ -18,7 +18,8 @@ interface Segmented<T extends string> {
     set(value: T): void;
 }
 
-function segmented<T extends string>(options: readonly T[], onPick: (v: T) => void, titles?: (v: T) => string): Segmented<T> {
+function segmented<T extends string>(options: readonly T[], onPick: (v: T) => void, titles?: (v: T) => string,
+    unavailable?: Readonly<Record<string, string>>): Segmented<T> {
     const el = document.createElement('div');
     el.className = 'row';
     const buttons = new Map<T, HTMLButtonElement>();
@@ -26,7 +27,10 @@ function segmented<T extends string>(options: readonly T[], onPick: (v: T) => vo
         const b = document.createElement('button');
         b.type = 'button';
         b.textContent = titles?.(o) ?? o;
-        b.onclick = () => onPick(o);
+        // Listed and greyed, with the reason on hover, rather than left out.
+        const why = unavailable?.[o];
+        if (why !== undefined) { b.disabled = true; b.title = why; }
+        b.onclick = () => { if (!b.disabled) onPick(o); };
         buttons.set(o, b);
         el.appendChild(b);
     }
@@ -37,7 +41,8 @@ function segmented<T extends string>(options: readonly T[], onPick: (v: T) => vo
  * A choice with more options than fit on a row -- a dozen clothing schemes, eight behaviors -- as
  * a dropdown, with the same `set` the segmented row has, so the panel treats the two alike.
  */
-function dropdown<T extends string>(name: string, options: readonly T[], onPick: (v: T) => void, titles?: (v: T) => string): Segmented<T> {
+function dropdown<T extends string>(name: string, options: readonly T[], onPick: (v: T) => void, titles?: (v: T) => string,
+    unavailable?: Readonly<Record<string, string>>): Segmented<T> {
     const el = document.createElement('div');
     el.className = 'row';
     const sel = document.createElement('select');
@@ -47,6 +52,8 @@ function dropdown<T extends string>(name: string, options: readonly T[], onPick:
         const opt = document.createElement('option');
         opt.value = o;
         opt.textContent = titles?.(o) ?? o;
+        const why = unavailable?.[o];
+        if (why !== undefined) { opt.disabled = true; opt.title = why; opt.textContent += ' (none yet)'; }
         sel.appendChild(opt);
     }
     sel.onchange = () => onPick(sel.value as T);
@@ -225,10 +232,19 @@ export class Panel {
             if (c.kind === 'enum') {
                 const title = (v: string): string => c.titles?.[v] ?? v;
                 const seg = c.options.length > ROW_MAX
-                    ? dropdown(c.label, c.options, v => this.h.setControl(c.id, v), title)
-                    : segmented(c.options, v => this.h.setControl(c.id, v), title);
+                    ? dropdown(c.label, c.options, v => this.h.setControl(c.id, v), title, c.unavailable)
+                    : segmented(c.options, v => this.h.setControl(c.id, v), title, c.unavailable);
                 this.enums.set(c.id, seg);
                 this.dyn.append(label(c.label), seg.el);
+                // The options it cannot offer yet, and why, under the control that lists them.
+                const why = new Map<string, string[]>();
+                for (const [o, r] of Object.entries(c.unavailable ?? {})) why.set(r, [...(why.get(r) ?? []), title(o)]);
+                if (why.size > 0) {
+                    const note = document.createElement('p');
+                    note.className = 'hint';
+                    note.textContent = [...why].map(([r, names]) => `${names.join(', ')}: ${r}`).join(' · ');
+                    this.dyn.append(note);
+                }
             } else if (c.kind === 'toggle') {
                 const b = button(c.label, () => this.h.setControl(c.id, !b.classList.contains('on')));
                 this.toggles.set(c.id, b);

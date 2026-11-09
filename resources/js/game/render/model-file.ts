@@ -10,11 +10,8 @@ import type { PersonModel } from '../data/people.ts';
 import { readGlb } from './glb-facts.ts';
 import type { GlbFacts } from './glb-facts.ts';
 
-/**
- * The model the game's crowd is drawn from unless `?model=` names another. Crowd composition will
- * choose models by their facts; until then, this one.
- */
-export const CROWD_MODEL = 'casual-man';
+/** The model the crowd's adults are drawn from unless `?model=` names another: composition's to say. */
+export { CROWD_MODEL } from '../composition.ts';
 
 /**
  * **Designed, not built: a model for a fixture or building type.** One model per type, standing in

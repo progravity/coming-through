@@ -29,7 +29,8 @@
  */
 import { BEHAVIORS, BEHAVIOR_KEYS, needsOf } from './behaviors.ts';
 import type { BehaviorKey, BehaviorMix, ModelClass } from './behaviors.ts';
-import { COMPOSITION, pick } from './composition.ts';
+import { COMPOSITION, crowdBehavior, crowdEquipment, crowdStroller, pick } from './composition.ts';
+import type { Drawable } from './composition.ts';
 import type { Rng } from './core/rng.ts';
 import { FRAME, fromFamily, fromList } from './palette.ts';
 import type { Range } from './util.ts';
@@ -48,7 +49,10 @@ export const BODY_TYPES: readonly BodyType[] = ['slim', 'trim', 'average', 'soli
  */
 export const BODY_TYPE_WIDTH: Readonly<Record<BodyType, number>> = { slim: 0.84, trim: 0.93, average: 1.02, solid: 1.11, broad: 1.2 };
 
-/** Equipment a person uses. Not yet supported on models: anyone with some is drawn as primitives. */
+/**
+ * Equipment a person uses. None of it can be drawn on a model yet, so the crowd rolls none
+ * (`EQUIPMENT_ITEMS` in `composition.ts`); the rolls and the motion profiles stay for when it can.
+ */
 export type Equipment = 'none' | 'stroller' | 'cane' | 'wheelchair' | 'scooter';
 export const EQUIPMENT: readonly Equipment[] = ['none', 'stroller', 'cane', 'wheelchair', 'scooter'];
 /** The mobility aids: equipment that is a way of moving rather than something pushed. */
@@ -100,7 +104,7 @@ export interface MotionProfile {
 export interface Recipe extends Choices {
     /**
      * The class of model this person has to be drawn from: a child for a Darter, an adult for
-     * everyone else. The renderer draws a person whose class it has no model for as primitives.
+     * everyone else. The crowd holds nobody whose class has no model (`composition.ts`).
      */
     modelClass: ModelClass;
     /** Whether a Group Walker leader's family wears their scheme. Rolled for everyone, read for leaders. */
@@ -237,19 +241,27 @@ const PARTS = { hat: 0.35, glasses: 0.18, beard: 0.2, ponytail: 0.22, jacket: 0.
 export interface RecipeOptions extends Partial<Choices> {
     /** Behavior weights in place of the composition's: the people lab's crowd mix. */
     mix?: BehaviorMix;
+    /**
+     * What the game can draw, in place of what the data files say (`DRAWABLE`): a test's way of
+     * asking what a child model or an equipment item would bring back. The game never passes one.
+     */
+    drawable?: Drawable;
     /** Fixed shirt color. Only the player uses this. */
     shirt?: number;
 }
 
 const lerpRange = (v: Range, t: number): number => (typeof v === 'number' ? v : v[0] + (v[1] - v[0]) * t);
-const behaviorWeights = (mix: BehaviorMix | undefined): Readonly<Record<BehaviorKey, number>> => mix ?? COMPOSITION.behavior;
+/** The weights a behavior roll selects against: the composition's or the mix, less what no model can draw. */
+const behaviorWeights = (mix: BehaviorMix | undefined, drawable: Drawable | undefined): Readonly<Record<BehaviorKey, number>> =>
+    crowdBehavior(mix, drawable);
 
 /**
  * The behavior agent N will roll, read ahead of building them: the first draw of their recipe
  * fork, selected exactly as `makeRecipe` selects it. The spawner needs it before the person exists,
  * to know whether a family or a parent comes with them. `rng` must be a fresh fork.
  */
-export const behaviorAhead = (rng: Rng, mix?: BehaviorMix): BehaviorKey => pick(behaviorWeights(mix), BEHAVIOR_KEYS, rng.next());
+export const behaviorAhead = (rng: Rng, mix?: BehaviorMix, drawable?: Drawable): BehaviorKey =>
+    pick(behaviorWeights(mix, drawable), BEHAVIOR_KEYS, rng.next());
 
 /**
  * Roll one person. `rng` must be this person's own fork of the `recipe` stream so the roll order
@@ -277,7 +289,7 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
     // ---- the choices ----
     // A stroller only ever comes with a Slow Walker, so forcing one forces the profile too.
     const behavior = opts.equipment === 'stroller' ? 'slow-walker'
-        : opts.behavior ?? pick(behaviorWeights(opts.mix), BEHAVIOR_KEYS, behavior0);
+        : opts.behavior ?? pick(behaviorWeights(opts.mix, opts.drawable), BEHAVIOR_KEYS, behavior0);
     const B = BEHAVIORS[behavior];
     const bodyType = opts.bodyType ?? pick(COMPOSITION.bodyType, BODY_TYPES, bodyType0);
     const skinTone = opts.skinTone ?? pick(COMPOSITION.skinTone, SKIN_TONE_KEYS, skin0);
@@ -286,9 +298,11 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
     const scheme = opts.scheme ?? pick(COMPOSITION.scheme, POOLED_KEYS, scheme0);
     // Someone pushing a stroller has their hands full: it and a mobility aid never combine. And a
     // mobility scooter is an adult's: a child who rolls one walks (the lab can still force it).
+    // Equipment no model can be drawn with has no weight, so today nobody rolls any; the rolls are
+    // taken all the same.
     const modelClass = needsOf(behavior);
-    const rolledStroller = behavior === 'slow-walker' && stroller0 < COMPOSITION.stroller;
-    const rolledAid = pick(COMPOSITION.equipment, AIDS, equip0);
+    const rolledStroller = behavior === 'slow-walker' && stroller0 < crowdStroller(opts.drawable);
+    const rolledAid = pick(crowdEquipment(opts.drawable), AIDS, equip0);
     const equipment: Equipment = opts.equipment
         ?? (rolledStroller ? 'stroller' : modelClass === 'child' && rolledAid === 'scooter' ? 'none' : rolledAid);
     const ep = EQUIP[equipment];

@@ -83,10 +83,13 @@ export function createPlayer(): Player {
     // The player's look is fixed: rolled from a constant seed rather than a run stream, and then
     // pinned. Everything the camera and the shoulder view read is written out rather than left to
     // the roll, so a change to the appearance rolls re-dresses the crowd and never the player, and
-    // never moves the first-person eye (`eyeHeight` reads `h` and `headR`). These are the values the
-    // roll gave before the age roll was removed. h puts them at about 1.73 m: the middle of the
-    // crowd, not a head above it.
-    const recipe = makeRecipe(new Rng(0), { behavior: 'typical', bodyType: 'trim', skinTone: 'light', equipment: 'none', shirt: 0xf2f0ea });
+    // never moves the first-person eye (the model is drawn at the height `h` and `headR` give). These
+    // are the values the roll gave before the age roll was removed. h puts them at about 1.75 m: the
+    // middle of the crowd, not a head above it. The model dresses them from their scheme and its
+    // arrangement, so those are pinned too, at what the roll gave when the player became a model.
+    const recipe = makeRecipe(new Rng(0), { behavior: 'typical', bodyType: 'trim', skinTone: 'light', equipment: 'none', shirt: 0xf2f0ea,
+        hairTone: 'dark-brown', scheme: 'bold-primaries' });
+    recipe.arrange = 0.6489853798411787; recipe.hairColor = 0x332419;
     recipe.h = 0.93; recipe.headR = 0.1794; recipe.hat = 'cap'; recipe.hatColor = 0xd9534f;
     recipe.skin = 0xefcca9; recipe.pants = 0xc8a97e; recipe.shoe = 0xd4a21f; recipe.shorts = true; recipe.bag = false;
     recipe.gait = { bob: 0.046, stride: 0.636, cadence: 9.1, arm: 0.42, limp: 0 };

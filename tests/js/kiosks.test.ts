@@ -22,6 +22,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import * as THREE from 'three';
+import { AS_DESIGNED } from '../../resources/js/game/composition.ts';
 import { Rng } from '../../resources/js/game/core/rng.ts';
 import { KIOSK } from '../../resources/js/game/palette.ts';
 import { Agent } from '../../resources/js/game/sim/agent.ts';
@@ -359,8 +360,10 @@ test('the crowd threads round the carts instead of walking through them', () => 
 test('nobody gets stuck behind a cart, however wide they are', () => {
     // The corridor between a cart and the railings is the trap this layer can create: a gap the
     // crowd can walk into and the widest bodies cannot walk out of. Measured as the widest body that
-    // ever ends up there against the room there actually is.
-    const sim = new Simulation(1);
+    // ever ends up there against the room there actually is. The widest are stroller pushers, whom
+    // no model can draw yet and so today's crowd does not hold; the crowd as designed does, and the
+    // corridor has to be ready for them when it holds them again.
+    const sim = new Simulation(1, { drawable: AS_DESIGNED });
     sim.prime(190);
     const carts = kioskObstacles(sim.crowd.obstacles);
     const behind = Math.min(...kiosks().map(k => PATH.halfWidth(k.s) - Math.abs(k.solid.n) - k.solid.r));

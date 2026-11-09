@@ -1,11 +1,11 @@
 /**
- * The crowd drawn as clones of one rigged model: **the default way people are drawn**. The primitive
- * people remain the fallback -- `?people=prim` for the whole crowd, and always for the player and for
- * anyone with equipment, which models cannot carry yet, and anyone whose model class this model is
- * not -- a Darter needs a child model (`drawsAsPrimitive`).
+ * The people of one age class drawn as clones of one rigged model: **how every person is drawn**,
+ * the player included. The game builds one of these per age class the crowd has a model for
+ * (`crowdModels` in `composition.ts`), and each draws the people of its own class; composition
+ * leaves out anyone no model can draw.
  *
- * It reads the same interpolated pose the primitive renderer reads and writes nothing back, so it
- * can move neither determinism hash. The simulation never imports it.
+ * It reads the interpolated pose the simulation leaves and writes nothing back, so it can move
+ * neither determinism hash. The simulation never imports it.
  *
  * One clone per crowd slot, built at load and hidden while the slot is empty, so nothing is
  * allocated during play. Two decisions in here are worth knowing before measuring with it:
@@ -33,9 +33,10 @@ import type { ModelFile } from '../render/model-file.ts';
 import { standingHeight } from '../render/person.ts';
 import type { Agent } from '../sim/agent.ts';
 import { lerpPose, newPose } from '../sim/pose.ts';
-import { MAX } from '../world/layout.ts';
+import type { Pose } from '../sim/pose.ts';
+import { MAX, PLAYER_SLOT } from '../world/layout.ts';
 import { PATH } from '../world/path.ts';
-import { BodyRig, LIMITS, bakeMask, drawnHeight, drawsAsPrimitive, patchFullness, shapeRecipe } from './body.ts';
+import { BodyRig, LIMITS, bakeMask, drawnHeight, drawsAsPrimitive, eyeLevel, patchFullness, shapeRecipe } from './body.ts';
 import type { FullnessUniforms, Limits, ModelBody } from './body.ts';
 import type { ModelClass } from '../behaviors.ts';
 import { GaitState, newMix } from './clips.ts';
@@ -103,6 +104,34 @@ function inkMaterial(): THREE.MeshBasicMaterial {
     return m;
 }
 
+/**
+ * The player, as the renderer draws them: who they are, where this frame puts them, how fast they
+ * are really going (the shove included), and their time on the clock. The player is not an `Agent`,
+ * so the game hands over the few things a clone needs instead.
+ */
+export interface PlayerFigure {
+    readonly recipe: Recipe;
+    /** Already interpolated to this frame. */
+    readonly view: Pose;
+    readonly speed: number;
+    readonly time: number;
+}
+
+/** How tall a person is drawn on this model and where their eyes are, in meters above the ground. */
+export interface FigureHeights {
+    readonly height: number;
+    readonly eye: number;
+}
+
+/** What a clone needs to play its clips this frame. */
+interface Going {
+    distance: number;
+    time: number;
+    speed: number;
+    scale: number;
+    mayRun: boolean;
+}
+
 /** Put an action at a time and a weight; one with no weight is not evaluated at all. */
 function pose(a: THREE.AnimationAction, time: number, weight: number): void {
     a.enabled = weight > 1e-4;
@@ -126,7 +155,7 @@ export class ModelCrowd {
     fallback = 0;
     /** Equipment users, out of `fallback`; the rest need another model class (a Darter, a child). */
     fallbackEquipment = 0;
-    /** The class of person this model can be, from its data file: an adult unless it says otherwise. */
+    /** The class of person this model draws, from its data file: an adult unless it says otherwise. */
     readonly drawable: ModelClass;
     /**
      * Draw everyone from the model, the fallback's people included -- without their equipment, and an
@@ -140,6 +169,9 @@ export class ModelCrowd {
     private readonly slots: Slot[] = [];
     /** The model's height in its rest pose, which each recipe's standing height is scaled against. */
     private readonly height: number;
+    /** Its eye line in its rest pose, as a fraction of that height (`eyeLevel`). */
+    private readonly eye: number;
+    private readonly going: Going = { distance: 0, time: 0, speed: 0, scale: 1, mayRun: true };
     private readonly view = newPose();
     private frame = 0;
 
@@ -174,7 +206,12 @@ export class ModelCrowd {
         const geo = src.geometry;
         geo.computeBoundingBox();
         geo.computeBoundingSphere();
-        this.height = (geo.boundingBox as THREE.Box3).max.y - (geo.boundingBox as THREE.Box3).min.y;
+        const box = geo.boundingBox as THREE.Box3;
+        this.height = box.max.y - box.min.y;
+        // Where the camera sits for a player drawn on this model, measured off the model itself.
+        const eye = eyeLevel(src);
+        if (eye === null) throw new Error('the rig has no head bone, so its eye height cannot be measured');
+        this.eye = (eye - box.min.y) / this.height;
         this.trisPerModel = (geo.index !== null ? geo.index.count : geo.getAttribute('position').count) / 3;
         this.bones = src.skeleton.bones.length;
         // The rest pose's sphere in model space, padded for limbs swinging out of it. Set on the
@@ -249,53 +286,43 @@ export class ModelCrowd {
     }
 
     /**
-     * Place and pose every agent's clone for this frame. `from` is where distance is measured from
-     * for the throttle: the player, which is where the camera is in first person and close to it in
-     * the other two views. `inkOn` is the game's own ink switch, which this follows rather than
-     * keeping a second one.
+     * Place and pose this frame's clones: every agent of this model's class, and the player when
+     * `player` is given (the game leaves them out in first person, where the camera is their eyes).
+     * `from` is where distance is measured from for the throttle: the player, which is where the
+     * camera is in first person and close to it in the other two views. `inkOn` is the game's own
+     * ink switch, which this follows rather than keeping a second one.
      */
-    draw(agents: readonly Agent[], alpha: number, from: { readonly x: number; readonly z: number }, inkOn: boolean): void {
+    draw(agents: readonly Agent[], alpha: number, from: { readonly x: number; readonly z: number }, inkOn: boolean,
+        player: PlayerFigure | null = null): void {
         this.setInk(inkOn);
         this.bodyDraws = 0; this.inkDraws = 0;
-        const k = this.knobs, view = this.view, frame = this.frame++;
+        const k = this.knobs, view = this.view, frame = this.frame++, go = this.going;
         const far2 = k.far * k.far, every = Math.max(1, Math.round(k.every));
         let animated = 0, fallback = 0, equipment = 0;
         for (const s of this.slots) s.used = false;
         for (const a of agents) {
             const s = this.slots[a.slot];
             if (s === undefined) continue;
-            // Equipment the model cannot carry: left to the primitives, whose collider it matches.
+            // Someone of another age class is drawn by that class's model.
+            if (a.recipe.modelClass !== this.drawable && !this.everyone) continue;
             if (drawsAsPrimitive(a.recipe, this.drawable)) {
                 fallback++;
                 if (a.recipe.equipment !== 'none') equipment++;
                 if (!this.everyone) continue;
             }
-            s.used = true;
             lerpPose(view, a.prev, a, alpha);
-            if (s.recipe !== a.recipe) this.dress(s, a.recipe);
-            const g = s.group;
-            g.visible = true;
-            g.position.set(view.x, PATH.surfaceY(view.x, view.z), view.z);
-            g.rotation.y = view.yaw;
             const dx = view.x - from.x, dz = view.z - from.z;
-            if (k.throttle && !s.fresh && dx * dx + dz * dz > far2 && (frame + a.slot) % every !== 0) continue;
-            s.fresh = false;
+            const throttled = k.throttle && dx * dx + dz * dz > far2 && (frame + a.slot) % every !== 0;
             // A mobility aid is out of scope here, so its user walks rather than running past.
-            const go = {
-                distance: view.phase / a.recipe.gait.cadence, time: a.t - (1 - alpha) * SIM_DT,
-                speed: Math.hypot(a.vx, a.vz), scale: g.scale.y, mayRun: a.recipe.mobility === 'none',
-            };
-            if (s.restart) { s.gait.reset(this.model, go); s.restart = false; }
-            const m = s.gait.update(this.model, go, s.idleOffset, this.mix);
-            pose(s.walk, m.walkTime, m.walkWeight);
-            if (s.run !== null) pose(s.run, m.runTime, m.runWeight);
-            if (s.idle !== null) pose(s.idle, m.idleTime, m.idleWeight);
-            s.mixer.update(0);
-            // The body's joints, onto the pose the clip just wrote.
-            s.shape.pose();
-            s.rig.updateMatrixWorld(true);
-            s.dirty = true;
-            animated++;
+            go.distance = view.phase / a.recipe.gait.cadence; go.time = a.t - (1 - alpha) * SIM_DT;
+            go.speed = Math.hypot(a.vx, a.vz); go.mayRun = a.recipe.mobility === 'none';
+            if (this.place(s, a.recipe, view, go, throttled)) animated++;
+        }
+        const ps = player === null ? undefined : this.slots[PLAYER_SLOT];
+        if (player !== null && ps !== undefined) {
+            go.distance = player.view.phase / player.recipe.gait.cadence; go.time = player.time;
+            go.speed = player.speed; go.mayRun = true;
+            if (this.place(ps, player.recipe, player.view, go, false)) animated++;
         }
         for (const s of this.slots) {
             if (!s.used && s.group.visible) { s.group.visible = false; s.recipe = null; }
@@ -303,6 +330,42 @@ export class ModelCrowd {
         this.animated = animated;
         this.fallback = fallback;
         this.fallbackEquipment = equipment;
+    }
+
+    /**
+     * Stand one clone where `view` puts it, dressed for `r`, and pose it unless it is `throttled`.
+     * True when its skeleton was evaluated.
+     */
+    private place(s: Slot, r: Recipe, view: Pose, go: Going, throttled: boolean): boolean {
+        s.used = true;
+        if (s.recipe !== r) this.dress(s, r);
+        const g = s.group;
+        g.visible = true;
+        g.position.set(view.x, PATH.surfaceY(view.x, view.z), view.z);
+        g.rotation.y = view.yaw;
+        if (throttled && !s.fresh) return false;
+        s.fresh = false;
+        go.scale = g.scale.y;
+        if (s.restart) { s.gait.reset(this.model, go); s.restart = false; }
+        const m = s.gait.update(this.model, go, s.idleOffset, this.mix);
+        pose(s.walk, m.walkTime, m.walkWeight);
+        if (s.run !== null) pose(s.run, m.runTime, m.runWeight);
+        if (s.idle !== null) pose(s.idle, m.idleTime, m.idleWeight);
+        s.mixer.update(0);
+        // The body's joints, onto the pose the clip just wrote.
+        s.shape.pose();
+        s.rig.updateMatrixWorld(true);
+        s.dirty = true;
+        return true;
+    }
+
+    /**
+     * How tall `r` is drawn on this model, and where their eyes are: what the camera stands the
+     * player's eye and its follow shot on, measured off the model rather than any other figure.
+     */
+    heights(r: Recipe): FigureHeights {
+        const height = drawnHeight(standingHeight(r), r);
+        return { height, eye: height * this.eye };
     }
 
     /**

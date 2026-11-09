@@ -119,7 +119,7 @@ export function stateFor(e: Inspectable, mode: string, search: string, pinned: C
     for (const c of e.controls) {
         const raw = q.get(c.id);
         if (raw === null || c.disabled !== undefined) continue;
-        if (c.kind === 'enum') { if (c.options.includes(raw)) controls[c.id] = raw; }
+        if (c.kind === 'enum') { if (c.options.includes(raw) && c.unavailable?.[raw] === undefined) controls[c.id] = raw; }
         else if (c.kind === 'toggle') controls[c.id] = raw === '1';
         else if (c.kind === 'number') controls[c.id] = clampNumber(c, num(raw, c.value));
         else {

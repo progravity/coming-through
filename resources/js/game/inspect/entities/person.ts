@@ -19,10 +19,10 @@
 import * as THREE from 'three';
 import { BEHAVIORS, BEHAVIOR_KEYS } from '../../behaviors.ts';
 import type { Behavior, BehaviorKey } from '../../behaviors.ts';
-import { COMPOSITION } from '../../composition.ts';
+import { COMPOSITION, behaviorUnavailable, crowdBehavior, crowdEquipment, crowdStroller, equipmentUnavailable } from '../../composition.ts';
 import { PALETTE } from '../../palette.ts';
 import { figureHeight, figureName } from '../../recipe.ts';
-import type { Choices, Recipe } from '../../recipe.ts';
+import type { Choices, Equipment, Recipe } from '../../recipe.ts';
 import type { Range } from '../../util.ts';
 import type { Look } from '../../render/look.ts';
 import { drawPerson, eyeHeight, standingHeight } from '../../render/person.ts';
@@ -124,10 +124,10 @@ export function shareOf<K extends string>(weights: Readonly<Record<K, number>>, 
 /** Whether a choice was the seed's roll or forced by the lab, for the card. */
 export type Chosen = Partial<Record<keyof Choices, boolean>>;
 
-/** The share of the crowd a person's equipment has: a stroller is a share of Slow Walkers. */
+/** The share of the crowd a person's equipment has: a stroller is a share of Slow Walkers. None, while no model can be drawn with it. */
 function equipmentShare(r: Recipe): string {
-    if (r.equipment === 'stroller') return `${pct(COMPOSITION.stroller)} of Slow Walkers`;
-    return `${shareOf(COMPOSITION.equipment, r.equipment)} of everyone not pushing a stroller`;
+    if (r.equipment === 'stroller') return `${pct(crowdStroller())} of Slow Walkers`;
+    return `${shareOf(crowdEquipment(), r.equipment)} of everyone not pushing a stroller`;
 }
 
 /** What the card says about each choice beyond its value: what it contributes to this figure. */
@@ -169,7 +169,7 @@ export function personChoices(w: Who, o: ChoicesOptions = {}): InfoSection {
         { k: 'skin tone', color: r.skin, v: `${tone.name} · ${by('skinTone')} · ${shareOf(COMPOSITION.skinTone, r.skinTone)} · ${n2(skinAt(r.skinTone, 0.5))} on the ramp, this one ${hexOf(r.skin)}${more('skinTone')}` },
         { k: 'hair', color: r.hairColor, v: `${hair.name} · ${by('hairTone')} · ${shareOf(COMPOSITION.hair, r.hairTone)}${more('hairTone')}` },
         { k: 'clothing scheme', v: `${schemeLine(r, by('scheme'))}${more('scheme')}` },
-        { k: 'behavior', v: `${B.name} · ${by('behavior')} · ${shareOf(COMPOSITION.behavior, r.behavior)} of the crowd · ${behaviorLine(B)}${more('behavior')}` },
+        { k: 'behavior', v: `${B.name} · ${by('behavior')} · ${shareOf(crowdBehavior(), r.behavior)} of the crowd · ${behaviorLine(B)}${more('behavior')}` },
         { k: 'equipment', v: (r.equipment === 'none' ? `none · ${by('equipment')}`
             : `${r.equipment} · ${by('equipment')} · ${equipmentShare(r)} · speed ×${n2(r.motion.speed)}, turn ×${n2(r.motion.turn)}, collider ×${n2(r.motion.radius)}`) + more('equipment') },
     ];
@@ -226,7 +226,7 @@ export function clothingSection(r: Recipe, d: Dressed, slots: readonly ClothingS
 export function personBehavior(w: Who): InfoSection {
     const A = BEHAVIORS[w.type];
     const rows: [string, string][] = [
-        ['spawns', `${A.name}: ${shareOf(COMPOSITION.behavior, w.type)} of the default crowd`],
+        ['spawns', `${A.name}: ${shareOf(crowdBehavior(), w.type)} of the default crowd`],
         ['speed', `${range(A.speed, ' m/s')}, before equipment · this one ${n2(w.speed)} m/s`],
         ['acceleration', `${A.accel} m/s²`],
         ['weaving', A.wander === 0 ? 'holds its line' : `drifts ×${A.wander} toward a new lane every ${range(A.wanderEvery, ' s')}`],
@@ -462,8 +462,10 @@ export function chosenBy(o: Partial<Overrides>): Chosen {
 export function subjectFor(seed: number, i: number, count: number, c: Controls): Subject {
     const o = overridesOf(c);
     const index = Number(c.agent ?? 0) + i;
-    // A row with no behavior forced shows one of each, so the whole cast is on stage at once.
-    if (o.behavior === 'seed' && count > 1) o.behavior = BEHAVIOR_KEYS[i % BEHAVIOR_KEYS.length];
+    // A row with no behavior forced shows one of each, so the whole cast is on stage at once: each
+    // one a model can draw.
+    const each = BEHAVIOR_KEYS.filter(k => behaviorUnavailable(k) === null);
+    if (o.behavior === 'seed' && count > 1) o.behavior = each[i % each.length];
     return new Subject(seed, index, o);
 }
 
@@ -620,17 +622,22 @@ class PersonCast implements Cast {
 const titled = (options: readonly string[], name: (k: string) => string): Readonly<Record<string, string>> =>
     Object.fromEntries(options.map(o => [o, o === 'seed' ? 'Seed' : name(o)]));
 const words = (k: string): string => k.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+/** The options no model can be drawn with yet, each with the reason: greyed on the control. */
+const unavailableOf = (options: readonly string[], why: (k: string) => string | null): Readonly<Record<string, string>> =>
+    Object.fromEntries(options.flatMap(o => { const w = o === 'seed' ? null : why(o); return w === null ? [] : [[o, w]]; }));
 
 /** The controls that say which person: every choice, each with "seed" for what the seed rolls. */
 export const PERSON_CONTROLS = {
     behavior: { kind: 'enum', id: 'behavior', label: 'behavior', options: BEHAVIOR_OPTIONS, value: 'seed', key: 't', rebuilds: true,
-        titles: titled(BEHAVIOR_OPTIONS, k => BEHAVIORS[k as BehaviorKey].name) },
+        titles: titled(BEHAVIOR_OPTIONS, k => BEHAVIORS[k as BehaviorKey].name),
+        unavailable: unavailableOf(BEHAVIOR_OPTIONS, k => behaviorUnavailable(k as BehaviorKey)) },
     bodyType: { kind: 'enum', id: 'body-type', label: 'body type', options: BODY_TYPE_OPTIONS, value: 'seed', key: 'b', rebuilds: true, titles: titled(BODY_TYPE_OPTIONS, words) },
     skin: { kind: 'enum', id: 'skin', label: 'skin tone', options: SKIN_OPTIONS, value: 'seed', rebuilds: true,
         titles: titled(SKIN_OPTIONS, k => skinToneNamed(k as Parameters<typeof skinToneNamed>[0]).name) },
     hair: { kind: 'enum', id: 'hair', label: 'hair', options: HAIR_OPTIONS, value: 'seed', rebuilds: true,
         titles: titled(HAIR_OPTIONS, k => hairNamed(k as Parameters<typeof hairNamed>[0]).name) },
-    equipment: { kind: 'enum', id: 'equipment', label: 'equipment', options: EQUIPMENT_OPTIONS, value: 'seed', key: 'm', rebuilds: true, titles: titled(EQUIPMENT_OPTIONS, words) },
+    equipment: { kind: 'enum', id: 'equipment', label: 'equipment', options: EQUIPMENT_OPTIONS, value: 'seed', key: 'm', rebuilds: true, titles: titled(EQUIPMENT_OPTIONS, words),
+        unavailable: unavailableOf(EQUIPMENT_OPTIONS, k => equipmentUnavailable(k as Equipment)) },
     agent: { kind: 'number', id: 'agent', label: 'spawn index', value: 0, min: 0, max: 99999, rebuilds: true },
     // A uniform says so on the control: it is assigned, never something a seed rolls.
     scheme: { kind: 'enum', id: 'scheme', label: 'clothing scheme', options: SCHEME_OPTIONS, value: 'seed', rebuilds: true,

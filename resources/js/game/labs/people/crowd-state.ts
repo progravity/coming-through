@@ -11,7 +11,7 @@
  */
 import { BEHAVIOR_KEYS } from '../../behaviors.ts';
 import type { BehaviorKey, BehaviorMix } from '../../behaviors.ts';
-import { COMPOSITION } from '../../composition.ts';
+import { crowdBehavior } from '../../composition.ts';
 import { parseSeed } from '../../core/rng.ts';
 import { PERSON_MODELS } from '../../data/people.ts';
 import { CROWD_MODEL } from '../../render/model-file.ts';
@@ -65,7 +65,8 @@ export const DEFAULT_CROWD = 80;
 /** The most steps a link may ask to be fast-forwarded: ten minutes of simulated time. */
 export const MAX_AT = 36000;
 
-export const ownWeights = (): number[] => BEHAVIOR_KEYS.map(k => COMPOSITION.behavior[k]);
+/** The weights the crowd is rolled from: the composition's, less any behavior no model can draw. */
+export const ownWeights = (): number[] => { const w = crowdBehavior(); return BEHAVIOR_KEYS.map(k => w[k]); };
 
 export function mixOf(weights: readonly number[] | null): BehaviorMix | undefined {
     if (weights === null) return undefined;

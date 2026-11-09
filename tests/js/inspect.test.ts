@@ -10,6 +10,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BEHAVIOR_KEYS } from '../../resources/js/game/behaviors.ts';
+import { AS_DESIGNED, behaviorUnavailable } from '../../resources/js/game/composition.ts';
 import { makeStreams } from '../../resources/js/game/core/rng.ts';
 import { BODY_TYPES, EQUIPMENT, behaviorAhead } from '../../resources/js/game/recipe.ts';
 import { Agent } from '../../resources/js/game/sim/agent.ts';
@@ -51,16 +52,21 @@ test('the behavior the spawner reads ahead is the behavior the person rolls', ()
     // The spawner has to know whether a family or a parent comes with agent N before agent N
     // exists, and reads the first draw of their recipe fork to find out. If makeRecipe ever stopped
     // taking its behavior from that draw, a Darter would arrive without a parent.
-    const seen = new Set<string>();
-    for (const seed of SEEDS) {
-        for (let i = 0; i < 200; i++) {
-            const ahead = behaviorAhead(makeStreams(seed).recipe.fork(`agent:${i}`));
-            const agent = new Agent(makeStreams(seed), i, 0, 0, 1, 1);
-            assert.equal(agent.type, ahead, `seed ${seed}, agent:${i}`);
-            seen.add(ahead);
+    // Today's crowd, and the crowd with a model for every class -- where the Darters are.
+    for (const drawable of [undefined, AS_DESIGNED]) {
+        const seen = new Set<string>();
+        for (const seed of SEEDS) {
+            for (let i = 0; i < 200; i++) {
+                const ahead = behaviorAhead(makeStreams(seed).recipe.fork(`agent:${i}`), undefined, drawable);
+                const agent = new Agent(makeStreams(seed), i, 0, 0, 1, 1, { drawable });
+                assert.equal(agent.type, ahead, `seed ${seed}, agent:${i}`);
+                seen.add(ahead);
+            }
         }
+        // Every behavior a model can draw comes up, and nothing else does.
+        const can = BEHAVIOR_KEYS.filter(k => behaviorUnavailable(k, drawable) === null);
+        assert.deepEqual([...seen].sort(), [...can].sort(), 'some behavior never came up in a thousand people, or one no model can draw did');
     }
-    assert.equal(seen.size, BEHAVIOR_KEYS.length, 'some behavior never came up in a thousand people');
 });
 
 test('a group member on the turntable wears the scheme the spawner handed the group', () => {

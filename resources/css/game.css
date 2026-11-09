@@ -45,6 +45,7 @@ button:active{background:rgba(60,64,72,.9)}
 #overlay h1{font-weight:500;font-size:26px;margin:0 0 12px}
 #overlay p{margin:6px auto;font-size:15px;color:#c9c6bd;max-width:420px}
 #overlay .seednote{font-size:13px;color:#9a978f}
+#overlay .problem{font-size:13px;color:#f0b4a8;text-align:left;max-width:560px;overflow-wrap:anywhere}
 #overlay .seedline{font-size:13px;color:#9a978f;display:flex;align-items:center;gap:6px;justify-content:center;flex-wrap:wrap;margin-top:14px}
 #overlay .seedline input{font:inherit;font-size:14px;color:#f2f0ea;background:rgba(20,22,28,.72);border:1px solid rgba(255,255,255,.18);border-radius:12px;padding:6px 10px;text-align:center}
 #overlay .seedline input:focus{outline:none;border-color:#e8c34a}

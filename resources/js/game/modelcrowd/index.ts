@@ -1,24 +1,31 @@
 /**
- * Which renderer draws the crowd, and an optional on-screen readout of what it costs. **Models are
- * the default** (`?model=` picks the file, `casual-man` when it says nothing); `?people=prim` keeps
- * the primitive people, which stay the fallback for the player, for anyone whose equipment a model
- * cannot carry yet, and for everyone if the model fails to load. The readout shows under `?people=`
- * or a stress run, so the two can be compared on one device at one crowd size.
+ * How the game draws its people -- **every person is a model**, the player included -- and an
+ * optional on-screen readout of what that costs. One model per age class the crowd draws
+ * (`crowdModels` in `composition.ts`: `casual-man` for adults, unless `?model=` names another model
+ * of a class), loaded before the game starts. There is nothing to fall back to: a model that does
+ * not load, a data file that is not valid, or a model with no walk to play stops the game, and
+ * `startPeople` throws saying which model and why. The readout shows under `?people=model` or a
+ * stress run.
  *
  * Knobs, all live: `O` (or the Ink button) is the game's own ink switch and the model follows it;
  * `L` (or the Throttle button) animates far people less often, with the distance and the interval
  * in the panel. `&throttle=1&far=15&every=3` sets them from the address bar, for headless runs.
  */
 import type * as THREE from 'three';
-import { personModel } from '../data/people.ts';
-import { CROWD_MODEL, fetchModel } from '../render/model-file.ts';
+import type { AgeClass, PersonModel } from '../data/people.ts';
+import { AGE_CLASSES, DATA_FILES, PERSON_MODELS, personModel } from '../data/people.ts';
+import { CROWD_MODEL, DRAWABLE, crowdModels } from '../composition.ts';
+import type { Recipe } from '../recipe.ts';
+import type { Agent } from '../sim/agent.ts';
+import { fetchModel } from '../render/model-file.ts';
 import { bodyOf } from './body.ts';
+import type { ModelBody } from './body.ts';
 import { ModelCrowd } from './crowd.ts';
+import type { FigureHeights, PlayerFigure } from './crowd.ts';
 import { prepareClips, reportClips } from './clips.ts';
 import { prepareRegions } from './regions.ts';
 import type { Knobs } from './crowd.ts';
-
-export type PeopleMode = 'model' | 'prim';
+import type { Regions } from './regions.ts';
 
 /** One frame's figures, as `game.ts` measured them. */
 export interface FrameReport {
@@ -35,10 +42,9 @@ export interface FrameReport {
 
 /** What the readout shows, readable from the console and by `scripts/bench-people.mjs` as `game.people`. */
 export interface PeopleStats {
-    renderer: 'model' | 'primitives';
-    model: string | null;
-    /** Why `?people=model` fell back to the primitives, if it did. */
-    error: string | null;
+    renderer: 'model';
+    /** The models drawn, one per age class, by ID. */
+    model: string;
     ink: boolean;
     throttle: boolean;
     far: number;
@@ -70,9 +76,52 @@ export interface PeopleStats {
 }
 
 export interface People {
-    readonly models: ModelCrowd | null;
+    /** One model crowd per age class the crowd draws, each drawing the people of its own class. */
+    readonly crowds: readonly ModelCrowd[];
     readonly stats: PeopleStats;
+    /** Draw everyone this frame, and the player when given (the game leaves them out in first person). */
+    draw(agents: readonly Agent[], alpha: number, from: { readonly x: number; readonly z: number }, inkOn: boolean, player: PlayerFigure | null): void;
+    /** How tall the player is drawn and where their eyes are, on the model they are drawn with. */
+    heights(r: Recipe): FigureHeights;
     report(f: FrameReport): void;
+}
+
+/** One model, loaded and ready to draw people of its class. */
+export interface LoadedModel {
+    readonly model: PersonModel;
+    readonly crowd: ModelCrowd;
+    readonly regions: Regions;
+    readonly body: ModelBody;
+}
+
+/**
+ * Load one person model and build its crowd. Throws, starting with the model's ID, when its file is
+ * not there, will not parse, or has no walk to play: the caller says so and does not draw anyone.
+ */
+export async function loadModel(model: PersonModel, scene: THREE.Scene, knobs: Knobs): Promise<LoadedModel> {
+    try {
+        const got = await fetchModel(model);
+        // Painted only when the regions are known and confidently separated; otherwise as authored, saying why.
+        const regions = prepareRegions(model, got.scene);
+        const body = bodyOf(model);
+        const clips = reportClips(prepareClips(model, got.scene, got.animations));
+        const crowd = new ModelCrowd(scene, got, clips, knobs, regions.slots?.usable === true ? regions.paint : null, body);
+        return { model, crowd, regions, body };
+    } catch (e) {
+        const why = e instanceof Error ? e.message : String(e);
+        throw new Error(why.startsWith(`${model.id}:`) ? why : `${model.id}: ${why}`);
+    }
+}
+
+/**
+ * Why the game cannot draw its people, before anything is fetched: a data file that is not valid
+ * (composition reads every one, so a broken file would quietly change who the crowd holds), or no
+ * model for the adults the player and most of the crowd are. Empty when there is nothing wrong.
+ */
+export function peopleProblems(files = DATA_FILES, byClass: Partial<Record<AgeClass, PersonModel>> = crowdModels()): string[] {
+    const out = files.flatMap(f => (f.model === null ? f.errors : []));
+    if (byClass.adult === undefined) out.push(`there is no adult person model in data/people/ to draw the player and the crowd with`);
+    return out;
 }
 
 const num = (v: string | null, fallback: number): number => {
@@ -81,67 +130,68 @@ const num = (v: string | null, fallback: number): number => {
 };
 
 /**
+ * Load the models the crowd is drawn from, one per age class composition draws (`DRAWABLE`), or
+ * throw saying which model failed and why. `?model=` swaps in another model for its own class.
+ *
  * @param readout Whether to put the cost readout on screen. The stats are kept either way, for
  *   `game.people`; a normal run simply does not show them.
  */
-export async function startPeople(mode: PeopleMode, scene: THREE.Scene, params: URLSearchParams, toggleInk: () => void, readout = true): Promise<People> {
+export async function startPeople(scene: THREE.Scene, params: URLSearchParams, toggleInk: () => void, readout = true): Promise<People> {
     const knobs: Knobs = {
         ink: false,
         throttle: params.get('throttle') === '1',
         far: num(params.get('far'), 15),
         every: Math.round(num(params.get('every'), 3)),
     };
+    const asked = params.get('model');
+    const byClass = crowdModels(PERSON_MODELS, asked ?? CROWD_MODEL);
+    // A model named in the address is drawn for its own class, whatever its occupation. Throws, saying
+    // why, when there is no such model or its data file is not valid.
+    if (asked !== null && asked !== '') { const m = personModel(asked); byClass[m.ageClass] = m; }
+    const problems = peopleProblems(DATA_FILES, byClass);
+    if (problems.length > 0) throw new Error(problems.join('\n'));
+    const loaded: LoadedModel[] = [];
+    // Every class composition draws, and the adults whatever it says: the player is one.
+    for (const c of AGE_CLASSES.filter(k => k === 'adult' || DRAWABLE.ageClasses.includes(k))) {
+        const m = byClass[c];
+        if (m !== undefined) loaded.push(await loadModel(m, scene, knobs));
+    }
+    const crowds = loaded.map(l => l.crowd);
+    const adults = loaded.find(l => l.model.ageClass === 'adult') as LoadedModel;
     const stats: PeopleStats = {
-        renderer: 'primitives', model: null, error: null, ink: false, throttle: knobs.throttle, far: knobs.far, every: knobs.every,
-        trisPerModel: 0, bones: 0, clips: '', colours: '', body: '', fallback: 0, fallbackEquipment: 0, animated: 0, bodyDraws: 0, inkDraws: 0, calls: 0, triangles: 0, people: 0,
+        renderer: 'model', model: loaded.map(l => l.model.id).join(', '), ink: false, throttle: knobs.throttle, far: knobs.far, every: knobs.every,
+        trisPerModel: adults.crowd.trisPerModel, bones: adults.crowd.bones, clips: loaded.map(l => l.crowd.clips).join(' | '),
+        colours: loaded.map(l => l.regions.summary).join(' | '),
+        body: loaded.map(l => `${l.body.build} ${l.body.ageClass} model`).join(', ') + '; Body Type from each recipe',
+        fallback: 0, fallbackEquipment: 0, animated: 0, bodyDraws: 0, inkDraws: 0, calls: 0, triangles: 0, people: 0,
         fps: 0, frameMs: 0, simMs: 0, poseMs: 0, renderMs: 0,
     };
-    let models: ModelCrowd | null = null;
-    if (mode === 'model') {
-        const name = params.get('model') ?? CROWD_MODEL;
-        try {
-            // Throws, saying why, when there is no such model or its data file is not valid.
-            const model = personModel(name);
-            const got = await fetchModel(model);
-            // Painted only when the regions are known and confidently separated; otherwise as authored, saying why.
-            const regions = prepareRegions(model, got.scene);
-            const body = bodyOf(model);
-            const clips = reportClips(prepareClips(model, got.scene, got.animations));
-            models = new ModelCrowd(scene, got, clips, knobs, regions.slots?.usable === true ? regions.paint : null, body);
-            Object.assign(stats, {
-                renderer: 'model', model: name, trisPerModel: models.trisPerModel, bones: models.bones, clips: models.clips,
-                colours: regions.summary, body: `${body.build} ${body.ageClass} model; Body Type from each recipe`,
-            });
-        } catch (e) {
-            stats.error = e instanceof Error ? e.message : String(e);
-            console.warn(`?people=model fell back to the primitive people: ${stats.error}`);
-        }
-    }
-    const panel = readout ? new Panel(stats, models !== null, toggleInk, () => setThrottle(!knobs.throttle), (far, every) => {
+    const panel = readout ? new Panel(stats, toggleInk, () => setThrottle(!knobs.throttle), (far, every) => {
         knobs.far = far; knobs.every = every; stats.far = far; stats.every = every;
     }) : null;
     function setThrottle(on: boolean): void { knobs.throttle = on; stats.throttle = on; panel?.sync(); }
-    if (models !== null) {
-        addEventListener('keydown', e => {
-            if (e.code !== 'KeyL' || e.repeat || e.target instanceof HTMLInputElement) return;
-            setThrottle(!knobs.throttle);
-        });
-    }
+    addEventListener('keydown', e => {
+        if (e.code !== 'KeyL' || e.repeat || e.target instanceof HTMLInputElement) return;
+        setThrottle(!knobs.throttle);
+    });
 
     // Half-second windows: long enough to settle, short enough to follow a change of knob.
     let frames = 0, time = 0, sim = 0, pose = 0, render = 0;
+    const sum = (f: (m: ModelCrowd) => number): number => crowds.reduce((n, m) => n + f(m), 0);
     return {
-        models,
+        crowds,
         stats,
+        draw(agents, alpha, from, inkOn, player): void {
+            for (const m of crowds) m.draw(agents, alpha, from, inkOn, m === adults.crowd ? player : null);
+        },
+        heights: r => adults.crowd.heights(r),
         report(f: FrameReport): void {
             frames++; time += f.frameDt; sim += f.simMs; pose += f.poseMs; render += f.renderMs;
             stats.calls = f.calls; stats.triangles = f.triangles; stats.people = f.people;
-            stats.ink = models !== null ? knobs.ink : stats.ink;
-            if (models !== null) {
-                stats.animated = models.animated; stats.bodyDraws = models.bodyDraws; stats.inkDraws = models.inkDraws;
-                stats.fallback = models.fallback;
-                stats.fallbackEquipment = models.fallbackEquipment;
-            }
+            stats.ink = knobs.ink;
+            stats.animated = sum(m => m.animated); stats.bodyDraws = sum(m => m.bodyDraws); stats.inkDraws = sum(m => m.inkDraws);
+            stats.fallback = sum(m => m.fallback);
+            stats.fallbackEquipment = sum(m => m.fallbackEquipment);
             if (time < 0.5) return;
             stats.fps = frames / time; stats.frameMs = (time / frames) * 1000;
             stats.simMs = sim / frames; stats.poseMs = pose / frames; stats.renderMs = render / frames;
@@ -161,7 +211,7 @@ class Panel {
     private readonly every = document.createElement('input');
     private readonly stats: PeopleStats;
 
-    constructor(stats: PeopleStats, model: boolean, toggleInk: () => void, toggleThrottle: () => void,
+    constructor(stats: PeopleStats, toggleInk: () => void, toggleThrottle: () => void,
         tune: (far: number, every: number) => void) {
         this.stats = stats;
         this.el.className = 'chip';
@@ -174,7 +224,7 @@ class Panel {
         this.inkBtn.onclick = () => { toggleInk(); this.sync(); };
         this.throttleBtn.onclick = () => { toggleThrottle(); };
         row.append(this.inkBtn);
-        if (model) {
+        {
             for (const [input, label, value, step] of [[this.far, 'far m', stats.far, 1], [this.every, 'every', stats.every, 1]] as const) {
                 input.type = 'number'; input.min = '1'; input.step = String(step); input.value = String(value);
                 input.style.cssText = 'width:44px;font:inherit;color:inherit;background:rgba(255,255,255,.1);border:0;border-radius:8px;padding:4px 6px';
@@ -202,19 +252,15 @@ class Panel {
         this.sync();
         const tris = s.triangles >= 1e6 ? `${(s.triangles / 1e6).toFixed(2)} M` : `${Math.round(s.triangles / 1e3)} k`;
         const lines = [
-            s.renderer === 'model'
-                ? `people: model "${s.model}" · ${s.trisPerModel.toLocaleString()} tris, ${s.bones} bones each`
-                : `people: primitives${s.error !== null ? ` (model failed: ${s.error})` : ''}`,
+            `people: model "${s.model}" · ${s.trisPerModel.toLocaleString()} tris, ${s.bones} bones each`,
             `${s.fps.toFixed(0)} fps · ${s.frameMs.toFixed(1)} ms a frame · ${s.people} people`,
-            `sim ${s.simMs.toFixed(2)} · ${s.renderer === 'model' ? 'animate' : 'pose'} ${s.poseMs.toFixed(2)} · render ${s.renderMs.toFixed(2)} ms`,
+            `sim ${s.simMs.toFixed(2)} · animate ${s.poseMs.toFixed(2)} · render ${s.renderMs.toFixed(2)} ms`,
             `${s.calls} draw calls · ${tris} triangles`,
+            `animated ${s.animated} · drawn ${s.bodyDraws} bodies + ${s.inkDraws} ink`,
+            `colours: ${s.colours}`,
+            `bodies: ${s.body}`,
+            `as primitives: ${s.fallback} (${s.fallbackEquipment} with equipment, not yet supported on models; ${s.fallback - s.fallbackEquipment} Darters, who need a child model)`,
         ];
-        if (s.renderer === 'model') {
-            lines.push(`animated ${s.animated} · drawn ${s.bodyDraws} bodies + ${s.inkDraws} ink`);
-            lines.push(`colours: ${s.colours}`);
-            lines.push(`bodies: ${s.body}`);
-            lines.push(`as primitives: ${s.fallback} (${s.fallbackEquipment} with equipment, not yet supported on models; ${s.fallback - s.fallbackEquipment} Darters, who need a child model)`);
-        }
         this.text.textContent = lines.join('\n');
     }
 }

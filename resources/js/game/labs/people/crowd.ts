@@ -20,6 +20,7 @@
  */
 import * as THREE from 'three';
 import { BEHAVIORS, BEHAVIOR_KEYS } from '../../behaviors.ts';
+import { behaviorUnavailable } from '../../composition.ts';
 import { parseSeed, randomSeed } from '../../core/rng.ts';
 import { MAX_CATCHUP_STEPS, SIM_DT } from '../../core/time.ts';
 import { count, n2 } from '../../inspect/describe.ts';
@@ -194,9 +195,13 @@ export async function startCrowd(lab: Lab): Promise<void> {
         sw.style.background = cssHex(BEHAVIORS[k].color);
         const name = el('span', 'mix-name', BEHAVIORS[k].name);
         const box = numberBox((state.mix ?? own)[i], 0, 50, () => setMix(), `${BEHAVIORS[k].name} weight`);
+        // One no model can draw stays listed, greyed at no weight, with the reason: a mix cannot bring it back.
+        const why = behaviorUnavailable(k);
+        if (why !== null) { box.disabled = true; box.value = '0'; box.title = `${BEHAVIORS[k].name}: ${why}`; }
         mixBoxes.push(box);
         const r = el('label', 'mix-row');
         r.append(sw, name, box);
+        if (why !== null) r.title = box.title;
         mixRows.append(r);
     });
     body.append(label('behavior mix (weights)'), mixRows, row(button('reset mix', () => { mixBoxes.forEach((b, i) => { b.value = String(own[i]); }); setMix(); })));
@@ -223,6 +228,7 @@ export async function startCrowd(lab: Lab): Promise<void> {
     // The behavior color key, which the discs are drawn in.
     const legend = el('div', 'legend');
     for (const k of BEHAVIOR_KEYS) {
+        if (behaviorUnavailable(k) !== null) continue;
         const s = el('span');
         const sw = el('i', 'sw');
         sw.style.background = cssHex(BEHAVIORS[k].color);

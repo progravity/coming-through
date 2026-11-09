@@ -10,7 +10,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { test } from 'node:test';
 import { BEHAVIOR_KEYS } from '../../resources/js/game/behaviors.ts';
 import type { BehaviorKey } from '../../resources/js/game/behaviors.ts';
-import { COMPOSITION } from '../../resources/js/game/composition.ts';
+import { AS_DESIGNED, COMPOSITION } from '../../resources/js/game/composition.ts';
 import { CATEGORIES, CATEGORY_OF } from '../../resources/js/game/entity.ts';
 import { Simulation } from '../../resources/js/game/sim/simulation.ts';
 import { FURNITURE_ABOUT } from '../../resources/js/game/world/furniture.ts';
@@ -173,8 +173,14 @@ test('a crowd mix of one behavior spawns nobody else', () => {
     sim.prime(60);
     assert.ok(sim.crowd.agents.length > 0);
     assert.deepEqual([...new Set(sim.crowd.agents.map(a => a.type))], ['distracted']);
-    // A Darter brings a Typical parent and a group its own family, whatever the mix says.
-    const kids = new Simulation(5, { mix: { ...only, distracted: 0, darter: 1 } });
+    // A mix cannot bring back someone no model can draw: a Darter needs a child model, so a mix of
+    // Darters alone has nothing it may roll and the crowd is all the first profile.
+    const darters = { ...only, distracted: 0, darter: 1 };
+    const none = new Simulation(5, { mix: darters });
+    none.crowd.fill(40);
+    assert.ok(!none.crowd.agents.some(a => a.type === 'darter'), 'a Darter was rolled with no child model to draw them');
+    // With a child model, a Darter brings a Typical parent and a group its own family, whatever the mix says.
+    const kids = new Simulation(5, { mix: darters, drawable: AS_DESIGNED });
     kids.crowd.fill(40);
     assert.deepEqual([...new Set(kids.crowd.agents.map(a => a.type))].sort(), ['darter', 'typical']);
     for (const a of kids.crowd.agents) if (a.type === 'darter') assert.equal(a.parent?.type, 'typical');
@@ -226,8 +232,17 @@ test('the model source lists what models cannot do yet, and an address cannot sw
     const m = ENTITIES.find(e => e.id === 'model');
     assert.ok(m !== undefined);
     const disabled = m.controls.filter(c => c.disabled !== undefined).map(c => c.id).sort();
-    assert.deepEqual(disabled, ['accessories', 'equipment']);
+    assert.deepEqual(disabled, ['accessories']);
     for (const c of m.controls) if (c.disabled !== undefined) assert.match(c.disabled, /not yet supported on models/);
+    // Every piece of equipment is listed and greyed, with the reason; so is a Darter.
+    const equipment = m.controls.find(c => c.id === 'equipment');
+    assert.ok(equipment?.kind === 'enum');
+    assert.deepEqual(Object.keys(equipment.unavailable ?? {}).sort(), ['cane', 'scooter', 'stroller', 'wheelchair']);
+    for (const why of Object.values(equipment.unavailable ?? {})) assert.match(why, /equipment item/);
+    const behavior = m.controls.find(c => c.id === 'behavior');
+    assert.ok(behavior?.kind === 'enum');
+    assert.deepEqual(Object.keys(behavior.unavailable ?? {}), ['darter']);
+    assert.match(behavior.unavailable?.darter ?? '', /child model/);
     // Equipment named in the address -- or an old mobility aid -- does nothing to the model, and
     // is never written back.
     for (const url of ['?equipment=cane', '?mob=cane']) {
@@ -277,8 +292,10 @@ test("the Individual view offers every choice, in order, each with the seed's ow
         assert.equal(ctl.options[0], 'seed', `${id} has no Seed option first`);
         assert.equal(ctl.value, 'seed', `${id} does not start on the seed's roll`);
     }
-    // Equipment is listed and greyed: not yet on models.
-    assert.match(m.controls.find(c => c.id === 'equipment')?.disabled ?? '', /not yet supported on models/);
+    // Equipment is listed with every piece greyed: no model can be drawn with any yet.
+    const equipment = m.controls.find(c => c.id === 'equipment');
+    assert.ok(equipment?.kind === 'enum');
+    assert.deepEqual(equipment.options.filter(o => equipment.unavailable?.[o] === undefined), ['seed', 'none']);
     // The uniform is offered, and says it is one; the pooled schemes are named as they are.
     const scheme = m.controls.find(c => c.id === 'scheme');
     assert.ok(scheme?.kind === 'enum');
@@ -287,8 +304,10 @@ test("the Individual view offers every choice, in order, each with the seed's ow
     assert.equal(scheme.titles?.['denim-white'], 'Denim & White');
     // And a choice in the address reaches the person: Seed is the seed's roll, anything else forced.
     // An old `age` loads and is ignored.
-    const s = readState('single', '?seed=5&behavior=darter&age=old&scheme=park-staff', LABS.people);
-    assert.equal(s.controls.behavior, 'darter');
+    const s = readState('single', '?seed=5&behavior=weaver&age=old&scheme=park-staff', LABS.people);
+    assert.equal(s.controls.behavior, 'weaver');
+    // A behavior no model can draw is greyed, and an address naming it gets the seed's roll.
+    assert.equal(readState('single', '?behavior=darter', LABS.people).controls.behavior, 'seed');
     assert.equal(s.controls.age, undefined);
     assert.equal(s.controls.scheme, 'park-staff');
     // The people lab is the one with path mode.

@@ -1,5 +1,6 @@
 import { BEHAVIORS } from '../behaviors.ts';
 import type { Behavior, BehaviorKey, BehaviorMix } from '../behaviors.ts';
+import type { Drawable } from '../composition.ts';
 import { atan2, cos, hypot, sin } from '../core/dmath.ts';
 import type { Rng, Streams } from '../core/rng.ts';
 import { SIM_DT } from '../core/time.ts';
@@ -31,6 +32,8 @@ export interface AgentOptions {
     choices?: Partial<Choices>;
     /** Behavior weights in place of the composition's, for the people lab's crowd mix. */
     mix?: BehaviorMix;
+    /** What can be drawn, in place of what the data files say (`Simulation`'s option). */
+    drawable?: Drawable;
     leader?: Agent;
     offset?: number;
     parent?: Agent;
@@ -95,7 +98,7 @@ export class Agent implements GridItem, Poseable {
         this.rng = streams.behavior.fork(label);
         // Who this is comes first: the recipe rolls every choice, the behavior profile among them,
         // and the walking pace. Nothing else draws from this person's recipe fork.
-        const recipe = makeRecipe(streams.recipe.fork(label), { ...opts.choices, mix: opts.mix });
+        const recipe = makeRecipe(streams.recipe.fork(label), { ...opts.choices, mix: opts.mix, drawable: opts.drawable });
         const A: Behavior = BEHAVIORS[recipe.behavior];
         this.index = index;
         this.type = recipe.behavior; this.A = A;

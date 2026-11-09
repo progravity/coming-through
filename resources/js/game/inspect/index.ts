@@ -22,7 +22,7 @@ import { LOOK_NAMES, lookNamed } from '../render/look.ts';
 import { count as countOf, meshCost } from './describe.ts';
 import { PartGizmos, measure, newBounds } from './gizmos.ts';
 import { GIZMOS, INK, ORIGINS, RULER, controlOf, findKey, rowCount } from './inspectable.ts';
-import type { ControlValue, Controls, DrawnPart, Inspectable, Readout } from './inspectable.ts';
+import type { Control, ControlValue, Controls, DrawnPart, Inspectable, Readout } from './inspectable.ts';
 import { Panel } from './panel.ts';
 import { HeightRulers } from './ruler.ts';
 import { byId, modelOf } from './registry.ts';
@@ -42,6 +42,15 @@ const wrapTau = (a: number): number => ((a % TAU) + TAU) % TAU;
 const wrap01 = (v: number): number => ((v % 1) + 1) % 1;
 const cycle = (options: readonly string[], current: string, step: number): string =>
     options[(options.indexOf(current) + step + options.length) % options.length];
+/** The next option a key or a button reaches, stepping over the ones that cannot be chosen. */
+function cycleChoosable(c: Extract<Control, { kind: 'enum' }>, current: string, step: number): string {
+    let v = current;
+    for (let i = 0; i < c.options.length; i++) {
+        v = cycle(c.options, v, step);
+        if (c.unavailable?.[v] === undefined) return v;
+    }
+    return current;
+}
 
 /**
  * What a control means in another entity: the same id, the same kind, and a value it accepts.
@@ -55,7 +64,7 @@ function carried(from: Controls, to: Inspectable): Controls {
     for (const c of to.controls) {
         const v = from[c.id];
         if (v === undefined || v === c.value || c.disabled !== undefined) continue;
-        if (c.kind === 'enum' && typeof v === 'string' && c.options.includes(v)) out[c.id] = v;
+        if (c.kind === 'enum' && typeof v === 'string' && c.options.includes(v) && c.unavailable?.[v] === undefined) out[c.id] = v;
         else if (c.kind === 'toggle' && typeof v === 'boolean') out[c.id] = v;
         else if ((c.kind === 'scalar' || c.kind === 'number') && typeof v === 'number') out[c.id] = v;
     }
@@ -228,7 +237,7 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
         if (entity.stepping === 'seed') { patch({ seed: (state.seed + delta) >>> 0 }); return; }
         const c = controlOf(entity, entity.stepping);
         if (c === undefined || c.kind !== 'enum') return;
-        setControl(c.id, cycle(c.options, String(state.controls[c.id]), delta));
+        setControl(c.id, cycleChoosable(c, String(state.controls[c.id]), delta));
     }
 
     /**
@@ -375,7 +384,7 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
         const c = hit.control;
         if (c.kind === 'toggle') { setControl(c.id, state.controls[c.id] !== true); return true; }
         if (c.kind === 'enum') {
-            setControl(c.id, cycle(c.options, String(state.controls[c.id]), shift ? -1 : 1));
+            setControl(c.id, cycleChoosable(c, String(state.controls[c.id]), shift ? -1 : 1));
             return true;
         }
         return false;

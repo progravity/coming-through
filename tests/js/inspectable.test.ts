@@ -20,6 +20,7 @@ import type { DrawnPart } from '../../resources/js/game/inspect/inspectable.ts';
 import { PERSON } from '../../resources/js/game/inspect/entities/person.ts';
 import { Subject } from '../../resources/js/game/inspect/subject.ts';
 import { BEHAVIOR_KEYS } from '../../resources/js/game/behaviors.ts';
+import { behaviorUnavailable } from '../../resources/js/game/composition.ts';
 import { INK, controlOf, defaultControls, findKey, overlaysOf } from '../../resources/js/game/inspect/inspectable.ts';
 import type { Cast, Inspectable } from '../../resources/js/game/inspect/inspectable.ts';
 import { ENTITIES, resolve } from '../../resources/js/game/inspect/registry.ts';
@@ -70,13 +71,14 @@ test('a lamp post casts its shadow under itself and not at the stage origin', ()
 test('the person cast puts the crowd\'s own people on the stage', () => {
     const cast = PERSON.mount(new THREE.Scene());
     const c = defaultControls(PERSON);
-    // Row mode is one per behavior profile, as it was one per archetype.
+    // Row mode is one per behavior profile a model can draw, as it was one per archetype.
+    const each = BEHAVIOR_KEYS.filter(k => behaviorUnavailable(k) === null);
     cast.rebuild(7, PERSON.row, c);
     cast.draw(0, BEHAVIOR_KEYS.map((_, i) => i * 1.15), 0);
     for (let i = 0; i < PERSON.row; i++) {
-        const want = new Subject(7, i, { behavior: BEHAVIOR_KEYS[i] });
+        const want = new Subject(7, i, { behavior: each[i % each.length] });
         const got = cast.readout(i, 1.8);
-        assert.equal(got.title, want.profile.name, `figure ${i} is not ${BEHAVIOR_KEYS[i]}`);
+        assert.equal(got.title, want.profile.name, `figure ${i} is not ${each[i % each.length]}`);
         // 18 is the true floor: torso, neck, head, both legs, both arms, both hands and both feet
         // are put() unconditionally by drawPerson (even a seated rider's legs are repositioned
         // rather than hidden), so anything under it can only mean the cast recorded nobody. The
@@ -176,8 +178,16 @@ test('every person URL that worked before still works', () => {
     assert.equal(s.controls.build, undefined);
     // A key already in the new form wins over its old name.
     assert.equal(stateFor(person, 'single', '?build=broad&body-type=slim').controls['body-type'], 'slim');
-    assert.equal(s.controls.equipment, 'cane');
-    for (const [arch, behavior] of [['tourist', 'typical'], ['mary', 'slow-walker'], ['kyle', 'distracted'], ['linda', 'sudden-stopper'], ['johnsons', 'group-walker'], ['timmy', 'darter']]) {
+    // `mob=cane` still arrives as equipment, but no model can be drawn with a cane yet, so the option
+    // is greyed and the address loads the seed's roll instead; the same for a Darter, who needs a
+    // child model. Both links still open.
+    const old = new URLSearchParams('?mob=cane&arch=timmy');
+    person.legacy?.(old);
+    assert.equal(old.get('equipment'), 'cane');
+    assert.equal(old.get('behavior'), 'darter');
+    assert.equal(s.controls.equipment, 'seed');
+    assert.equal(stateFor(person, 'single', '?arch=timmy').controls.behavior, 'seed');
+    for (const [arch, behavior] of [['tourist', 'typical'], ['mary', 'slow-walker'], ['kyle', 'distracted'], ['linda', 'sudden-stopper'], ['johnsons', 'group-walker']]) {
         assert.equal(stateFor(person, 'single', `?arch=${arch}`).controls.behavior, behavior, arch);
     }
     assert.equal(stateFor(person, 'single', '?arch=seed').controls.behavior, 'seed');

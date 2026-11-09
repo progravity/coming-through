@@ -42,6 +42,7 @@ export type { Family };
  * Every control may be **disabled with a reason**: still listed, never changeable, and its reason
  * shown beside it. A source that cannot do something yet says so in place, so the panel doubles as
  * the list of what it still lacks. A disabled control keeps its default whatever an address says.
+ * An enum can do the same for some of its options alone (`unavailable`).
  */
 export type Control = (
     | {
@@ -50,6 +51,12 @@ export type Control = (
         key?: string; rebuilds?: boolean;
         /** What each option is called on screen, where its key is not a name: `slow-walker` is Slow Walker. */
         titles?: Readonly<Record<string, string>>;
+        /**
+         * Options listed but not choosable, each with its reason: a Darter while there is no child
+         * model. Greyed in place rather than left out, so the control still says what exists; an
+         * address naming one is read as the default, as a disabled control is.
+         */
+        unavailable?: Readonly<Record<string, string>>;
     }
     | { kind: 'toggle'; id: string; label: string; value: boolean; key?: string; rebuilds?: boolean }
     | {

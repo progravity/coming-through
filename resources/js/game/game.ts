@@ -12,19 +12,17 @@ import type { Action } from './input/index.ts';
 import { KeyboardAdapter } from './input/keyboard.ts';
 import { Recorder } from './input/recorder.ts';
 import { TouchAdapter } from './input/touch.ts';
-import { drawsAsPrimitive } from './modelcrowd/body.ts';
 import { startPeople } from './modelcrowd/index.ts';
-import { drawPerson } from './render/person.ts';
+import type { People } from './modelcrowd/index.ts';
+import type { PlayerFigure } from './modelcrowd/crowd.ts';
 import { PartPools } from './render/pools.ts';
-import { staminaFraction, staminaState } from './sim/player.ts';
+import { createPlayer, staminaFraction, staminaState } from './sim/player.ts';
 import { lerpPose, newPose } from './sim/pose.ts';
 import { MAX_CROWD, Simulation, clampCrowd } from './sim/simulation.ts';
 import type { StepCommand } from './sim/simulation.ts';
 import { UI } from './ui.ts';
 import { wrapAngle } from './util.ts';
 import { buildWorld } from './world/index.ts';
-import { PLAYER_SLOT } from './world/layout.ts';
-import { PATH } from './world/path.ts';
 
 // ---------- seed and mode ----------
 const params = new URLSearchParams(location.search);
@@ -56,22 +54,34 @@ const rig = new CameraRig();
 const pools = new PartPools(world.scene);
 const debug = new DebugOverlay(ui.debugCanvas);
 /**
- * People are drawn with models by default (`modelcrowd/`, `?model=` choosing which), and
- * `?people=prim` keeps the primitive people. Primitives stay the fallback in every mode: for the
- * player, for anyone whose equipment the models cannot carry yet (`drawsAsPrimitive`), and for the
- * whole crowd if the model fails to load. The cost readout shows when asked for -- `?people=` or a
- * stress run -- and is read by the bench scripts as `game.people` either way.
+ * Every person is drawn with a person model, the player included (`modelcrowd/`, `?model=` choosing
+ * which). There is no fallback: a model that fails to load, a data file that fails its check, or a
+ * model with no walk to play stops the game here, with the model named and the problem said, rather
+ * than drawing anyone any other way. The cost readout shows when asked for -- `?people=model` or a
+ * stress run -- and is read by the bench scripts as `game.people` either way. `?people=prim`, which
+ * used to draw the primitive people, is read as no parameter at all, and dropped from the address.
  */
 const peopleParam = params.get('people');
-const people = await startPeople(peopleParam === 'prim' ? 'prim' : 'model', world.scene, params,
-    () => input.dispatch('toggleInk'), peopleParam !== null || stress);
-const modelCrowd = people.models;
+if (peopleParam === 'prim') {
+    const url = new URL(location.href);
+    url.searchParams.delete('people');
+    history.replaceState(null, '', url);
+}
+let people: People;
+try {
+    people = await startPeople(world.scene, params, () => input.dispatch('toggleInk'), (peopleParam !== null && peopleParam !== 'prim') || stress);
+} catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    ui.fatal('The game can\'t start', [`A person model could not be used, so there is nobody to draw:`, ...why.split('\n')]);
+    throw e;
+}
 
 // ---------- loop state ----------
 const IDLE = { x: 0, y: 0, mag: 0, hurry: false } as const;
 const cmd: StepCommand = { x: 0, y: 0, mag: 0, hurry: false, cam: 'first', running: false, crowd: 0 };
-const view = newPose();
 const playerView: PlayerView = { ...newPose(), camYaw: 0, speed: 0 };
+/** The player, as the model renderer takes them: refilled each frame, never reallocated. */
+const playerFigure: { -readonly [K in keyof PlayerFigure]: PlayerFigure[K] } = { recipe: createPlayer().recipe, view: playerView, speed: 0, time: 0 };
 const RING = 120;
 const simRing = new Float64Array(RING), renderRing = new Float64Array(RING), stepRing = new Float64Array(RING), poseRing = new Float64Array(RING);
 const ringSum = { sim: 0, render: 0, steps: 0, pose: 0 };
@@ -140,7 +150,9 @@ function startRun(nextSeed: number): void {
     sim.onBump = e => { const hit = hitStrength(e.force); ui.flash(hit); rig.kick(e.nx, e.nz, hit); };
     // Scenery, not a person: its own quiet cue, and never the bump count.
     sim.onScrape = () => ui.scrape();
-    rig.setBody(sim.player.recipe);
+    // The camera stands on the player as the model draws them: their height and their eyes.
+    rig.setBody(people.heights(sim.player.recipe));
+    playerFigure.recipe = sim.player.recipe;
     sim.prime(targetCount);
     recorder = new Recorder(seed, targetCount);
     acc = 0;
@@ -359,23 +371,17 @@ function frame(now: number): void {
     // The crowd walks in the horizontal plane and is *draped* onto the walkway at the last
     // moment: the height under a body is a question about the path, asked of the interpolated
     // position rather than interpolated itself, so nobody floats over a crest between two steps.
-    if (modelCrowd !== null) {
-        modelCrowd.draw(sim.crowd.agents, alpha, sim.player, pools.inkOn);
-        // And the people it leaves to the primitives, whose colliders their equipment sets.
-        for (const a of sim.crowd.agents) {
-            if (!drawsAsPrimitive(a.recipe, modelCrowd.drawable)) continue;
-            lerpPose(view, a.prev, a, alpha); drawPerson(pools, a.slot, a, view, t, PATH.surfaceY(view.x, view.z));
-        }
-    } else for (const a of sim.crowd.agents) { lerpPose(view, a.prev, a, alpha); drawPerson(pools, a.slot, a, view, t, PATH.surfaceY(view.x, view.z)); }
     const p = sim.player;
     lerpPose(playerView, p.prev, p, alpha);
     playerView.camYaw = p.prevCamYaw + wrapAngle(p.camYaw - p.prevCamYaw) * alpha;
     // How fast the player is actually going, for the camera's sprint cue. Not interpolated: it is
     // already smoothed by the time the step is done with it, and the rig eases its own response.
     playerView.speed = Math.hypot(p.vx, p.vz);
-    if (rig.mode === 'first') pools.freeSlot(PLAYER_SLOT);
-    else drawPerson(pools, PLAYER_SLOT, p, playerView, t, PATH.surfaceY(playerView.x, playerView.z));
-    pools.commit();
+    // Everyone is a model. In first person the camera is the player's eyes, so their own body is
+    // not drawn; in the other two views it walks at the speed it is really travelling, shove and all.
+    playerFigure.speed = Math.hypot(p.vx + p.kx, p.vz + p.kz);
+    playerFigure.time = sim.steps * SIM_DT;
+    people.draw(sim.crowd.agents, alpha, p, pools.inkOn, rig.mode === 'first' ? null : playerFigure);
     const poseMs = performance.now() - renderStart;
     world.animate(t);
     renderer.render(world.scene, rig.update(frameDt, playerView));

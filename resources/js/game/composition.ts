@@ -9,12 +9,25 @@
  * takes an option out of the crowd without taking it out of the game (the people lab can still ask
  * for it by name).
  *
- * The behavior weights are the old archetypes' own spawn weights, profile for profile, so the
- * default crowd's mix of behaviors is today's mix of archetypes. Two pairings are tied on purpose
- * and live here as their own entries rather than as weights: a stroller only ever comes with a Slow
- * Walker, and a Group Walker's family can share the leader's clothing scheme.
+ * The behavior weights are the old archetypes' own spawn weights, profile for profile. Two pairings
+ * are tied on purpose and live here as their own entries rather than as weights: a stroller only
+ * ever comes with a Slow Walker, and a Group Walker's family can share the leader's clothing scheme.
+ *
+ * **Every person is drawn with a model, so the crowd holds only people a model can draw**
+ * (`docs/specs/person-model.md`, "Models only"). The weights below are the crowd as designed; what
+ * the crowd is rolled from is those weights with every choice the game cannot draw taken to zero
+ * (`crowdBehavior`, `crowdEquipment`, `crowdStroller`). Two things decide what can be drawn, and
+ * both are read rather than written down: the age classes the crowd has a model for, from the data
+ * files in `data/people/` (`crowdModels`), and the equipment the game can attach (`EQUIPMENT_ITEMS`).
+ * A behavior that needs a model class nobody provides -- a Darter needs a child -- and equipment
+ * with no item get no weight; a child model dropped into `data/people/` brings the Darters back
+ * with no change here. The lab still offers both, greyed, with the reason (`behaviorUnavailable`,
+ * `equipmentUnavailable`).
  */
-import type { BehaviorKey } from './behaviors.ts';
+import { needsOf } from './behaviors.ts';
+import type { BehaviorKey, BehaviorMix } from './behaviors.ts';
+import { AGE_CLASSES, PERSON_MODELS } from './data/people.ts';
+import type { AgeClass, PersonModel } from './data/people.ts';
 import type { BodyType, Equipment } from './recipe.ts';
 import type { HairKey, PooledKey, SkinToneKey } from './wardrobe.ts';
 
@@ -48,6 +61,91 @@ export const COMPOSITION = {
     /** The chance a Group Walker's family all wear the leader's clothing scheme (each arranged their own way). */
     groupSharesScheme: 0.8,
 } as const;
+
+// ---------- what the game can draw ----------
+
+/**
+ * The model the crowd's adults are drawn from, unless `?model=` names another. Composition will
+ * choose models by their facts later; until then, this one.
+ */
+export const CROWD_MODEL = 'casual-man';
+
+/**
+ * The model each age class is drawn from, for every class some person model provides: `prefer`
+ * when it is one of that class, otherwise the first in ID order. Only visitors count -- a model
+ * whose occupation is `none` -- since a staff model is for staff spots, never the crowd (the spec's
+ * "Worlds opt in"). The game loads these and nothing else, and composition reads the same answer,
+ * so the two cannot disagree about who can be drawn.
+ */
+export function crowdModels(models: Readonly<Record<string, PersonModel>> = PERSON_MODELS, prefer: string = CROWD_MODEL): Partial<Record<AgeClass, PersonModel>> {
+    const visitors = Object.values(models).filter(m => m.occupation === 'none');
+    const out: Partial<Record<AgeClass, PersonModel>> = {};
+    for (const c of AGE_CLASSES) {
+        const of = visitors.filter(m => m.ageClass === c);
+        const chosen = of.find(m => m.id === prefer) ?? of[0];
+        if (chosen !== undefined) out[c] = chosen;
+    }
+    return out;
+}
+
+/**
+ * The equipment the game can attach to a model. None yet: equipment items (the item spec's
+ * `data/items/`) and the poses and placement that put a person in or behind one are not built. Each
+ * piece of equipment comes back into the crowd the day it is listed here, and nothing else changes.
+ */
+export const EQUIPMENT_ITEMS: readonly Exclude<Equipment, 'none'>[] = [];
+
+/** What the game can draw a person with: the age classes it has a model for, and the equipment it can attach. */
+export interface Drawable {
+    readonly ageClasses: readonly AgeClass[];
+    readonly equipment: readonly Exclude<Equipment, 'none'>[];
+}
+
+/** What a set of models and items can draw. */
+export const drawableOf = (models: Readonly<Record<string, PersonModel>> = PERSON_MODELS,
+    equipment: readonly Exclude<Equipment, 'none'>[] = EQUIPMENT_ITEMS): Drawable => {
+    const by = crowdModels(models);
+    return { ageClasses: AGE_CLASSES.filter(c => by[c] !== undefined), equipment };
+};
+
+/** What the game can draw today, read once from the bundled data files. */
+export const DRAWABLE: Drawable = drawableOf();
+
+/**
+ * A model for every age class and an item for every piece of equipment: the crowd exactly as the
+ * weights above design it, as it was before models were the only way to draw a person. The game
+ * never uses it; tests do, to keep exercising the people the crowd will hold again.
+ */
+export const AS_DESIGNED: Drawable = { ageClasses: AGE_CLASSES, equipment: ['stroller', 'cane', 'wheelchair', 'scooter'] };
+
+/** Why no person of this behavior can be drawn, or null when one can: a clause, to follow its name. */
+export function behaviorUnavailable(b: BehaviorKey, d: Drawable = DRAWABLE): string | null {
+    const needs = needsOf(b);
+    return d.ageClasses.includes(needs) ? null : `needs ${needs === 'adult' ? 'an' : 'a'} ${needs} model, and there is none yet`;
+}
+
+/** Why no person with this equipment can be drawn, or null when one can: a clause, to follow its name. */
+export function equipmentUnavailable(e: Equipment, d: Drawable = DRAWABLE): string | null {
+    if (e === 'none' || d.equipment.includes(e)) return null;
+    return 'needs an equipment item to attach to a model, and there is none yet';
+}
+
+/** The behavior weights the crowd is rolled from: the composition's (or a lab mix), less what cannot be drawn. */
+export function crowdBehavior(mix: BehaviorMix = COMPOSITION.behavior, d: Drawable = DRAWABLE): Readonly<Record<BehaviorKey, number>> {
+    const out = { ...mix } as Record<BehaviorKey, number>;
+    for (const k of Object.keys(out) as BehaviorKey[]) if (behaviorUnavailable(k, d) !== null) out[k] = 0;
+    return out;
+}
+
+/** The mobility aid weights the crowd is rolled from, less what cannot be drawn. */
+export function crowdEquipment(d: Drawable = DRAWABLE): Readonly<Record<Exclude<Equipment, 'stroller'>, number>> {
+    const out = { ...COMPOSITION.equipment };
+    for (const k of Object.keys(out) as Exclude<Equipment, 'stroller'>[]) if (equipmentUnavailable(k, d) !== null) out[k] = 0;
+    return out;
+}
+
+/** The chance a Slow Walker pushes a stroller, or none while a stroller cannot be drawn. */
+export const crowdStroller = (d: Drawable = DRAWABLE): number => (equipmentUnavailable('stroller', d) === null ? COMPOSITION.stroller : 0);
 
 /**
  * The option a roll in [0, 1) lands on, weighted, walking `keys` in their fixed order. Takes a roll

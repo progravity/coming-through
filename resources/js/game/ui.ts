@@ -1,4 +1,5 @@
 import { BEHAVIORS, BEHAVIOR_KEYS } from './behaviors.ts';
+import { behaviorUnavailable } from './composition.ts';
 import { BOB, BOB_CONTROLS, STAMINA, resetBob } from './feel.ts';
 import type { BobKey } from './feel.ts';
 import type { CameraMode, StaminaState } from './sim/player.ts';
@@ -54,7 +55,10 @@ export class UI {
 
     constructor() {
         const legend = el<HTMLElement>('legend');
+        // The behaviors the crowd can hold: one no model can draw (a Darter, until there is a child
+        // model) never appears, so it has no color to explain.
         for (const k of BEHAVIOR_KEYS) {
+            if (behaviorUnavailable(k) !== null) continue;
             const A = BEHAVIORS[k]; const row = document.createElement('div');
             row.innerHTML = `<i style="background:#${A.color.toString(16).padStart(6, '0')}"></i>${A.name} <span>${A.desc}</span>`;
             legend.appendChild(row);
@@ -180,6 +184,18 @@ export class UI {
         this.title.textContent = 'Made it';
         this.result.textContent = `${elapsed.toFixed(1)} seconds, ${bumps} bump${bumps === 1 ? '' : 's'}.`;
         this.start.textContent = 'Go again';
+        this.overlay.style.display = 'flex';
+    }
+    /**
+     * The game cannot start: say why, in place of the start screen, and offer nothing to press. Each
+     * problem is a line of its own, as text, so a file name or an error message is shown as written.
+     */
+    fatal(title: string, problems: readonly string[]): void {
+        const box = this.overlay.firstElementChild ?? this.overlay;
+        const h = document.createElement('h1');
+        h.textContent = title;
+        const lines = problems.map(text => { const p = document.createElement('p'); p.className = 'problem'; p.textContent = text; return p; });
+        box.replaceChildren(h, ...lines);
         this.overlay.style.display = 'flex';
     }
     /** Label the start button for whether pressing it replays the same seed or plays a new one. */

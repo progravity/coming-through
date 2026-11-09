@@ -304,6 +304,25 @@ function headSpan(mesh: THREE.SkinnedMesh, head: number): { base: number; top: n
     return top > base ? { base, top } : null;
 }
 
+/**
+ * Where a person model's eyes are, as a fraction of the way from its head's joint to its crown
+ * (`headSpan`). Measured on the two models' eye texels: casual-man's black `keep` region sits 1.62
+ * to 1.66 m up a 1.75 m figure whose head joint is at 1.489 m and crown at 1.736 m, and
+ * casual-man-low's at 1.62 to 1.63 m on a head from 1.485 to 1.733 m. This puts the eye line at
+ * 1.632 and 1.629 m, through the middle of both. A fraction of the head rather than of the figure,
+ * so a model with a bigger head or a longer neck gets its own eye line.
+ */
+export const EYE_ON_HEAD = 0.58;
+
+/**
+ * A skinned figure's eye line, in its geometry's own space: the head's joint plus `EYE_ON_HEAD` of
+ * the way to the crown, both read off the bind matrices. Null when the rig has no head bone.
+ */
+export function eyeLevel(mesh: THREE.SkinnedMesh): number | null {
+    const span = headSpan(mesh, mesh.skeleton.bones.findIndex(b => /Head$/i.test(b.name)));
+    return span === null ? null : span.base + EYE_ON_HEAD * (span.top - span.base);
+}
+
 /** Average the normals of coincident vertices into `bodyNormal`, so a seam swells as one surface. */
 function weldNormals(geo: THREE.BufferGeometry): void {
     const pos = geo.getAttribute('position'), nrm = geo.getAttribute('normal');

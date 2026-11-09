@@ -30,7 +30,7 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   incoming connections for `php` and `node` the first time. Two dev servers for one checkout fight
   over `public/hot`, which is why the other one has to stop.
 - **Tests:** `npm test` type-checks the engine and its tests, runs the Math.random check, and then
-  runs everything under `tests/js/` with `node --test` (303 tests). `npm run lint` is the first two
+  runs everything under `tests/js/` with `node --test` (309 tests). `npm run lint` is the first two
   on their own. `composer test` is the Laravel side: Pint, PHPStan and Pest (`tests/Feature/`,
   `tests/Unit/`), against SQLite in memory. Both are plain commands and both must pass.
 - **Node is pinned to 26.13.0** in `.nvmrc` (and `^26.13.0` in `package.json` `engines`). Herd's
@@ -190,16 +190,15 @@ The engine:
   `redirect.ts`, `dom.ts`, and one directory per lab holding its entry; `people/` also holds the crowd
   view. The files at the top of `labs/` are shell, like the inspector's: they reach the registry and
   the interface and never an entity, which `tests/js/labs.test.ts` checks. See "The labs" below.
-- `resources/js/game/modelcrowd/` — **the default way people are drawn**: the crowd as clones of a rigged
-  model (`casual-man` unless `?model=` names another). `?people=prim` keeps the primitive people,
-  which stay the fallback: for the player, for anyone with a mobility aid or a stroller, and for the
-  whole crowd if the model fails to load. `regions.ts` finds a model's color regions and repaints
-  them per person, `body.ts` shapes each clone by its recipe's Body Type and decides who falls
-  back (see "Model bodies"), `clips.ts` plays each model's clips by role -- walk and run by the
-  ground covered, idle when someone stops (see "Clip roles") -- and `index.ts` chooses the
-  renderer and keeps the cost readout, shown
-  under `?people=` or a stress run. The people lab, which shows only models, uses all of it.
-  See "Models by default".
+- `resources/js/game/modelcrowd/` — **how every person is drawn**, the player included: clones of a
+  rigged model, one model per age class the crowd holds (`casual-man` for adults unless `?model=`
+  names another). There is no fallback: a model that cannot be used stops the game with the reason
+  (see "Models only"). `regions.ts` finds a model's color regions and repaints
+  them per person, `body.ts` shapes each clone by its recipe's Body Type and measures its eyes
+  (see "Model bodies"), `clips.ts` plays each model's clips by role -- walk and run by the
+  ground covered, idle when someone stops (see "Clip roles") -- and `index.ts` loads the models,
+  refuses to start without them, and keeps the cost readout, shown
+  under `?people=model` or a stress run. The people lab, which shows only models, uses all of it.
 - `resources/js/game/compare/` — the render-direction comparator. The six rendering directions it shows side by
   side live as data in `resources/js/game/render/look.ts`; `?look=` plays a normal run under one of them and
   reaches every surface, not just the crowd. `main.ts` names this directory only to *open* it, so
@@ -353,6 +352,13 @@ The engine:
   too, and says why; that a model whose file did not load still has its data file checked; that
   every line of the spec's acceptance checklist is on the card, automated or manual; and what the
   two models in the repo pass and fail today.
+- `tests/js/models-only.test.ts` — every person is a model: that the crowd holds nobody a model
+  cannot draw (no Darter, no equipment, at several seeds), that what can be drawn is read off the
+  data files and the equipment items, so a child model brings the Darters back and a staff model
+  brings nothing, that each age class is drawn from one model, that a broken data file or a crowd
+  with no adult model stops the game with the reason, that the player is drawn with the crowd model
+  at their own slot (and not in first person) with the camera on that model's height and eye line,
+  and that a model with no walk cannot be drawn.
 - `tests/js/recipe-streams.test.ts` — that a person's appearance rolls are contained to appearance.
   It adds a dummy roll to every person's recipe fork without touching `makeRecipe` (a swapped
   recipe stream whose forks take one extra draw at a chosen position), runs the same crowd with
@@ -1408,6 +1414,21 @@ a child who rolls a mobility scooter walks instead, since the primitive child ca
 can still force it); and a seated rider -- a wheelchair or a scooter -- carries no backpack, which
 would be drawn inside the seat back (the roll is taken either way).
 
+**The crowd holds only people a model can draw** (`docs/specs/person-model.md`, "Models only"). The
+weights below are the crowd as designed; the crowd is rolled from them with every choice the game
+cannot draw taken to zero (`crowdBehavior`, `crowdEquipment` and `crowdStroller` in
+`composition.ts`). What can be drawn is read, not written down (`DRAWABLE`): the age classes the
+crowd has a model for, from the visitor models (occupation `none`) in `data/people/`
+(`crowdModels`), and the equipment the game can attach (`EQUIPMENT_ITEMS`, empty until equipment
+items exist). Today that is adults and no equipment, so **there are no Darters and nobody with
+equipment in the crowd**; every roll is still taken, and a child model dropped into `data/people/`
+brings the Darters back with no code change (and both hashes with them). The lab offers both,
+greyed, with the reason (`behaviorUnavailable`, `equipmentUnavailable`), and a lab mix cannot bring
+one back. `AS_DESIGNED` is the crowd with everything drawable, which the game never uses and the
+tests do, to keep the stroller corridor and the Darter's parent exercised. A choice with no weight
+takes the others' share: the behavior roll is picked against 15 rather than 17, which moved nearly
+half of everyone's profile (45.9% of rolls select another), not only the Darters'.
+
 **Age is not a choice: it comes only from a model's age class** (`adult`, `child`, `elder`, in its
 data file). Children and elderly people come from models made for those ages, never from adjusting
 an adult, so there are no age presets: no roll, no lab control or row, no table. They were Young,
@@ -1431,14 +1452,15 @@ the archetypes one for one, in the same order, each naming the archetype it was 
 | Darter | Timmy | 2.0-2.8 | small, fast, unpredictable; beside a Typical parent; a child |
 
 **The default weights** (`COMPOSITION`): behavior 6/2/2/2/2/1/2 in that order -- the archetypes' own
-spawn weights, so the default crowd's behavior mix is today's archetype mix (measured over forty
-seeds: Typical 37.3% against Tourist 36.8%, Group Walker 16.3% against the Johnsons 16.7%, the rest
-within a point); Body Type even fifths; skin tone even sevenths; hair black 3, dark brown 3, brown
+spawn weights. With the Darter's taken out, the crowd measures (forty seeds, 190 people each)
+Typical 34.2%, Weaver 10.8%, Slow Walker 11.3%, Distracted 10.7%, Sudden Stopper 11.6%, Group Walker
+21.3%; as designed it was the archetypes' mix (Typical 37.3% against Tourist 36.8%, Group Walker
+16.3% against the Johnsons 16.7%). Body Type even fifths; skin tone even sevenths; hair black 3, dark brown 3, brown
 2.5, light brown 1.5, blond 1.2, red 0.5, gray 1 (7.9% of the crowd: the adults whose hair reads gray
 from the walkway, while elders, who will bring their own, have no model yet); equipment none 92.7, cane 3.1,
-wheelchair 2.7, scooter 1.5 (about 6.5% of the crowd on an aid, as before), and a stroller for 60%
-of Slow Walkers (5.4% of the crowd, down from Mary's 9.7%); a Group Walker family shares the leader's
-clothing 80% of the time.
+wheelchair 2.7, scooter 1.5 (about 6.5% of the crowd on an aid, as designed), and a stroller for 60%
+of Slow Walkers (5.4% of the crowd, as designed) -- none of which the crowd rolls while no equipment
+item exists; a Group Walker family shares the leader's clothing 80% of the time.
 
 Four hard rules hold `makeRecipe` together:
 
@@ -1465,10 +1487,12 @@ Four hard rules hold `makeRecipe` together:
 - **Nothing in a recipe may reach the `spawn` or `behavior` streams.**
 
 **The player is rolled from a constant seed and then pinned** (`createPlayer` in `sim/player.ts`):
-their Body Type, skin, head, trousers, shoes and gait are written out rather than left to the roll,
-because the first-person eye height reads the player's `h` and `headR`. Removing the age roll would
-otherwise have dressed the player all in white and lowered the camera 1.7 cm; a change to the
-appearance rolls re-dresses the crowd and never the player.
+their Body Type, skin, hair, clothing scheme and its arrangement, height and gait are written out
+rather than left to the roll, because the model draws them from those and the camera stands on
+the model's height for them. A change to the appearance rolls re-dresses the crowd and never the
+player. **The player is drawn with the crowd's adult model**, at slot 0 (`PLAYER_SLOT`), walking and
+standing by the clips as anyone else does, at the speed they really travel (the bump's shove
+included); in first person they are not drawn, since the camera is their eyes.
 
 A behavior profile also declares what kind of thing a person is -- see "The entity taxonomy" above;
 for a person the taxonomy's type is their profile. That is metadata about the *kind* rather than a
@@ -1626,9 +1650,9 @@ compensate for. The glasses are the only parts exempt today; the balloon string 
 depth are the next candidates. Adding one is one word at the call site -- deliberately not a list of
 part indices, because `box` 3-9 is shared between a phone, a camera and a pram.
 
-Anything outside the renderer that needs to know how tall a person is imports `standingHeight` or
-`eyeHeight` from `render/person.ts`; `camera.ts` derives all three of its heights that way, so a
-proportion change cannot leave the camera aimed where the chest used to be.
+The camera does not read this figure: it stands on the player as the model draws them
+(`ModelCrowd.heights`, see "The model renderer"), so a change of model or of height cannot leave it
+aimed where the chest used to be.
 
 ## Looks
 
@@ -1726,7 +1750,7 @@ and buildings toggle is in place and stays on primitives, with its reason in the
 lab has no source: it shows models only** (`Lab.modelsOnly`, read as `Scope.modelsOnly`), in every
 view. Its only entity is the model, so the primitive person is filed in no lab, and any address
 naming the primitive person, an old `source=prim` and an old `/play?inspect=` person address all
-open the model. The primitive people are the game's fallback and nothing else.
+open the model. The game draws no primitive people at all (see "Models only").
 
 **The shared information panel** (`inspect/info.ts`) is the left card in every view. It renders a
 `Readout` -- the at-a-glance rows, the swatches, and `sections` under shared headings, in this order:
@@ -1741,8 +1765,10 @@ into two vocabularies.
   Clothing scheme, Behavior and Equipment, each with **Seed** first -- what the seed rolls for agent
   N, exactly as the crowd rolls them (Model's Seed is the game's model for the class the person
   needs). Choices with more options than fit on a row are dropdowns, and every option shows its
-  name (`Control.titles`); the clothing scheme lists Park Staff as "(uniform)". Equipment is listed
-  and greyed, "not yet supported on models", with the reason; so are accessories. Then seed
+  name (`Control.titles`); the clothing scheme lists Park Staff as "(uniform)". What no model can
+  draw yet is listed and greyed with the reason, never hidden: every piece of equipment and the
+  Darter, option by option (`Control.unavailable`, read off `DRAWABLE`, so an address naming one
+  gets the seed's roll and a key steps over it), and the accessories toggle whole. Then seed
   stepping, `agent` (the spawn index), the clip, freeze and phase, a held angle, so any agent of
   any seed stands on the turntable as the crowd built them; a group follower's address carries the
   family's shared scheme. Collider and orientation overlays draw the body the crowd steers
@@ -1754,15 +1780,14 @@ into two vocabularies.
   limbs, fullness, face and neck; the skin tone's place on the ramp and the color it landed on; the
   hair color; the clothing scheme's kind (pooled or uniform) and the color each clothing slot got
   on this model; the behavior in a line, and whether the game walks or runs them at their speed;
-  the equipment and that the game draws them as primitives. **Behavior** spells out the profile's
+  the equipment. **Behavior** spells out the profile's
   settings: speed, acceleration, weaving, separation, avoiding the player, stops, grouping,
   collider and gait. **Clothing on <model>** lists every clothing slot with its color (or that the
   model has none), the scheme and its pool, which arrangement was taken, and the rules it meets (a
   uniform's are waived). Then the body against the presets and limits, the rolls, geometry, the
   model's clip roles (every role the spec names, present with its clip, loop and authored speed or
   missing, with a missing walk, run or idle marked as an error), clips, color regions, anchors and
-  costs, provenance. A Darter shows on the adult model
-  with a note that it needs a child model, and the game's fallback is on any card it applies to.
+  costs, provenance.
 
   `compare=` chooses what the row stands side by side: `body-type` (the default: the five Body
   Types exactly; `compare=build`, from before the rename, still opens it, and an old `compare=age`
@@ -1784,9 +1809,7 @@ into two vocabularies.
   Typical walkers (`walkers=`, six by default: half ahead going the same way, half coming the other)
   so weaving and avoidance are visible. A Group Walker brings their family, a Darter their Typical
   parent, as the spawner would; the scene restarts when they reach the far end. **Everyone is drawn
-  from the model**, as on the stage (`ModelCrowd.everyone`): someone the game would draw as
-  primitives -- equipment, or a Darter -- walks as the model without the equipment, at the speed and
-  with the collider the equipment gives them, and the card says what the game does. Overlays: **speed**
+  from the model**, as on the stage (`ModelCrowd.everyone`). Overlays: **speed**
   (a label over the head), **trail** (the route walked, colored from blue where slow against their
   own pace to orange at it), **stops** (a ring wherever they stopped dead, sized by how long), and
   **avoidance** (arrows for the separation, furniture and railing forces from the steering functions
@@ -1798,7 +1821,7 @@ into two vocabularies.
   identity, choices and behavior. It builds its own `Crowd` and touches neither hash.
 - **People, crowd** (`labs/people/`) — a `Simulation` built, primed and stepped exactly as the game
   does between runs (the player idle on the start pad), in its own instance, drawn with the game's
-  world, people (models, with the game's fallback) and shipped look. View settings: seed, crowd
+  world, people (models) and shipped look. View settings: seed, crowd
   size and a behavior mix (weights, `mix=` in `BEHAVIOR_KEYS` order). Time: play, pause, one step,
   ½×, ¼×, ⅒×; a paused crowd writes `at`, the steps since priming, so a link reopens the same moment.
   Cameras: orthographic top-down (`top=`), free orbit (`orbit=`), and follow (`cam=follow&sel=`).
@@ -2063,7 +2086,7 @@ guessed from a name any more. Each entry is `{ "clip", "loop", "speed"?, "props"
 - **Walk, run and idle are required**, but a model missing one still loads. The lab card lists every
   role, present with its clip or missing, and a missing required role -- or a clip the GLB does not
   have, or a stale speed -- is an error there and on the console; any other missing role is just
-  listed. Without a walk the game cannot draw the model and falls back to the primitives.
+  listed. Without a walk the game cannot draw the model, and does not start.
 
 **How the crowd plays them** (`GaitState` and `prepareClips` in `modelcrowd/clips.ts`, presentation
 only: neither hash moves and nothing under `sim/` reads a clip):
@@ -2176,30 +2199,30 @@ rules; both fail textures (a 2048×2048 base color) and clip roles (no idle); bo
 `casual-man-low` at 2,591, under it, and fails textures a second time for its 2048×2048
 metallic-roughness map. 5 passed, 1 warning, 3 failed and 7 manual each.
 
-### Models by default
+### Models only
 
-**People are drawn with models by default** in the game (`?people=model` or nothing), and **only**
-with models in the people lab. The primitive people are kept as the game's
-fallback: `?people=prim` for everyone, and always for the player, for
-anyone with **equipment** -- a stroller, a wheelchair, a scooter or a cane -- for **Darters**, who
-need a child model and have none yet (the crowd's model's data file says which age class it is), and
-for the whole crowd if the model fails to load (`drawsAsPrimitive` in `modelcrowd/body.ts`).
+**Every person in the game is drawn with a person model, the player included**, and the people lab
+shows only models (`docs/specs/person-model.md`, "Models only"). There are no primitive people in
+the game, as a fallback or otherwise:
 
-The mobility fallback exists because what you see has to match what you collide with: a
-wheelchair, a scooter, a cane or a stroller widens a person's collider for the equipment, and a
-model drawn without the equipment would be someone you bump into half a meter before you reach
-them. Until models carry it, those people are primitives. It is flagged, not hidden: the cost
-readout (`?people=` or a stress run) and the crowd view's statistics count them ("as primitives"),
-and the lab says so on any such person it shows -- the person's card and a crowd selection
-both. The crowd view draws the fallback exactly as the game does, so it shows what the game shows.
-The readout splits the count: at the stress seed, primed, 18 of 81 (11 with equipment and 7
-Darters) and 49 of 191 (30 and 19) -- a quarter of the crowd, up from 14 of 80 and 34 of 190 before
-Darters fell back. A child model takes the Darters back.
+- **Nobody a model cannot draw is in the crowd.** Equipment is not on the models yet, and a Darter
+  needs a child model nobody has made, so composition gives both no weight (see "A person"): the
+  crowd has no stroller, wheelchair, scooter or cane and no Darter until an item or a model brings
+  them back. What you see still matches what you collide with, because nobody is left whose
+  collider is sized for equipment that is not drawn.
+- **The game loads one model per age class the crowd holds** (`crowdModels` in `composition.ts`),
+  before it starts (`startPeople` in `modelcrowd/index.ts`), and **refuses to start** -- the start
+  screen replaced by "The game can't start" and the reason, each line naming the model or the data
+  file -- when any data file in `data/people/` is not valid (composition reads every one, so a
+  broken file would quietly change who the crowd holds), when there is no adult model, when a
+  model's GLB is not there or will not parse, when its rig has no head bone to measure the eyes by,
+  or when it has no walk to play. `?model=nobody` shows it.
+- **`?people=prim` is gone.** An old link with it plays as if it were not there, and the parameter
+  is dropped from the address bar. `?people=model` still shows the cost readout.
 
-The cost readout is on screen only under `?people=` or a stress run, and kept either way as
-`game.people` for the bench scripts. The scripts default to models too: `stress-headless.mjs` and
-`bench-looks.mjs` take `--prim`, `bench-people.mjs` runs models alone unless given `--only=prim` or
-`--only=both`, and `bench-pose.mjs` times the primitives by nature.
+The cost readout is on screen only under `?people=model` or a stress run, and kept either way as
+`game.people` for the bench scripts. Its "as primitives" line still counts anyone a model could not
+draw, which in the game is now always nobody.
 
 Measured in a visible tab at 120 Hz (`?stress=1`; frames sit on the vsync cap either way): at 80
 people, primitives pose 1.49 ms and render 1.94 ms against models 0.75 and 1.52; at 190, primitives
@@ -2208,9 +2231,18 @@ more triangles (2.85 M against 0.59 M at 190) for the GPU to absorb.
 
 ### The model renderer
 
-One clone of the model per crowd slot, built at load and hidden while a slot is empty; the player
-stays primitive. It reads the same interpolated pose `drawPerson` reads and writes nothing back, so
-neither hash can move, and nothing under `resources/js/game/sim/` imports it. Five things about it:
+One `ModelCrowd` per age class the crowd holds, each drawing the people of its own class; today
+that is one, `casual-man`, for adults. One clone of the model per crowd slot, built at load and
+hidden while a slot is empty; slot 0 is the player's, drawn by the adults' model except in first
+person. It reads the interpolated pose the simulation leaves and writes nothing back, so neither
+hash can move, and nothing under `resources/js/game/sim/` imports it. Six things about it:
+
+- **The camera stands on the player as this model draws them** (`heights`): their height is the
+  recipe's standing height the clone is scaled to, and their eyes are the model's own eye line at
+  that scale -- `eyeLevel` in `body.ts`, the head's joint plus `EYE_ON_HEAD` (0.58) of the way to the
+  crown, measured on both models' black eye texels (1.62 to 1.66 m up casual-man's 1.75 m). For the
+  player that is 1.75 m tall with eyes at 1.63 m. The shoulder view aims at 0.62 of the height and
+  rides at 1.45 of it, as before.
 
 - **The bones never move with the person.** Each clone's skeleton stays at the origin, out of the
   scene; only the skinned mesh is placed, in detached bind mode with identity bind matrices. That is
@@ -2313,8 +2345,8 @@ never adjusted into a younger or older person (see "A person").
   adult model and is the standing height itself for an adult. `figureHeight` is a read-only export
   from `recipe.ts`; nothing there rolls differently.
 - **A child is not an age; it is a model class.** Only a Darter needs one, and an adult model cannot
-  be made into a convincing child, so until there is a child model the game draws Darters as
-  primitives and the lab shows the adult model with a note saying it needs a child model.
+  be made into a convincing child, so until there is a child model the crowd has no Darters and the
+  lab greys the Darter out with the reason.
 - **Limits** keep every Body Type sane and are a safety net, not a style: no shipped preset touches
   them, which the tests pin. Width 0.82 to 1.16, shoulders 0.88 to 1.10, limbs 0.86 to 1.14,
   fullness 0 to 2.6%, face 0 to 0.7%, neck 0.96 to 1.12. A value pushed past one is clamped, and the
@@ -2360,10 +2392,15 @@ so nothing in it has been touched by a movement profile. **Work on appearance mu
 moves, a draw was added, removed or reordered in the `spawn` or `behavior` streams, or ahead of the
 behavior roll — fix the cause, never the stored value.
 
-**It moved once, on purpose,** when archetypes were split into independent choices: the profile
-used to be a spawn-stream draw and became the person's own recipe roll, a Darter's parent became
-the spawn index after the child's, and a family's shared outfit stopped being a spawn draw. That is
-the only time it has moved; it was written by hand in that commit.
+**It has moved twice, on purpose, each time written by hand in its commit.** First when archetypes
+were split into independent choices: the profile used to be a spawn-stream draw and became the
+person's own recipe roll, a Darter's parent became the spawn index after the child's, and a
+family's shared outfit stopped being a spawn draw. Then when every person became a model:
+composition stopped rolling Darters, who need a child model nobody has made, so the behavior roll
+selects against 15 instead of 17 (45.9% of rolls now land on another profile) and no Darter brings
+a Typical parent, which shifts every later spawn index. `AS_DESIGNED`, a model for every class and
+an item for every piece of equipment, still reproduces the value from before it, which is the proof
+that nothing else moved it.
 
 ## URL parameters
 
@@ -2386,8 +2423,8 @@ cost of toon against PBR against matcap actually shows up.
 `?seed=<uint32 or any string>` (strings are hashed), `?stress=1` (pinned seed, full crowd, no input,
 per-frame sim/render milliseconds; `&crowd=N` holds it at N people), `?debug=1` (top-down overlay),
 `?tier=low|mid|high`, `?look=<name>` (play the whole world under one rendering direction; see
-below), `?people=prim` (draw the crowd with the primitives) or `?people=model` (the default, with
-the cost readout on screen), `?model=<name>` (which model; see "Models by default").
+below), `?people=model` (the cost readout on screen; an old `?people=prim` is ignored and dropped),
+`?model=<name>` (which model; see "Models only").
 
 `?bob=` carries the head-bob tuning: one value per axis in `BOB_CONTROLS` order, clamped to each
 axis's own range on the way in, and dropped from the URL entirely when everything is 0 so an

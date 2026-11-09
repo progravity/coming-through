@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 import { CAMERA, bobAt, bobHz, newBobOffsets } from './feel.ts';
-import { eyeHeight, standingHeight } from './render/person.ts';
-import type { Recipe } from './recipe.ts';
+import type { FigureHeights } from './modelcrowd/crowd.ts';
 import { CAMERA_MODES } from './sim/player.ts';
 import type { CameraMode } from './sim/player.ts';
 import type { Pose } from './sim/pose.ts';
@@ -48,9 +47,9 @@ export class CameraRig {
     private readonly pos = new THREE.Vector3(this.home.x, this.home.y + 3, this.home.z);
     private readonly target = new THREE.Vector3();
     /**
-     * Heights taken from the player's own body rather than hardcoded, so a change to the character
-     * proportions cannot silently leave the camera looking at where the chest used to be. Defaults
-     * match a person of unit height until setBody is called.
+     * Heights taken from the player's own body, as the model draws them, rather than hardcoded, so a
+     * change of model or of height cannot silently leave the camera looking at where the chest used
+     * to be. Defaults stand in until `setBody` is called.
      *
      * All three are heights **above the walkway**, not world y: each is added to the path's surface
      * under whatever it is measuring from, so the rig rides a slope instead of burying itself in it.
@@ -99,10 +98,13 @@ export class CameraRig {
         this.hit = Math.min(1, this.hit + strength);
     }
 
-    /** Re-derive the camera heights from the body it is following. Call once per run. */
-    setBody(recipe: Recipe): void {
-        const top = standingHeight(recipe);
-        this.eye = eyeHeight(recipe);
+    /**
+     * Re-derive the camera heights from the body it is following: the player's height and eye line
+     * on the model they are drawn with (`ModelCrowd.heights`). Call once per run.
+     */
+    setBody(body: FigureHeights): void {
+        const top = body.height;
+        this.eye = body.eye;
         // Chest height for the follow camera to aim at, and a rig that clears the head comfortably.
         this.look = top * 0.62;
         this.high = top * 1.45;

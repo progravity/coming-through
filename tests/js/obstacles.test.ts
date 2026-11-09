@@ -13,6 +13,7 @@
  */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { AS_DESIGNED } from '../../resources/js/game/composition.ts';
 import { hasProperty } from '../../resources/js/game/entity.ts';
 import { Agent } from '../../resources/js/game/sim/agent.ts';
 import { SpatialGrid } from '../../resources/js/game/sim/grid.ts';
@@ -163,11 +164,12 @@ test('the interaction radius stays inside what the grid guarantees to find', () 
     // further would fade in and out depending on where the cell boundaries happened to fall.
     const obstacles = buildObstacles();
     const grid = fixedGrid(obstacles);
-    // The widest body the crowd actually produces, taken off real crowds rather than guessed at:
-    // a stroller pusher is the biggest circle in the game and no aid is wider.
+    // The widest body the crowd produces, taken off real crowds rather than guessed at: a stroller
+    // pusher is the biggest circle in the game and no aid is wider. Today's crowd holds none -- no
+    // model can be drawn with a stroller yet -- so these are crowds as designed, which do.
     let widest = 0;
     for (const seed of [1, 7, 20260903]) {
-        const sim = new Simulation(seed);
+        const sim = new Simulation(seed, { drawable: AS_DESIGNED });
         sim.crowd.fill(190);
         for (const a of sim.crowd.agents) widest = Math.max(widest, a.r);
     }

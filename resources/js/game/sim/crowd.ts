@@ -1,4 +1,5 @@
 import type { BehaviorMix } from '../behaviors.ts';
+import type { Drawable } from '../composition.ts';
 import type { Streams } from '../core/rng.ts';
 import { stepsFor } from '../core/time.ts';
 import { hasProperty } from '../entity.ts';
@@ -46,10 +47,13 @@ export class Crowd {
     private readonly streams: Streams;
     /** Behavior weights in place of the composition's, for the people lab; the game never sets one. */
     readonly mix: BehaviorMix | undefined;
+    /** What can be drawn, in place of what the data files say: a test's question, never the game's. */
+    readonly drawable: Drawable | undefined;
 
-    constructor(streams: Streams, mix?: BehaviorMix) {
+    constructor(streams: Streams, mix?: BehaviorMix, drawable?: Drawable) {
         this.streams = streams;
         this.mix = mix;
+        this.drawable = drawable;
         this.grid.setFixed(this.obstacles, reachOf);
         // Slot 0 belongs to the player; the crowd fills upward from 1 (see PLAYER_SLOT).
         for (let i = MAX; i >= 1; i--) this.freeSlots.push(i);

@@ -31,7 +31,7 @@ export function spawn(crowd: Crowd, streams: Streams, opts: SpawnOptions = {}): 
     const where = streams.spawn.fork(`spawn:${event}`);
     const how = streams.behavior.fork(`spawn:${event}`);
     const index = crowd.nextAgentIndex();
-    const type = behaviorAhead(streams.recipe.fork(`agent:${index}`), crowd.mix), A = BEHAVIORS[type];
+    const type = behaviorAhead(streams.recipe.fork(`agent:${index}`), crowd.mix, crowd.drawable), A = BEHAVIORS[type];
     // Every placement draw is taken unconditionally, then selected between. Drawing inside the
     // branches would let `scatter` (which is not part of the seed) shift every later draw from
     // this fork, so the same spawn event would produce a different person depending on whether it
@@ -53,7 +53,7 @@ export function spawn(crowd: Crowd, streams: Streams, opts: SpawnOptions = {}): 
     const n = atDoor ? (door.side > 0 ? edge - 0.8 : -edge + 0.8) : clamp(acrossPath, -edge + 1, edge - 1);
     const make = (i: number, an: number, o: AgentOptions = {}) => {
         const w = PATH.toWorld(s, an, _w);
-        return new Agent(streams, i, w.x, w.z, dir, crowd.takeSlot(), { mix: crowd.mix, ...o });
+        return new Agent(streams, i, w.x, w.z, dir, crowd.takeSlot(), { mix: crowd.mix, drawable: crowd.drawable, ...o });
     };
     if (A.group) {
         // One draw, exactly as before: this is the last value this fork produces, so retuning the
