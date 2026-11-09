@@ -129,7 +129,7 @@ export class Simulation {
             h.u32(r.skin).u32(r.shirt).u32(r.pants).u32(r.shoe);
             h.str(r.hat).u32(r.hatColor).str(r.hair).u32(r.hairColor).bool(r.ponytail).str(r.beard).bool(r.glasses);
             h.bool(r.jacket).u32(r.jacketColor).bool(r.shorts).bool(r.bag).u32(r.bagColor);
-            h.str(r.acc).u32(r.accColor).str(r.mobility).u32(r.frameColor);
+            h.str(r.acc).u32(r.accColor).str(r.mobility).u32(r.frameColor).f64(r.pace);
             h.f64(r.gait.bob).f64(r.gait.stride).f64(r.gait.cadence).f64(r.gait.arm).f64(r.gait.limp);
         }
         return h.digest();

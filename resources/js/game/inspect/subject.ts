@@ -1,12 +1,11 @@
 /**
  * One person on the inspection stage.
  *
- * The person comes from `makeRecipe`, rolled from this person's own fork of the `recipe` stream in
- * exactly the order `Agent` takes it -- same fork label, same recipe call, same follow-up speed
- * draw -- so the figure on the turntable is the figure the crowd builds for that seed and spawn
- * index: their behavior, age, build, colors and equipment are the crowd's own rolls. This file adds
- * no rolls of its own and never reads the `spawn` or `behavior` streams, and the inspector never
- * builds a `Simulation`.
+ * The person comes from `makeRecipe`, rolled from this person's own fork of the `recipe` stream
+ * exactly as `Agent` rolls it -- same fork label, same recipe call -- so the figure on the
+ * turntable is the figure the crowd builds for that seed and spawn index: their behavior, age,
+ * build, colors, equipment and pace are the crowd's own rolls. This file adds no rolls of its own
+ * and never reads the `spawn` or `behavior` streams, and the inspector never builds a `Simulation`.
  *
  * The lab's controls force choices (`RecipeOptions`): a forced choice still takes its roll, so the
  * person keeps everything else they rolled while one choice moves under them. "Seed" on any control
@@ -78,15 +77,15 @@ export class Subject implements Poseable {
         // makeStreams builds all four streams but only `recipe` and `cosmetic` are ever read here.
         const streams = makeStreams(seed);
         const label = `agent:${index}`;
-        const recipeRng = streams.recipe.fork(label), cosmetic = streams.cosmetic.fork(label);
+        const cosmetic = streams.cosmetic.fork(label);
         this.seed = seed; this.index = index;
-        this.recipe = makeRecipe(recipeRng, { ...opts, ...forced(o) });
+        this.recipe = makeRecipe(streams.recipe.fork(label), { ...opts, ...forced(o) });
         this.type = this.recipe.behavior;
         const A = BEHAVIORS[this.type];
         this.profile = A;
-        // Mirrors Agent's constructor: the speed draw follows the recipe on the same fork.
+        // Mirrors Agent's constructor: the recipe's own pace, after the equipment's multiplier.
         const m = this.recipe.motion;
-        this.speed = recipeRng.sample(A.speed) * m.speed;
+        this.speed = this.recipe.pace * m.speed;
         this.r = A.radius * m.radius;
         this.colOff = m.colOffset;
         this.sepR = A.sepR + (this.r - A.radius);

@@ -7,14 +7,21 @@
  * another, and none of them is decided by another -- except the two pairings that are tied on
  * purpose: a stroller only ever comes with a Slow Walker, and a Darter needs a child model.
  *
- * Two rules hold this file together, both from CLAUDE.md's determinism rules:
+ * Three rules hold this file together, all from CLAUDE.md's determinism rules:
  *
  * 1. Every random draw is taken in `makeRecipe`, unconditionally, in a fixed order. Selection is
  *    done afterwards from rolls already in hand. A branch that skipped a draw would shift every
  *    later one and silently turn agent N into a different person. The behavior roll is the
  *    **first** draw, and has to stay first: the spawner reads it ahead of building the person
  *    (`behaviorAhead`), and the identity hash stores what it chose.
- * 2. Nothing here may reach the `spawn` or `behavior` streams.
+ * 2. **After the behavior roll, the person's fork carries appearance and nothing else.** Every
+ *    other roll the simulation reads -- the equipment, which sets how a person moves and how much
+ *    room they take, and their walking pace -- comes from the fork's `motion` sub-fork. A fork is
+ *    built from its parent's seed, never its position, so the motion rolls are the same however
+ *    many appearance rolls come before them: adding, removing or reordering an appearance roll
+ *    changes how people look and nothing about how the crowd moves. `tests/js/recipe-streams.test.ts`
+ *    holds this. A new roll the simulation reads goes at the end of the motion fork.
+ * 3. Nothing here may reach the `spawn` or `behavior` streams.
  *
  * The people lab chooses a person by forcing choices (`RecipeOptions`); a forced choice still takes
  * its roll, so everything after it is the same person.
@@ -145,6 +152,12 @@ export interface Recipe extends Choices {
     /** True for wheelchair and scooter users: the legs are folded and the body rides lower. */
     seated: boolean;
     frameColor: number;
+    /**
+     * This person's own walking speed in m/s, rolled within their behavior's range, before the
+     * equipment's multiplier. A group follower walks at the leader's speed instead, but still rolls
+     * their own.
+     */
+    pace: number;
     motion: MotionProfile;
     headPitch: number;
     gait: Gait;
@@ -248,12 +261,16 @@ export const behaviorAhead = (rng: Rng, mix?: BehaviorMix): BehaviorKey => pick(
  */
 export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
     // Every draw for this person, taken up front and in a fixed order. Nothing below this block
-    // draws; it only selects. Adding a roll at the end is safe; reordering or conditioning one is
-    // not, and the behavior roll must stay first (see `behaviorAhead`).
-    const behavior0 = rng.next(), age0 = rng.next(), build0 = rng.next();
+    // draws; it only selects. The behavior roll must stay first (see `behaviorAhead`). After it,
+    // `rng` rolls appearance only, so an appearance roll may be added, removed or reordered and
+    // only appearance changes. The rolls the simulation reads come from `motion`, whose values do
+    // not depend on anything drawn from `rng`; adding one there is safe at the end only.
+    const behavior0 = rng.next();
+    const motion = rng.fork('motion');
+    const stroller0 = motion.next(), equip0 = motion.next(), pace0 = motion.next();
+    const age0 = rng.next(), build0 = rng.next();
     const skin0 = rng.next(), skinVar0 = rng.next(), hair0 = rng.next(), hairVar0 = rng.next(), gray0 = rng.next();
     const scheme0 = rng.next(), arrange0 = rng.next(), share0 = rng.next();
-    const stroller0 = rng.next(), equip0 = rng.next();
     const height0 = rng.next(), headR0 = rng.next();
     const hat0 = rng.next(), hatType0 = rng.next(), hairStyle0 = rng.next(), ponytail0 = rng.next();
     const beard0 = rng.next(), glasses0 = rng.next(), jacket0 = rng.next(), shorts0 = rng.next();
@@ -348,6 +365,7 @@ export function makeRecipe(rng: Rng, opts: RecipeOptions = {}): Recipe {
         mobility,
         seated: ep.seated,
         frameColor: fromFamily(FRAME, frame0),
+        pace: lerpRange(B.speed, pace0),
         motion: { speed: ep.speed, turn: ep.turn, accel: ep.accel, radius: ep.radius, colOffset: ep.colOffset },
         headPitch: 0,
         gait: {

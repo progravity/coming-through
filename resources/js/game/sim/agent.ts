@@ -91,10 +91,11 @@ export class Agent implements GridItem, Poseable {
 
     constructor(streams: Streams, index: number, x: number, z: number, dir: 1 | -1, slot: number, opts: AgentOptions = {}) {
         const label = `agent:${index}`;
-        const recipeRng = streams.recipe.fork(label), cosmetic = streams.cosmetic.fork(label);
+        const cosmetic = streams.cosmetic.fork(label);
         this.rng = streams.behavior.fork(label);
-        // Who this is comes first: the recipe rolls every choice, the behavior profile among them.
-        const recipe = makeRecipe(recipeRng, { ...opts.choices, mix: opts.mix });
+        // Who this is comes first: the recipe rolls every choice, the behavior profile among them,
+        // and the walking pace. Nothing else draws from this person's recipe fork.
+        const recipe = makeRecipe(streams.recipe.fork(label), { ...opts.choices, mix: opts.mix });
         const A: Behavior = BEHAVIORS[recipe.behavior];
         this.index = index;
         this.type = recipe.behavior; this.A = A;
@@ -104,13 +105,11 @@ export class Agent implements GridItem, Poseable {
         const v0 = pathDir(frame, dir * 0.5, 0, _world);
         this.vx = v0.x; this.vz = v0.z;
         this.recipe = recipe;
-        // Drawn unconditionally: a group follower takes the leader's speed instead, but the draw
-        // still has to happen or this fork would run at a different offset for the rest of the run.
-        const ownSpeed = recipeRng.sample(A.speed);
         // A mobility aid is a way of moving, not a costume: it changes pace, turn rate, how hard
-        // the body can accelerate, and how much room it takes up in the crowd.
+        // the body can accelerate, and how much room it takes up in the crowd. A group follower
+        // walks at the leader's speed rather than their own pace.
         const m = recipe.motion;
-        this.speed = (opts.speed ?? ownSpeed) * m.speed;
+        this.speed = (opts.speed ?? recipe.pace) * m.speed;
         this.r = A.radius * m.radius;
         this.colOff = m.colOffset;
         this.sepR = A.sepR + (this.r - A.radius);

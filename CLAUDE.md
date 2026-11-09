@@ -30,7 +30,7 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   incoming connections for `php` and `node` the first time. Two dev servers for one checkout fight
   over `public/hot`, which is why the other one has to stop.
 - **Tests:** `npm test` type-checks the engine and its tests, runs the Math.random check, and then
-  runs everything under `tests/js/` with `node --test` (266 tests). `npm run lint` is the first two
+  runs everything under `tests/js/` with `node --test` (270 tests). `npm run lint` is the first two
   on their own. `composer test` is the Laravel side: Pint, PHPStan and Pest (`tests/Feature/`,
   `tests/Unit/`), against SQLite in memory. Both are plain commands and both must pass.
 - **Node is pinned to 26.13.0** in `.nvmrc` (and `^26.13.0` in `package.json` `engines`). Herd's
@@ -314,6 +314,13 @@ The engine:
   arranges differently by model and by person, from its pool alone; a uniform is the same clothing
   on everyone and never rolled; skin tones are named by lightness alone and stay human; Old grays
   the hair and nothing else.
+- `tests/js/recipe-streams.test.ts` — that a person's appearance rolls are contained to appearance.
+  It adds a dummy roll to every person's recipe fork without touching `makeRecipe` (a swapped
+  recipe stream whose forks take one extra draw at a chosen position), runs the same crowd with
+  and without it over four seeds, and compares everyone on what is not appearance: behavior,
+  equipment and motion, speed, the behavior stream's first draws, spawn step, place and direction,
+  group, leader, parent and offset, when they left the path and where they ended up. A failure
+  names each field that moved, for how many people, and the first of them.
 
 ## The entity taxonomy
 
@@ -1390,17 +1397,28 @@ wheelchair 2.7, scooter 1.5 (about 6.5% of the crowd on an aid, as before), and 
 of Slow Walkers (5.4% of the crowd, down from Mary's 9.7%); a Group Walker family shares the leader's
 clothing 80% of the time.
 
-Two hard rules hold `makeRecipe` together:
+Four hard rules hold `makeRecipe` together:
 
 - **Every draw is taken up front, unconditionally, in a fixed order**, and selection happens
   afterwards from rolls already in hand. A forced choice -- the lab's, a group follower's profile, a
   Darter's parent's -- still takes its roll, so the person keeps everything else they rolled.
   Helpers in `palette.ts`, `wardrobe.ts` and `composition.ts` (`pick`) take a roll rather than an
-  `Rng`, so they cannot draw by accident. Adding a roll at the end is safe; reordering or
-  conditioning one turns agent N into a different person.
+  `Rng`, so they cannot draw by accident. Conditioning a roll turns agent N into a different person.
 - **The behavior roll is the first draw, and stays first.** The spawner reads it ahead of building
   the person (`behaviorAhead`) to know whether a family or a parent comes with them, and the identity
   hash stores what it chose. Nothing rolled after it can move it.
+- **After the behavior roll, a person's recipe fork rolls appearance and nothing else.** Every other
+  roll the simulation reads -- the stroller and the mobility aid, which set how a person moves and
+  how much room they take, and their walking pace (`Recipe.pace`) -- comes from the fork's `motion`
+  sub-fork. A fork is built from its parent's seed, never its position, so those rolls are the same
+  however many appearance rolls come before them: adding, removing or reordering an appearance roll
+  changes how people look and nothing about how the crowd moves, which `tests/js/recipe-streams.test.ts`
+  holds. A new roll the simulation reads goes at the end of `motion`; nothing draws from a person's
+  recipe fork outside `makeRecipe`. It used to: `Agent` drew the pace from the same fork after the
+  recipe, and the equipment rolls sat among the appearance rolls, so any added or removed appearance
+  roll re-rolled everyone's speed and some people's equipment, and through them when people left
+  the path and when later spawns landed. Neither hash could see it: `identityHash` leaves speed and
+  equipment out, and `hash()` was expected to move for the appearance change anyway.
 - **Nothing in a recipe may reach the `spawn` or `behavior` streams.**
 
 A behavior profile also declares what kind of thing a person is -- see "The entity taxonomy" above;
