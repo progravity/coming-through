@@ -179,5 +179,5 @@ A new item is used in the game only after it passes every check below.
 | Do wearables (hats, glasses) fit across person models and Body Types? | Attaching a Meshy-made cap and glasses to the current model in the People Lab and stepping through the Body Types |
 | Can grips be arm-only poses over the normal walk? | Posing one arm over the walk on the current model in the People Lab |
 | Items per person: a cap, or instancing | A phone test with props on part of the crowd |
-| Is equipment chosen with behavior (part of the recipe, covered by the determinism checks), and wearables and props cosmetically? | Your decision (recommended: yes, since equipment changes speed and collision) |
+| Which stream picks wearables and props? Equipment is settled: it rolls from each person's motion sub-fork, separate from appearance and covered by the state hash | Your decision (recommended: the cosmetic stream, since wearables and props don't change movement) |
 | The reference item | The first hat generated to this spec |

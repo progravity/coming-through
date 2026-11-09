@@ -6,7 +6,7 @@ Last updated: 2026-11-08
 
 Every person model must meet this spec so it works with the game's color, body, behavior, animation, and item systems with no per-model code. A model that passes its acceptance checklist can be dropped into the game and lab as data alone. The shared look is defined in the [Art Style Spec](art-style.md), and the items people wear, carry, and use are defined in the [Item Model Spec](item-model.md); this spec covers what a person model needs in order to use them.
 
-- **Step 2** builds game and lab support for this spec, tested against the current model where possible.
+- **Step 2** builds game and lab support for this spec, tested against the current model where possible. (Done.)
 - **Step 3** generates the first model to this spec, with multiple clips.
 - **Step 4** tests it in the lab, the game, and on a phone, and settles every value marked *starting target*.
 
@@ -133,6 +133,8 @@ Flat unshaded solid colors only, no baked shadows, highlights, gradients, or pat
 ```
 
 **Settings for people:** A-pose; when rigging, height 1.75 m for adults (the real intended height for children and elders).
+
+**Clips to add before export:** walk, run, and idle (required; the People Lab flags a model missing any of them), plus look-around. Add phone if a good clip exists. Export one GLB with Animation: All Added. See Animation clip roles for the full list.
 
 ## Skeleton and rig
 
@@ -301,8 +303,6 @@ Every person model has an ID and one data file. The data file holds every fact t
 
 **Worlds opt in.** A world lists the occupations (and, if it wants, garments) it accepts for its crowd and for its staff spots, and leaves out anything it doesn't list. A theme park's crowd takes occupation none and its staff spots take park-staff, so a construction-worker model added later never appears there. How a world lists this belongs in a world composition spec.
 
-Today this information is split across a regions file and a body file per model, named after the GLB and kept beside it in `public/models/`. Step 2 merges them into one data file per model in `data/people/`, named by ID.
-
 ## Acceptance checklist
 
 A new model is used in the game only after it passes every check below.
@@ -321,12 +321,12 @@ A new model is used in the game only after it passes every check below.
 
 ## Open items
 
-These are settled during steps 0 through 4 or when the first batch of models is made; each answer updates the section it belongs to. Open items about items are in the Item Model Spec.
+These are settled during steps 3 and 4 or when the first batch of models is made; each answer updates the section it belongs to. Open items about items are in the Item Model Spec.
+
+Settled in step 0: appearance rolls can no longer reach behavior, spawning, equipment, or pace (equipment and pace now roll from each person's own motion sub-fork, held by `tests/js/recipe-streams.test.ts`), and the stacked branches are merged.
 
 | Item | Settled by | Step |
 | --- | --- | --- |
-| Recipe stream: can adding an appearance option reshuffle behaviors across the crowd? | A check by Claude Code, and a fix plus test if so | 0 |
-| Merge the stacked branches | Merging through one PR, with CI running | 0 |
 | Triangle count | Comparing the step 3 model at about 5,000, 8,000, and 11,000 triangles in the model comparison row | 4 |
 | Generated low-poly vs remeshed | Comparing the two methods on the same character | 4 |
 | Final base and people prompts | Looking at the step 3 model in the game | 4 |
