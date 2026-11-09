@@ -30,7 +30,7 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   incoming connections for `php` and `node` the first time. Two dev servers for one checkout fight
   over `public/hot`, which is why the other one has to stop.
 - **Tests:** `npm test` type-checks the engine and its tests, runs the Math.random check, and then
-  runs everything under `tests/js/` with `node --test` (270 tests). `npm run lint` is the first two
+  runs everything under `tests/js/` with `node --test` (282 tests). `npm run lint` is the first two
   on their own. `composer test` is the Laravel side: Pint, PHPStan and Pest (`tests/Feature/`,
   `tests/Unit/`), against SQLite in memory. Both are plain commands and both must pass.
 - **Node is pinned to 26.13.0** in `.nvmrc` (and `^26.13.0` in `package.json` `engines`). Herd's
@@ -108,8 +108,10 @@ The Laravel side is the starter kit's, plus:
 - `tests/js/` — the engine's tests, run by `node --test`. `tests/Feature/PlayPageTest.php` checks the
   page itself, and `tests/Feature/Labs/LabPagesTest.php` the lab pages: behind the login, standalone,
   each loading its own entry and the lab stylesheet.
-- `public/models/` — the `.glb` files and their `.regions.json`, served by Laravel from its web root
-  at `/models/` (`MODEL_DIR` in `render/model-file.ts`).
+- `public/models/people/` — the person models' `.glb` files, under the names Meshy exported them
+  with, served by Laravel from its web root at `/models/people/`. Everything known about each one
+  is in its data file (`resources/js/game/data/people/`), never beside the GLB. See "Person model
+  data files" below.
 - `scripts/` — the Math.random check and the stress and bench scripts.
 - `vite.config.js` — the starter kit's, with the game's stylesheet and entry added as inputs and the
   LAN switch for phone testing.
@@ -128,6 +130,10 @@ The engine:
 - `resources/js/game/composition.ts` — what the crowd is made of: the default weight of every choice a person is rolled from.
 - `resources/js/game/wardrobe.ts` — `COLORS`, the one table of skin tones, hair colors and clothing schemes.
 - `resources/js/game/recipe.ts` — one person: every choice rolled in a fixed order, the primitives' figure and equipment profiles.
+- `resources/js/game/data/` — the game's data files. `data/people/<id>.json` is one per person
+  model, and `data/people.ts` finds, validates and exposes them (`PERSON_MODELS`, `DATA_FILES`,
+  `personModel`). Pure: it imports nothing, and `tests/js/purity.test.ts` walks it beside `sim/`.
+  See "Person model data files" below.
 - `resources/js/game/sim/` — pure simulation, no DOM or three.js: `simulation.ts` is the whole game state and its
   fixed step; `crowd.ts`, `agent.ts`, `spawner.ts`, `steering.ts`, `player.ts`, `pose.ts`,
   `grid.ts` (the spatial index, moving layer and fixed), `obstacles.ts` (the colliders of everything
@@ -174,8 +180,8 @@ The engine:
   `entities/structure.ts` is the cast the carts, the shopfronts and the restaurants share, since
   everything the tool does with one it does with the others and a copy is where "through the game's
   own assembler" quietly stops being true for one of them.
-  `entities/model.ts` is the one exception to "the game's own assembler": a `.glb` from
-  `public/models/` beside one of the game's people. See "Models from files" below.
+  `entities/model.ts` is the one exception to "the game's own assembler": a person model's `.glb`
+  beside one of the game's people. See "Models from files" below.
 - `resources/js/game/labs/` — the labs: `labs.ts` (the three, each a category, with the entities read
   off the registry and the taxonomy), `start.ts` (opens a lab at the view its address names),
   `chrome.ts` (the view and source controls in the lab bar), `placement.ts` (the placement view),
@@ -199,7 +205,8 @@ The engine:
   `tests/js/determinism.expected.json`, which stores two values: `hash` (whole state) and `identity`
   (the crowd a seed produces). See "Two hashes" below.
 - `tests/js/purity.test.ts` — that the simulation reaches no renderer and no DOM, walking the
-  **transitive** closure of `resources/js/game/sim/` rather than its own import list: nobody writes `THREE` into
+  **transitive** closure of `resources/js/game/sim/` and `resources/js/game/data/` (the model data
+  crowd composition will read) rather than their own import lists: nobody writes `THREE` into
   `sim/agent.ts`, but the simulation reads `world/plan.ts`, and half of `world/` imports three.js
   quite legitimately. It is checked rather than trusted because a breach here fails nothing else —
   three.js loads happily under `node` with no GL context, so a renderer dragged in would go green
@@ -292,28 +299,37 @@ The engine:
   file: that a missing file still stands something the stage can frame and says why, that a skinned
   figure is measured in its pose rather than its bind pose, that the rest pose comes back at its own
   size on an armature scaled by 0.01 (where `Skeleton.pose()` measurably makes a 17 mm figure), that
-  the file's materials come back by identity and only what the bench made is disposed, and that the
-  row's second exhibit is the game's own person.
+  the file's materials come back by identity and only what the bench made is disposed, that the
+  row's second exhibit is the game's own person, and that the card lists every data file that
+  failed its check, by file and field.
 - `tests/js/body.test.ts` — model bodies, on a Mixamo-named rig built in code: that the Build presets
   are the crowd's own width roll cut into fifths with neighbors visibly apart, that the limits hold
   and say what they held, that a child is drawn as a teen at the teen height, that widening the chest
   moves nothing hung from it, that the shoulders carry the arms and limbs thicken across the bone,
   that longer legs lift the figure by exactly what they add, that a stoop never compounds, that a
   body never writes another figure's bind matrices, that fullness leaves the hands, feet and head
-  alone and swells a seam as one surface, and that its shader runs after the material's own.
+  alone and swells a seam as one surface, that its shader runs after the material's own, and that a
+  model's body (age class, build, limits) is its data file's.
 - `tests/js/regions.test.ts` — a model's colour regions, on atlases built in code: that the groups are
   the patches and never the gutter, that every used texel is labelled, edges included, that two
   colours as close as the casual man's skin and khaki are pulled apart by the bandwidth search, that a
-  bandwidth too wide to do so is reported and refused rather than painted, that a role file matches
-  by color and not by order, that a blend only refuses painting across two roles, that an old role
-  name is refused with its new one, and that a model is painted in its person's scheme arranged on
-  the roles it has.
+  bandwidth too wide to do so is reported and refused rather than painted, that color slots match
+  by color and not by order, that a blend only refuses painting across two roles, that a data file's
+  color slots reach the detector as they are, and that a model is painted in its person's scheme
+  arranged on the roles it has.
 - `tests/js/wardrobe.test.ts` — the color system: every pooled scheme meets the rules on every
-  model's role file and the role sets to come, at every skin tone and hair color, young and old, in
+  model's color slots and the role sets to come, at every skin tone and hair color, young and old, in
   few tries; the crowd as rolled meets them on the models and the primitives; a pooled scheme
   arranges differently by model and by person, from its pool alone; a uniform is the same clothing
   on everyone and never rolled; skin tones are named by lightness alone and stay human; Old grays
   the hair and nothing else.
+- `tests/js/people-data.test.ts` — the person model data files: that every file in `data/people/`
+  is found without being listed and is valid, named by its ID, and points at a GLB that is there;
+  that casual-man and casual-man-low state their facts and leave what nobody knows as `unknown`;
+  that a missing field, a value outside its list, a field nothing reads yet, an ID that breaks the
+  rule or disagrees with the facts, garments or accessories with no color region, and `accessory2`
+  each fail with a message naming the file and the field; and that a file dropped into a folder is
+  found with no code change.
 - `tests/js/recipe-streams.test.ts` — that a person's appearance rolls are contained to appearance.
   It adds a dummy roll to every person's recipe fork without touching `makeRecipe` (a swapped
   recipe stream whose forks take one extra draw at a chosen position), runs the same crowd with
@@ -1354,7 +1370,7 @@ the one table the crowd's makeup is tuned in:
 
 | choice | options | where it lives |
 |---|---|---|
-| **Model** | the model file, with its body file's age class (`adult` today; `child` and `elderly` later) | `render/model-file.ts`, `<model>.body.json` |
+| **Model** | the model, with its data file's age class (`adult` today; `child` and `elder` later) | `data/people/<id>.json`, `render/model-file.ts` (`CROWD_MODEL`) |
 | **Age** | Young, Normal, Old: small adjustments relative to the model | `AGES` in `recipe.ts`; `AGE_PRESETS` in `modelcrowd/body.ts` |
 | **Build** | Slim, Trim, Average, Solid, Broad | `BUILDS` in `recipe.ts`; `BUILD_PRESETS` in `modelcrowd/body.ts` |
 | **Skin tone** | Lightest, Light, Medium-Light, Medium, Medium-Deep, Deep, Deepest | `COLORS.skin` in `wardrobe.ts` |
@@ -1460,15 +1476,17 @@ the warmth.
 in. Old shifts any of them 55-90% of the way toward a gray (one roll decides both, so the most
 grayed is the whitest); it is the only color age changes.
 
-**Clothing is filled by role.** Every model's role file divides its texture into the same standard
-roles: the clothing roles **`headwear`, `tops`, `bottoms`, `footwear` and `accessory`** (anything
+**Clothing is filled by role.** Every model's data file divides its texture into the same color
+slots (`colorSlots`): the clothing slots **`tops`, `bottoms`, `footwear` and `accessory`** (anything
 baked into a model, a bag or a backpack), plus `skin`, `hair` and `keep` (details left as authored,
-like eyes). A one-piece garment is `tops` with no `bottoms`; most models will have no `headwear`.
-Headwear means a hat baked into a model *and* a hat attached by code later: both wear the person's
-headwear color. The two casual-man files were migrated from the first role names (`top` ->
-`tops`, `trousers` -> `bottoms`, `shoes` -> `footwear`, both shoe colors to `footwear`); a role file
-still using an old name is refused with the new one named. Both models have `tops`, `bottoms` and
-`footwear` and nothing else.
+like eyes and shoe soles). A one-piece garment is `tops` with no `bottoms`. **`headwear` is a
+clothing role but not a color slot**: models are generated without hats, and a hat -- the
+primitives' today, a wearable later -- takes the person's headwear color, so a data file naming it
+is refused. The spec's `accessory2` is refused too, with the reason, until `wardrobe.ts` can color a
+second accessory. The two casual-man models were migrated from the first role names (`top` ->
+`tops`, `trousers` -> `bottoms`, `shoes` -> `footwear`, both shoe colors to `footwear`); a data
+file still using an old name is refused with the new one named. Both models have `tops`, `bottoms`
+and `footwear` and nothing else.
 
 **A scheme is one of two kinds**, and the format holds both from the start so staff uniforms never
 need it reworked:
@@ -1497,7 +1515,7 @@ the roles one at a time, each trying the pool from its own starting color, keepi
 everything so far still meets the rules and stepping back when a role runs out -- deterministic,
 complete (every arrangement is reachable), and quick: the hardest case the tests find, Pastels on
 the lightest skin with all five roles, takes about twenty tries. The test checks every pooled scheme
-against every model's role file and the role sets models will have later, at every skin tone and
+against every model's color slots and the role sets models will have later, at every skin tone and
 hair color, young and old, and that a uniform comes out identical on everyone.
 
 The **primitives** are dressed by the same `dress()`, at recipe time, on the roles they wear (a hat
@@ -1715,9 +1733,10 @@ into two vocabularies.
   the model as the model crowd does. The primitives' part gizmos and part origins are not offered
   (`Inspectable.universal`). **Height** reads as its parts, `1.70 m = 1.75 base × 0.97 Old × 1.00
   recipe height`, and the **height ruler** (`ruler`, `E`, on by default, a shell overlay every lab
-  has) stands beside each exhibit, ticked every 10 cm and labeled with its measured height. A
-  model's source and license note is `MODEL_SOURCES` in `render/model-file.ts`; the license reads
-  "not recorded" until someone records it.
+  has) stands beside each exhibit, ticked every 10 cm and labeled with its measured height. The
+  card's **Data file** section shows the model's data file, its path and every fact in it, and
+  **provenance** shows its source and license, with each field still `unknown` marked missing. A
+  data file that failed its check is listed on every card under **Data file problems**.
 - **People, path mode** (`labs/people/path.ts`, `mode=path`; the lab bar's Stage | Path toggle in
   the Individual view) — the same person, chosen by the same address, **walking a stretch of the
   real promenade with their behavior**: built as an `Agent` through the spawner's constructor and
@@ -1916,18 +1935,75 @@ cannot disturb the promenade.
 browsable. Where the carts stand is a question about the promenade's layout rather than about a
 cart, and `?debug=1` and the game answer it.
 
+### Person model data files
+
+**Every person model is one data file, named by its ID**: `resources/js/game/data/people/<id>.json`,
+holding everything the game knows about the model; the GLB in `public/models/people/` is only the
+asset it points at, under the file name Meshy exported. `docs/specs/person-model.md` ("Names,
+files, and the data file") is the source of truth for the fields and their values, and
+`data/people.ts` is that section, enforced. The fields, in the order the files write them:
+
+- **identity** -- `id`, `label`, `description`, `version` (a whole number, bumped when the same
+  character is regenerated), `modelFile` (`/models/people/<file>.glb`: its address, and its path
+  under `public/`);
+- **facts** -- `ageClass` (`adult`, `child`, `elder`), `sex` (`male`, `female`), `build` (`average`,
+  `heavy-set`), `occupation`, `garments` (a garment per clothing slot: `tops` and `footwear`
+  required, `bottoms` absent under a one-piece), `accessories` (`[{ "accessory", "slot" }]`, at most
+  two);
+- **rendering** -- `colorSlots` (`[{ "color": "#rrggbb", "slot" }]`), an optional `regionBandwidth`,
+  and `bodyLimits`;
+- **provenance** -- `source` (`plan`, `generatorVersion`, `date` as `YYYY-MM-DD`, `prompt`,
+  `promptVersion`) and `license` (`model`, `clips`). Every field is required, and `"unknown"` is an
+  answer: what nobody has recorded is written as unknown, never made up, and the lab marks it
+  missing.
+
+**Adding a model is a GLB and a data file, and no code.** The files are found, not listed: under
+Vite, `import.meta.glob` turns into the parsed files at build time, so they are bundled and every
+model's facts are in hand before anything runs; under node, where the tests run, there is no such
+transform, so `readFolder` reads the folder from disk. `import.meta.env` is what tells the two
+apart, and the build drops the node half entirely. A data file that is not JSON fails Vite's own
+build or dev transform, naming the file.
+
+**Every file is validated as it loads**, and every problem names the file and the field: a missing
+field, a value outside its list, a field nothing reads, a garment or accessory with no color region
+of its slot, and an ID that breaks the spec's rule (`<age class>-<man/woman/boy/girl>[-heavy][-<occupation>]-<number>`),
+disagrees with the facts, or is not the file's name. `casual-man` and `casual-man-low` are the
+legacy exceptions to the rule (`LEGACY_IDS`), as the spec allows. A file that fails is not a model:
+its problems go to the console as the files load and to every People Lab model card, and asking
+for it by name (`personModel`, `?model=`) says why. The rest of the models are unaffected.
+
+Five things the spec leaves open or the code does not do yet, decided here:
+
+- **Open lists are closed in code.** The spec's occupations and garments end in "and so on"; the
+  validator allows the ones the spec names (`OCCUPATIONS`, `GARMENTS`), and the accessories its
+  accessory table lists (`ACCESSORIES`). A new one is a line in `data/people.ts`.
+- **Fields the spec describes that nothing reads yet are refused, with the reason**: `clips` and
+  `clipRoles` (the next task maps clip roles; until then clips come from the GLB as they are),
+  `anchors`, `colliderWidth` (measured, later) and `stats` (computed at load, never written).
+- **`version` goes on the GLB's address** (`?v=1`), so a regenerated file is never served stale.
+- **A model's clothing arrangement is salted by its GLB's file name** (`modelFileName`), as it was
+  before the data files, so moving the files dressed nobody differently. Regenerating a character
+  under a new file name will rearrange its clothing; salting by ID instead is a deliberate change.
+- **The crowd's model is `CROWD_MODEL`** (`casual-man`) in `render/model-file.ts` unless `?model=`
+  names another. It used to be whichever model was listed first; with discovery, a new model whose
+  ID sorts earlier would have become the crowd's. Composition will choose by facts later.
+
+Models are listed in ID order, which is not file name order: `casual-man-low.json` sorts before
+`casual-man.json`.
+
 ### Models from files
 
-`/lab/people` puts a `.glb` from `public/models/` on the stage, drawn as the person the controls
+`/lab/people` puts a person model's `.glb` on the stage, drawn as the person the controls
 name and painted in their recipe. It is **the one exhibit not drawn by the game's assembler**: there
 is no assembler for a model file to go through. What it keeps instead is that the person is the
 game's -- rolled exactly as the crowd rolls agent N of the seed, and shaped by the same
 `modelcrowd/body.ts` the crowd is.
 
-- **Adding a file** is dropping it in `public/models/` and one line in `MODELS` in
-  `render/model-file.ts`, under the short name `?model=` uses. Nothing in a browser can list
-  `public/`. Laravel serves everything there from its web root and it ships with every deploy, used
-  or not. `fetchModel` there is the one loader, shared with the model renderer that draws the crowd.
+- **Adding a model** is its GLB in `public/models/people/` and its data file in
+  `resources/js/game/data/people/`, and no code: see "Person model data files" below. Laravel serves
+  everything in `public/` from its web root and it ships with every deploy, used or not.
+  `fetchModel` in `render/model-file.ts` is the one loader, shared with the model renderer that
+  draws the crowd.
 - **Its clips are its controls.** `load` fetches every listed file and fills the `clip` control with
   the clip names it found, ahead of `pose` (the file's rest pose). The clip plays through an
   `AnimationMixer` advanced by `SIM_DT` in `step`, so pause and `freeze clip` work as the gait does.
@@ -1954,7 +2030,7 @@ game's -- rolled exactly as the crowd rolls agent N of the seed, and shaped by t
 with models in the people lab. The primitive people are kept as the game's
 fallback: `?people=prim` for everyone, and always for the player, for
 anyone with **equipment** -- a stroller, a wheelchair, a scooter or a cane -- for **Darters**, who
-need a child model and have none yet (the crowd's model's body file says which age class it is), and
+need a child model and have none yet (the crowd's model's data file says which age class it is), and
 for the whole crowd if the model fails to load (`drawsAsPrimitive` in `modelcrowd/body.ts`).
 
 The mobility fallback exists because what you see has to match what you collide with: a
@@ -2002,15 +2078,16 @@ neither hash can move, and nothing under `resources/js/game/sim/` imports it. Fi
   become a third group. The kernel starts at 0.04 and narrows by a quarter while any group 2-means
   into two clearly separate colours; the casual man stops at 0.017 with seven groups, which is what
   pulls his skin and khaki shorts (0.063 apart) out of one group. His remesh (`casual-man-low`, 2,591
-  triangles against 15,571) lands on the same colours less the eyes, so its role file is the same
-  six lines. The mask is half the texture's resolution, which leaves a skin-coloured hairline on a
+  triangles against 15,571) lands on the same colours less the eyes, so its color slots are the
+  same six lines. The mask is half the texture's resolution, which leaves a skin-coloured hairline on a
   couple of the remesh's shirt seams where islands touch with no gutter -- visible only zoomed in.
-- **What each group is lives in `<model>.regions.json` beside the `.glb`**: colors mapped to the
-  standard roles -- `headwear`, `tops`, `bottoms`, `footwear`, `accessory`, `skin`, `hair` or `keep` --
-  matched by Oklab distance under 0.06 rather than by
-  order, so a file survives the detector reordering and carries over to a regeneration in the same
-  garments. An optional `bandwidth` fixes the kernel for one model. A model with no file, or a group
-  the file does not name, prints a starting point to the console.
+- **What each group is lives in the model's data file**, as `colorSlots`: colors mapped to the
+  color slots -- `tops`, `bottoms`, `footwear`, `accessory`, `skin`, `hair` or `keep` -- matched by
+  Oklab distance under 0.06 rather than by order, so a file survives the detector reordering and
+  carries over to a regeneration in the same garments. An optional `regionBandwidth` fixes the
+  kernel for one model. A group the file does not name prints a starting `colorSlots` to the
+  console. `R` in the people lab shows the groups in false color; their numbers follow the
+  detector's order, not the file's.
 - **It refuses rather than guesses.** A group still two colours at the narrowest kernel, or two
   groups of different roles with more than 1% of the texture sitting between them, turn painting off
   and say why -- in the inspector's readout and the crowd's. Painting keeps the texture's light and
@@ -2098,16 +2175,22 @@ shorter with a gentle stoop. Old also grays the hair, which is the recipe's (see
   0.96 to 1.08, legs 0.97 to 1.05, stoop 0 to 0.22 rad. A value pushed past one is clamped, and the lab marks it "held back" with what was
   asked.
 
-**Each model's body file**, `<model>.body.json` beside its `.regions.json`:
+**What a model's data file says about its body** (`bodyOf` in `modelcrowd/body.ts`):
 
-- `bodyType` -- `average`, `heavy` or `child`: the figure as authored, before any preset. The lab
-  shows it. Heavier-set models will cover the fullest end of the crowd later; nothing chooses models
-  by type yet.
-- `limits` -- optional, `{ "<key>": [min, max] }` for any of `height`, `width`, `shoulders`,
-  `limbs`, `fullness`, `face`, `neck`, `head`, `legs`, `stoop`, overriding the global limits for this model only
-  (some models stretch better than others). The lab marks which limits came from the file.
-- `about` -- prose for whoever opens the file. A missing file is an average body inside the global
-  limits, and says so.
+- `ageClass` -- `adult`, `child` or `elder`: who the model can be. A Darter needs a child.
+- `build` -- `average` or `heavy-set`: the figure as generated, before any preset. The lab shows it.
+  Heavy-set models will cover the fullest end of the crowd later; nothing chooses models by build
+  yet.
+- `bodyLimits` -- `{ "<key>": [min, max] }` for any of `height`, `width`, `shoulders`, `limbs`,
+  `fullness`, `face`, `neck`, `head`, `legs`, `stoop`, overriding the global limits for this model
+  only (some models stretch better than others); `{}` for none. The lab marks which limits came
+  from the file.
+
+**The words differ between the spec and the code, and that is known.** The spec's *Build* is the
+model's shape (average or heavy-set) and its *Body Type* is the preset rolled per person (Slim to
+Broad); in the code the preset is `Build` (`BUILDS` in `recipe.ts`) and the model's shape is
+`ModelBody.build`. Renaming the code's `Build` is its own change; the data file uses the spec's
+words.
 
 Measured in a visible tab at a full 120 Hz frame (the frame time sits on the vsync cap either way),
 `?stress=1&people=model`: at 80 people pose 0.82 → 0.71 ms and render 1.65 → 1.52 ms; at 190, pose
