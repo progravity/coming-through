@@ -30,7 +30,7 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   incoming connections for `php` and `node` the first time. Two dev servers for one checkout fight
   over `public/hot`, which is why the other one has to stop.
 - **Tests:** `npm test` type-checks the engine and its tests, runs the Math.random check, and then
-  runs everything under `tests/js/` with `node --test` (292 tests). `npm run lint` is the first two
+  runs everything under `tests/js/` with `node --test` (303 tests). `npm run lint` is the first two
   on their own. `composer test` is the Laravel side: Pint, PHPStan and Pest (`tests/Feature/`,
   `tests/Unit/`), against SQLite in memory. Both are plain commands and both must pass.
 - **Node is pinned to 26.13.0** in `.nvmrc` (and `^26.13.0` in `package.json` `engines`). Herd's
@@ -307,7 +307,8 @@ The engine:
   the file's materials come back by identity and only what the bench made is disposed, that the
   row's second exhibit is the game's own person, that the card lists every data file that failed
   its check, by file and field, and that it lists every clip role, present with its clip or
-  missing, a missing walk, run or idle or a clip the GLB does not have as an error.
+  missing, a missing walk, run or idle or a clip the GLB does not have as an error, and that it
+  carries the spec checks, every one on the checklist, with their verdicts at its head.
 - `tests/js/body.test.ts` — model bodies, on a Mixamo-named rig built in code: that the Body Types
   are the crowd's own width roll cut into fifths with neighbors visibly apart, that the limits hold
   and say what they held, that a body is its Body Type and nothing else (no age in it: the broadest
@@ -346,6 +347,12 @@ The engine:
   no idle a person stands in the walk's average pose, feet side by side on the ground; and that the
   crowd's timing plays walk and run at the rate speed and size call for, blends into idle by speed,
   and cross-fades walk and run lined up by the left foot, with hysteresis and never for a mobility aid.
+- `tests/js/spec-checks.test.ts` — the people lab's spec checks and the GLB reader under them: that a
+  GLB's meshes, triangles, materials, textures (PNG and JPEG sizes, by material slot) and bones are
+  read off its bytes; that each check passes, warns or fails on the spec's numbers, at the edges
+  too, and says why; that a model whose file did not load still has its data file checked; that
+  every line of the spec's acceptance checklist is on the card, automated or manual; and what the
+  two models in the repo pass and fail today.
 - `tests/js/recipe-streams.test.ts` — that a person's appearance rolls are contained to appearance.
   It adds a dummy roll to every person's recipe fork without touching `makeRecipe` (a swapped
   recipe stream whose forks take one extra draw at a chosen position), runs the same crowd with
@@ -1767,7 +1774,8 @@ into two vocabularies.
   has) stands beside each exhibit, ticked every 10 cm and labeled with its measured height. The
   card's **Data file** section shows the model's data file, its path and every fact in it, and
   **provenance** shows its source and license, with each field still `unknown` marked missing. A
-  data file that failed its check is listed on every card under **Data file problems**.
+  data file that failed its check is listed on every card under **Data file problems**. **Spec
+  checks** sets the model against the spec's acceptance checklist; see "Spec checks" below.
 - **People, path mode** (`labs/people/path.ts`, `mode=path`; the lab bar's Stage | Path toggle in
   the Individual view) — the same person, chosen by the same address, **walking a stretch of the
   real promenade with their behavior**: built as an `Agent` through the spawner's constructor and
@@ -2127,6 +2135,46 @@ game's -- rolled exactly as the crowd rolls agent N of the seed, and shaped by t
   seed stands beside it, so in the row the two wear the same colours and a region painted the wrong
   one shows against its neighbour. `[`/`]` repaint live. The readout lists every group with its
   colour, share and color slot, and says why when nothing is painted. See "The model renderer".
+
+### Spec checks
+
+**The people lab checks each model against `docs/specs/person-model.md` when it loads**, so most
+of the acceptance checklist is reported rather than looked for. The card's **Spec checks** section
+gives pass, warning or fail for each, with the numbers behind it, and its head carries the tally
+(`spec-checks.ts` in `inspect/entities/`, worked out once per model):
+
+| check | passes when | otherwise |
+|---|---|---|
+| skeleton | the bone names and count are the reference's (`casual-man`, 24 bones) | fail, listing what is missing and what is extra; a warning if the reference did not load |
+| triangles | 5,000 to 11,000, inclusive | fail, with the count |
+| geometry | one mesh and one material | fail, with both counts |
+| textures | one base color texture, 1024×1024 or smaller | fail for a larger one, a second, none, or any metallic-roughness or normal map; a warning for any other image, or a size the reader cannot read |
+| data file | its data file is valid | fail, with its errors |
+| color slots | every color region found in the texture has a color slot | fail for one with none, a blend across two slots or a texture that cannot be separated; a warning for a slot that matches no region, or where the texture cannot be read (under node) |
+| color rules | every pooled scheme meets the rules on its clothing slots, at every skin tone and hair color (4,704 people); a staff model wears Park Staff, whose rules are waived | fail, with how many broke them and examples |
+| clip roles | walk, run and idle are mapped, and nothing else in the map is wrong | fail |
+| provenance | every source and license field is recorded | a warning naming each one still `unknown` |
+| file size | (info) the GLB's size, and how long it took to fetch and parse here | |
+
+Then the checklist items no lab can judge, as **manual**, each saying where to look: the
+false-color view, the Body Type row, motion (transitions, feet sliding), wearables, the model in
+path mode and the crowd view, a phone's frame rate, load time and memory, and both determinism
+hashes. Between them the two lists cover every line of the spec's checklist, which
+`tests/js/spec-checks.test.ts` holds.
+
+**The checks read the GLB's own bytes** (`readGlb` in `render/glb-facts.ts`): meshes, triangle
+primitives' triangles, materials, which material slot each texture fills, each image's size from
+its own PNG or JPEG header, and every skin's joints by name -- what the file describes, not what a
+loader made of it. That is what lets the same checks run under node, where the tests are and no
+texture decodes, and say there what the lab says; only the color slots check needs the texture
+itself, and so a browser. `parseModel` hands the facts back beside the scene (`ModelFile.facts`).
+
+**What the two models come to today**, and the card says so rather than hiding it. Both pass the
+skeleton, geometry, data file, color slots (`casual-man` 7 regions, `casual-man-low` 6) and color
+rules; both fail textures (a 2048×2048 base color) and clip roles (no idle); both warn on provenance
+(six of seven fields unknown). `casual-man` fails triangles at 15,571, over the range;
+`casual-man-low` at 2,591, under it, and fails textures a second time for its 2048×2048
+metallic-roughness map. 5 passed, 1 warning, 3 failed and 7 manual each.
 
 ### Models by default
 
