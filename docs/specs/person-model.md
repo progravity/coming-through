@@ -1,6 +1,6 @@
 # Coming Through! - Person Model Spec
 
-Last updated: 2026-11-08
+Last updated: 2026-11-09
 
 ## Purpose and scope
 
@@ -50,7 +50,7 @@ These terms are used the same way everywhere in this spec and in the game's code
 | **Color slot** | What a person model's color region is colored as: skin, hair, tops, bottoms, footwear, accessory, accessory2, or keep |
 | **Color set** | A named list of colors that an item's color region is picked from |
 | **Clothing scheme** | A person's coordinated clothing colors: one of the pooled schemes, or a uniform such as Park Staff |
-| **Occupation** | What a person model is dressed for: none (an ordinary visitor), park-staff, construction-worker, and so on. Worlds choose which occupations appear |
+| **Occupation** | What a person model is dressed for: none (an ordinary visitor), park-staff, construction-worker, and so on. Settings choose which occupations appear |
 
 Consequences:
 
@@ -279,8 +279,9 @@ Every person model has an ID and one data file. The data file holds every fact t
 | Age class | adult, child, elder | You | Composition; behavior rules (Darters need a child) |
 | Sex | male, female | You | Composition (balancing the crowd) |
 | Build | average, heavy-set | You | Composition; Body Type limits |
-| Occupation | none (an ordinary visitor), park-staff, construction-worker, … | You | Worlds choose which occupations appear, and where |
-| Garments | What each clothing slot is: t-shirt, shorts, sneakers, sundress, … | You | Composition by setting (a winter world might skip shorts) |
+| Occupation | none (an ordinary visitor), park-staff, construction-worker, … | You | Settings choose which occupations appear, and where |
+| Garments | What each clothing slot is: t-shirt, shorts, sneakers, sundress, … | You | Composition by setting (a winter setting might exclude shorts) |
+| Style tags | From the fixed list: vacation, casual, sporty, business, formal, workwear (any number) | You | Settings prefer or require styles |
 | Accessories | Each baked accessory and its color slot, such as shoulder bag → accessory | You | Composition (what share of the crowd carries bags) |
 | Clip roles | Which roles this model has | Derived from the clip map | Behavior rules (a phone moment needs the phone clip) |
 
@@ -302,9 +303,9 @@ Every person model has an ID and one data file. The data file holds every fact t
 | License | Terms for the model and for its clips | You, when added |
 | Stats | Triangles, bones, texture size, file size | Computed |
 
-**Never in a person data file:** behavior, spawn weights, clothing schemes or colors, worlds, or equipment. Those are the game's choices about a model; composition reads the facts and decides the rest.
+**Never in a person data file:** behavior, spawn weights, clothing schemes or colors, settings, or equipment. Those are the game's choices about a model; composition reads the facts and decides the rest.
 
-**Worlds opt in.** A world lists the occupations (and, if it wants, garments) it accepts for its crowd and for its staff spots, and leaves out anything it doesn't list. A theme park's crowd takes occupation none and its staff spots take park-staff, so a construction-worker model added later never appears there. How a world lists this belongs in a world composition spec.
+**Settings opt in.** A setting lists the occupations it accepts for its crowd and for its staff spots, and leaves out anything it doesn't list. A theme park's crowd takes occupation none and its staff spots take park-staff, so a construction-worker model added later never appears there. How a setting picks each person's model from these facts is in the [Setting Spec](setting.md).
 
 ## Acceptance checklist
 

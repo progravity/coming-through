@@ -116,8 +116,8 @@ Anything rigid that sits on one part of the body is an item. Anything that wraps
 ## Color sets
 
 - A **color set** is a named list of colors. Each color region of an item either names a set or keeps its painted color, so a phone or cane can have little or no variation while a balloon has a wide range.
-- Sets are named by purpose ("balloon," "phone," "mobility"), never by look, because a world can redefine them.
-- Default sets live in a data file. A world can override any set by name, and sets it doesn't mention keep their defaults. Items never know which world they're in.
+- Sets are named by purpose ("balloon," "phone," "mobility"), never by look, because a setting can redefine them.
+- Default sets live in a data file. A setting can override any set by name, and sets it doesn't mention keep their defaults. Items never know which setting they're in (see the [Setting Spec](setting.md)).
 - Each person's item color is picked from the resolved set with the cosmetic random stream, so it stays seeded and repeatable.
 - Hats take the person's headwear color from their clothing scheme rather than a set, so they coordinate with the outfit.
 - The color rules carry over: an item's color differs from what it sits against (a hat from the hair, a held prop from the top).
@@ -155,7 +155,7 @@ As with people: no database, data files are bundled into the game and discovered
 | Age classes | Which age classes can use it, and its scale for children |
 | Stats | Triangles, texture size, file size |
 
-**Never in an item data file:** which worlds or people use it, or how often. Worlds opt in to items the same way they opt in to people.
+**Never in an item data file:** which settings or people use it, or how often. Settings opt in to items the same way they opt in to people.
 
 ## Performance
 
