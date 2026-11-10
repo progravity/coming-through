@@ -23,7 +23,6 @@ import { edgePlans } from '../world/plan.ts';
 import { PATH, newPathFrame, newWorldPoint, pathDir, pathPlace } from '../world/path.ts';
 import { LabChrome } from './chrome.ts';
 import { button, card, el, label, segmented } from './dom.ts';
-import { primaries } from './labs.ts';
 import type { Lab, LabView } from './labs.ts';
 
 /** The look a run of the game ships under (`DEFAULT_LOOK` in game.ts). */
@@ -113,8 +112,8 @@ function neighbors(site: Site): InfoSection {
 export async function startPlacement(lab: Lab): Promise<void> {
     const q = new URLSearchParams(location.search);
     const resolved = resolveIn(location.search, lab);
-    const entity = resolved.entity.modelOf !== undefined ? (byId(resolved.entity.modelOf) ?? resolved.entity) : resolved.entity;
-    const choices = primaries(lab).filter(e => e.sites !== undefined);
+    const entity = resolved.entity;
+    const choices = lab.entities.filter(e => e.sites !== undefined);
     const tc = typeControl(entity);
     const types = (tc?.options ?? []).filter(o => o !== 'seed');
     const asked = q.get(tc?.id ?? '') ?? String(resolved.pinned[tc?.id ?? ''] ?? '');
@@ -126,8 +125,7 @@ export async function startPlacement(lab: Lab): Promise<void> {
     for (const o of OVERLAYS) { const raw = q.get(o.id); if (raw === '1') shown.add(o.id); else if (raw === '0') shown.delete(o.id); }
 
     new LabChrome({
-        lab, view: 'placement', source: 'primitives',
-        modelBlocked: `${entity.title}: no model yet. Primitives only for now (see STRUCTURE_MODELS in render/model-file.ts).`,
+        lab, view: 'placement',
         onView: (v: LabView) => {
             const t = new URLSearchParams();
             if (v !== 'single') t.set('view', v);
@@ -135,7 +133,6 @@ export async function startPlacement(lab: Lab): Promise<void> {
             if (tc !== undefined && type !== '') t.set(tc.id, type);
             location.search = t.toString();
         },
-        onSource: () => {},
     });
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });

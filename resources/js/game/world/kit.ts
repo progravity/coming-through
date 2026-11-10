@@ -263,10 +263,7 @@ interface Mover { batch: Batch; index: number; st: Standing; }
  * Place every plan's pieces through the curve and hand `parent` one group holding all of it.
  *
  * A group rather than a handful of loose children on purpose: the layer is **one thing**, so it
- * goes in, comes out, moves and turns as one, and disposing an exhibit is one call. It also keeps
- * the whole layer off a scene's top level, where `compare/treatments.ts` walks the children
- * counting the character pools' meshes -- the tag on those is what really tells them apart, and
- * this is the second lock on the same door.
+ * goes in, comes out, moves and turns as one, and disposing an exhibit is one call.
  *
  * `parent` is an `Object3D` rather than a `Scene` so the inspection stage can hang one object's
  * worth of edge under a group it moves and turns. The game passes its scene, as it always did.

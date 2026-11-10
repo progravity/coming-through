@@ -1,5 +1,5 @@
 /**
- * Guards the one property the character turntable (`?inspect=1`) exists for: it must show the
+ * Guards the one property the people lab's turntable (`/lab/people`) exists for: it must show the
  * person the crowd would build, not a lookalike.
  *
  * `resources/js/game/inspect/` is a driver for the game's character code, never a copy of it. The moment
@@ -38,8 +38,7 @@ test('a person on the turntable is the person the crowd spawns', () => {
                 assert.equal(subject.sepR, agent.sepR, `separation radius differs for ${where}`);
                 assert.equal(subject.accel, agent.accel, `acceleration differs for ${where}`);
                 assert.equal(subject.turn, agent.turn, `turn rate differs for ${where}`);
-                // Cosmetic draws too, so the idle fidget and the gait's starting phase match.
-                assert.equal(subject.fidget, agent.fidget, `fidget differs for ${where}`);
+                // The cosmetic draw too, so the gait's starting phase matches.
                 assert.equal(subject.phase, agent.phase, `gait phase differs for ${where}`);
                 checked++;
             }

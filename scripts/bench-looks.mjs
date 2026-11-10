@@ -63,7 +63,7 @@ const send = (method, params = {}, sessionId) => new Promise(r => {
 
 const rows = [];
 for (const look of LOOKS) {
-    // A fresh target per look, so nothing a previous look left on the pools can carry over.
+    // A fresh target per look, so nothing a previous look left on a material can carry over.
     const url = gamePage(base, `stress=1&tier=high&look=${look}`);
     const { result: { targetId } } = await send('Target.createTarget', { url: 'about:blank' });
     const { result: { sessionId } } = await send('Target.attachToTarget', { targetId, flatten: true });

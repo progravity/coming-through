@@ -21,7 +21,7 @@
  * - **No ink shell.** The game ships under `toon-bare`, without the line, so the default comparison
  *   is a fair one; the model crowd's own shell follows the body (`modelcrowd/crowd.ts`).
  * - **No crowd cost.** A skinned mesh is a draw call per figure, and three.js has no instanced
- *   skinning. This answers "does it look right"; `?people=model` on /play measures the rest.
+ *   skinning. This answers "does it look right"; `?readout=1` on /play measures the rest.
  * - **No root motion.** A clip plays on the spot; one that walks forward walks off its anchor.
  *
  * Every model is a data file in `resources/js/game/data/people/`, found by `data/people.ts` and named
@@ -56,7 +56,7 @@ import type { Cast, Control, Controls, DrawnPart, InfoCell, InfoRow, InfoSection
 import { disposeMarks, dot } from '../markers.ts';
 import type { Subject } from '../subject.ts';
 import {
-    COLLIDER, FACING, PERSON_CONTROLS, PERSON_DEFAULTS, PersonMarks, chosenBy, clothingSection, overridesOf, personLegacy, personBehavior, personChoices,
+    COLLIDER, FACING, PERSON_CONTROLS, PERSON_DEFAULTS, PersonMarks, chosenBy, clothingSection, overridesOf, personBehavior, personChoices,
     personGeometry, personIdentity, personRecipe, subjectFor,
 } from './person.ts';
 
@@ -97,7 +97,7 @@ interface Model {
     readonly verts: number;
     readonly bones: number;
     readonly bytes: number;
-    /** Its color regions and their color slots, as the `?people=model` crowd paints them; null when not looked for. */
+    /** Its color regions and their color slots, as the game's crowd paints them; null when not looked for. */
     readonly regions: Regions | null;
     readonly triangles: number;
     /** Its height in the rest pose, which the crowd scales each recipe's standing height against. */
@@ -734,7 +734,7 @@ class ModelCast implements Cast {
                         { k: 'skinning', v: `${m.bones} bones, uploaded per figure per frame` },
                         { k: 'body', v: 'girth in the bind matrices, set once per body; six joint copies after each animation update; fullness one uniform and one vertex attribute' },
                     ],
-                    note: 'three.js has no instanced skinning, so a crowd of these is a draw call per person; ?people=model on /play measures that.',
+                    note: 'three.js has no instanced skinning, so a crowd of these is a draw call per person; ?readout=1 on /play measures that.',
                 },
             ],
         };
@@ -1043,23 +1043,11 @@ const MODEL_OVERLAYS: readonly OverlayDef[] = [
     { id: ANCHOR_OVERLAY, label: 'accessory anchors', key: 'j' },
 ];
 
-/**
- * Read an old address: the person's old keys (`personLegacy`), `compare=build`, the Body Type row
- * from before the per-person preset was called the Body Type, and `compare=age`, the Age row from
- * before the age presets were removed, which now opens the default row.
- */
-function modelLegacy(q: URLSearchParams): void {
-    personLegacy(q);
-    const compare = q.get('compare');
-    if (compare === 'build') q.set('compare', 'body-type');
-    else if (compare === 'age') q.delete('compare');
-}
-
 /** The person's equipment control, without the key `M` already chooses the model by. */
 const { key: _equipKey, ...equipment } = PERSON_CONTROLS.equipment;
 
-export const MODEL: Inspectable = {
-    id: 'model',
+export const PERSON: Inspectable = {
+    id: 'person',
     family: 'person',
     // The panel prints this over the seed box. The seed chooses the person the model is drawn as.
     title: 'Person',
@@ -1090,7 +1078,6 @@ export const MODEL: Inspectable = {
         PERSON_CONTROLS.agent,
     ],
     overlays: MODEL_OVERLAYS,
-    legacy: modelLegacy,
     // A model has meshes, not instanced parts: no part gizmos, no part origins, and no ink shell on
     // the stage to switch.
     universal: [RULER],

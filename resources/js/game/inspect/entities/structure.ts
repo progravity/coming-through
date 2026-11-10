@@ -174,7 +174,6 @@ export function structureSections<T extends string>(
                 { k: 'painted by', v: `${kind.source.roller}, off hashString('${kind.source.stream}')`, mono: true },
                 { k: 'placed by', v: `${kind.source.placements} · ${kind.source.spans}`, mono: true },
                 { k: 'kit', v: 'resources/js/game/world/structure.ts · placeStructure; world/kit.ts · buildEdge', mono: true },
-                { k: 'model', v: 'none yet: primitives only (see STRUCTURE_MODELS in render/model-file.ts)' },
             ],
         },
         { id: 'cost', rows: cost },

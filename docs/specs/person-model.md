@@ -257,6 +257,7 @@ Every person model has an ID and one data file. The data file holds every fact t
 - **No database:** data files are versioned with the models, ship with the game so the phone app works offline, and keep crowds reproducible.
 - **Bundled:** data files are built into the game, so crowd composition can read every model's facts instantly and identically on every run. The game discovers every file in `data/people/` automatically: adding a model is a GLB and a data file, with no code change.
 - **Regenerating:** the same character gets the new GLB, its data file points at it, and the version goes up. A different character gets a new ID, so a seed never silently shows someone else.
+- **One GLB, one data file:** every GLB in `public/models/people/` is pointed at by exactly one data file, and the tests fail on a GLB with none or on two data files sharing one. When a character is regenerated, its old GLB is deleted.
 - **Legacy:** `casual-man` and `casual-man-low` keep those IDs until they're removed.
 
 ### What the data file holds

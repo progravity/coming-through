@@ -6,17 +6,13 @@
  * worth anything. The seed defaults to a fixed value rather than a random one for the same reason.
  *
  * None of it is written per entity. A control is carried under **its own id**, an overlay under its
- * own id, and that is the whole rule -- which is also why every URL the character turntable ever
- * wrote still reads: the person's controls were named `arch`, `age`, `build`, `mob`, `walk` and
- * `phase` because those were already the query keys, and a key renamed since is read back by its
- * entity's `legacy` (`build` is `body-type` now). A scheme that could not reproduce them would
- * have been the wrong scheme.
+ * own id, and that is the whole rule.
  */
 import { parseSeed } from '../core/rng.ts';
 import { LOOK_NAMES } from '../render/look.ts';
 import { clampNumber, defaultControls, defaultOverlays, gateIds, overlaysOf, rowCount } from './inspectable.ts';
 import type { Controls, Inspectable } from './inspectable.ts';
-import { DEFAULT_ENTITY, modelOf, resolve } from './registry.ts';
+import { DEFAULT_ENTITY, resolve } from './registry.ts';
 import { REST, clampView } from './stage.ts';
 import type { View } from './stage.ts';
 
@@ -42,12 +38,6 @@ export type PanelId = (typeof PANELS)[number];
  */
 export interface Scope {
     readonly entities: readonly Inspectable[];
-    /**
-     * Whether this scope shows only models of anything that has one. The people lab's does: people
-     * are drawn from models there, with no source to choose, so an address naming the primitive
-     * person or asking for `source=prim` opens the model, and the address bar never names a source.
-     */
-    readonly modelsOnly?: boolean;
 }
 
 export const EVERYTHING: Scope = { entities: [] };
@@ -113,7 +103,6 @@ const num = (v: string | null, fallback: number): number => {
  */
 export function stateFor(e: Inspectable, mode: string, search: string, pinned: Controls = {}): InspectState {
     const q = new URLSearchParams(search);
-    e.legacy?.(q);
     const controls = { ...defaultControls(e), ...pinned };
     const overlays = defaultOverlays(e);
     for (const c of e.controls) {
@@ -124,8 +113,8 @@ export function stateFor(e: Inspectable, mode: string, search: string, pinned: C
         else if (c.kind === 'number') controls[c.id] = clampNumber(c, num(raw, c.value));
         else {
             controls[c.id] = wrap01(num(raw, c.value));
-            // A gated scalar in the URL means "hold it here", so it turns its own gate on. This is
-            // what keeps `?phase=0.25` meaning a frozen gait, as it always has.
+            // A gated scalar in the URL means "hold it here", so it turns its own gate on: `?phase=0.25`
+            // is a clip frozen a quarter of the way through.
             if (c.gate !== undefined) controls[c.gate] = true;
         }
     }
@@ -161,27 +150,14 @@ export function stateFor(e: Inspectable, mode: string, search: string, pinned: C
 }
 
 /**
- * The entity an address asks for inside `scope`, with whatever an alias pins.
- *
- * `source=model` swaps a primitive entity for the model that stands in for it, when the scope has
- * one: that is the labs' source toggle, read back. A name from outside the scope falls back to the
- * scope's own default, so a stale or cross-lab address still opens something this page can show.
+ * The entity an address asks for inside `scope`, with whatever an alias pins. A name from outside
+ * the scope falls back to the scope's own default, so a cross-lab address still opens something
+ * this page can show.
  */
 export function resolveIn(search: string, scope: Scope = EVERYTHING): { entity: Inspectable; pinned: Controls } {
     const q = new URLSearchParams(search);
     let { entity, pinned } = resolve(q.get('entity'));
     if (!inScope(scope, entity)) { entity = scope.entities[0] ?? entity; pinned = {}; }
-    const source = q.get('source');
-    const prim = source === 'prim' || source === 'primitives';
-    // A models-only scope holds no primitive with a model, so the fallback above already chose it.
-    if (scope.modelsOnly === true) return { entity, pinned };
-    if (source === 'model' && entity.modelOf === undefined) {
-        const m = modelOf(entity.id);
-        if (m !== undefined && inScope(scope, m)) entity = m;
-    } else if (prim && entity.modelOf !== undefined) {
-        const p = resolve(entity.modelOf).entity;
-        if (inScope(scope, p)) entity = p;
-    }
     return { entity, pinned };
 }
 
@@ -191,20 +167,12 @@ export function readState(mode: string, search: string, scope: Scope = EVERYTHIN
     return stateFor(entity, mode, search, pinned);
 }
 
-/**
- * The address bar for `s`, leaving anything still at its default out of it.
- *
- * A model source is written as the entity it stands in for plus `source=model`, which is how the
- * labs' toggle reads it back; the scope's default entity is never named.
- */
+/** The address bar for `s`, leaving anything still at its default out of it: the scope's default entity is never named. */
 export function queryOf(s: InspectState, e: Inspectable, scope: Scope = EVERYTHING): URLSearchParams {
     const q = new URLSearchParams();
     if (s.mode === 'row') q.set('view', 'row');
     q.set('seed', String(s.seed));
-    // A models-only scope names its model as itself; elsewhere a model is its entity plus a source.
-    const named = scope.modelsOnly === true ? s.entity : e.modelOf ?? s.entity;
-    if (named !== defaultOf(scope)) q.set('entity', named);
-    if (e.modelOf !== undefined && scope.modelsOnly !== true) q.set('source', 'model');
+    if (s.entity !== defaultOf(scope)) q.set('entity', s.entity);
     if (s.mode === 'row' && s.sel > 0) q.set('sel', String(s.sel));
     const gates = gateIds(e);
     for (const c of e.controls) {

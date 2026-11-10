@@ -22,8 +22,6 @@ import type { Steer } from './steering.ts';
 /** Anything the renderer needs to pose a body. Shared by agents and the player. */
 export interface Poseable extends Pose {
     recipe: Recipe;
-    /** Phase offset for idle fidget and balloon sway; from the cosmetic stream. */
-    fidget: number;
 }
 
 export interface AgentOptions {
@@ -74,8 +72,7 @@ export class Agent implements GridItem, Poseable {
     hx: number; hz: number;
     /** Age in simulation seconds. */
     t: number;
-    phase: number; mv: number; lean: number;
-    readonly fidget: number;
+    phase: number; mv: number;
     /** Wander target, in path coordinates: a lane to drift into, or an offset from a parent. */
     wanderN: number; wanderS: number; nextWander: number;
     stopUntil: number; nextStop: number;
@@ -121,7 +118,7 @@ export class Agent implements GridItem, Poseable {
         const heading = PATH.yawAt(at.s);
         this.yaw = dir > 0 ? heading : heading + Math.PI;
         const h0 = pathDir(frame, dir, 0, _world); this.hx = h0.x; this.hz = h0.z;
-        this.t = 0; this.phase = cosmetic.range(0, TAU); this.fidget = cosmetic.range(0, TAU); this.mv = 0; this.lean = 0;
+        this.t = 0; this.phase = cosmetic.range(0, TAU); this.mv = 0;
         this.wanderN = at.n; this.wanderS = 0; this.nextWander = this.rng.sample(A.wanderEvery);
         this.stopUntil = 0; this.nextStop = A.stopEvery ? this.rng.sample(A.stopEvery) : Infinity;
         this.leader = opts.leader ?? null; this.offset = opts.offset ?? 0; this.parent = opts.parent ?? null;
@@ -228,13 +225,13 @@ export class Agent implements GridItem, Poseable {
             const w = PATH.toWorld(now.s, clamp(now.n, -lim, lim), _world);
             this.x = w.x; this.z = w.z;
         }
-        // heading, lean, gait
+        // heading, gait
         const s2 = hypot(this.vx, this.vz);
         if (s2 > 0.15) {
             const d = wrapAngle(atan2(this.vx, this.vz) - this.yaw);
-            this.yaw += d * Math.min(1, dt * this.turn); this.lean = clamp(-d * 0.8, -0.25, 0.25);
+            this.yaw += d * Math.min(1, dt * this.turn);
             this.hx = sin(this.yaw); this.hz = cos(this.yaw);
-        } else this.lean *= 0.9;
+        }
         this.mv += (clamp(s2 / this.speed, 0, 1) - this.mv) * Math.min(1, dt * 10);
         this.phase += s2 * dt * this.recipe.gait.cadence;
         if (!this.leader && !this.parent && now.s * this.dir > EXIT_S) this.dead = true;

@@ -35,15 +35,27 @@ test('every file in data/people/ is found, read and valid, and each is named by 
     const onDisk = readdirSync(FOLDER).filter(f => f.endsWith('.json')).map(f => f.replace(/\.json$/, '')).sort();
     assert.deepEqual(DATA_FILES.map(f => f.path), onDisk.map(id => `${DATA_DIR}${id}.json`));
     for (const f of DATA_FILES) assert.deepEqual(f.errors, [], f.path);
-    // In ID order, which is the order the lab lists them in.
+    // In ID order, which is the order the lab lists them in. The list itself is not written down
+    // here: adding a model is a GLB and a data file, and no test changes for it.
     assert.deepEqual(Object.keys(PERSON_MODELS), onDisk);
-    assert.deepEqual(Object.keys(PERSON_MODELS), ['casual-man', 'casual-man-low']);
+    for (const id of ['casual-man', 'casual-man-low']) assert.ok(PERSON_MODELS[id] !== undefined, `${id} is gone`);
 });
 
 test('every model file is a GLB in public/models/people/ that is really there', () => {
     for (const m of Object.values(PERSON_MODELS)) {
         assert.match(m.modelFile, /^\/models\/people\/[^/]+\.glb$/);
         assert.ok(existsSync(new URL(`public${m.modelFile}`, ROOT)), `${m.path} points at public${m.modelFile}, which is not there`);
+    }
+});
+
+test('every GLB in public/models/people/ belongs to exactly one data file', () => {
+    // A GLB nothing points at ships with every deploy and is drawn by nobody; two data files on one
+    // GLB are two IDs for one character, and would dress alike (the arrangement is salted by the file).
+    const claimed = new Map<string, string[]>();
+    for (const m of Object.values(PERSON_MODELS)) claimed.set(m.modelFile, [...(claimed.get(m.modelFile) ?? []), m.id]);
+    for (const [file, ids] of claimed) assert.equal(ids.length, 1, `${ids.join(' and ')} both point at public${file}`);
+    for (const file of readdirSync(new URL('public/models/people/', ROOT)).filter(f => !f.startsWith('.'))) {
+        assert.ok(claimed.has(`/models/people/${file}`), `public/models/people/${file} has no data file in ${DATA_DIR}`);
     }
 });
 
@@ -135,10 +147,8 @@ test('a clip map names roles the spec has, clips that loop when the role does, a
     assert.deepEqual(check(clips({})), []);
 });
 
-test('the color slots are the spec\'s, an old slot name says what it became, and a slot the game cannot color is refused', () => {
-    for (const [old, now] of [['top', 'tops'], ['trousers', 'bottoms'], ['shoes', 'footwear']]) {
-        one(check({ colorSlots: [{ color: '#123456', slot: old }] }), 'colorSlots[0].slot', new RegExp(`"${old}", which is now "${now}"`));
-    }
+test('the color slots are the spec\'s, and a slot the game cannot color is refused', () => {
+    one(check({ colorSlots: [{ color: '#123456', slot: 'trousers' }] }), 'colorSlots[0].slot', /"trousers"; use one of/);
     // Headwear is not a color slot: models are generated without hats, and a hat wearable is colored instead.
     one(check({ colorSlots: [{ color: '#123456', slot: 'headwear' }] }), 'colorSlots[0].slot', /"headwear"; use one of/);
     one(check({ colorSlots: [...(read('casual-man').colorSlots as object[]), { color: '#654321', slot: 'accessory2' }] }), 'colorSlots[7].slot', /cannot color a second accessory yet/);

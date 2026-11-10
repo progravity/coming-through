@@ -11,8 +11,8 @@
  * add the placement view, which needs an entity to say where it stands (`Inspectable.sites`).
  *
  * The routes are `routes/web.php`'s (`lab.index`, `lab.people`, `lab.fixtures`, `lab.buildings`),
- * all behind the login. `LAB_ROOT` is where they live; it is written here once so the redirect from
- * an old `/play?inspect=` address and the views' own links agree with the routes.
+ * all behind the login. `LAB_ROOT` is where they live; it is written here once so the views' own
+ * links agree with the routes.
  */
 import { CATEGORY_OF } from '../entity.ts';
 import type { Category } from '../entity.ts';
@@ -28,9 +28,6 @@ export const VIEW_TITLES: Readonly<Record<LabView, string>> = {
     single: 'Individual', row: 'Row', crowd: 'Crowd', placement: 'Placement',
 };
 
-/** Where an entity is drawn from: the game's primitives, or a model file standing in for them. */
-export type Source = 'primitives' | 'model';
-
 export interface Lab extends Scope {
     id: Category;
     title: string;
@@ -45,29 +42,12 @@ export interface Lab extends Scope {
 }
 
 const entitiesOf = (c: Category): Inspectable[] => ENTITIES.filter(e => CATEGORY_OF[e.family] === c);
-/**
- * A models-only lab's entities: anything a model stands in for is left out, so the model is the
- * only way it can be shown and every address naming the primitive falls back to it.
- */
-const modelsOf = (c: Category): Inspectable[] =>
-    entitiesOf(c).filter(e => e.modelOf !== undefined || !entitiesOf(c).some(m => m.modelOf === e.id));
 
 export const LABS: Readonly<Record<Category, Lab>> = {
-    // People are models, here as everywhere: there are no primitive people.
-    people: { id: 'people', title: 'People', path: `${LAB_ROOT}/people`, entities: modelsOf('people'), views: ['single', 'row', 'crowd'], modelsOnly: true, pathMode: true },
+    people: { id: 'people', title: 'People', path: `${LAB_ROOT}/people`, entities: entitiesOf('people'), views: ['single', 'row', 'crowd'], pathMode: true },
     fixtures: { id: 'fixtures', title: 'Fixtures', path: `${LAB_ROOT}/fixtures`, entities: entitiesOf('fixtures'), views: ['single', 'row', 'placement'] },
     buildings: { id: 'buildings', title: 'Buildings', path: `${LAB_ROOT}/buildings`, entities: entitiesOf('buildings'), views: ['single', 'row', 'placement'] },
 };
-
-/** The lab an entity is shown in. */
-export const labFor = (e: Inspectable): Lab => LABS[CATEGORY_OF[e.family]];
-
-/**
- * The entities a lab's picker offers: the primitive ones, since a model is reached by the source
- * toggle -- or, in a models-only lab, which has no toggle, the models themselves.
- */
-export const primaries = (lab: Lab): Inspectable[] =>
-    lab.modelsOnly === true ? [...lab.entities] : lab.entities.filter(e => e.modelOf === undefined);
 
 /** Which view an address asks for, falling back to the individual view for anything this lab lacks. */
 export function viewOf(lab: Lab, search: string): LabView {

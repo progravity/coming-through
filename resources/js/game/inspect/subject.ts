@@ -34,10 +34,6 @@ export const EQUIPMENT_OPTIONS: readonly string[] = ['seed', ...EQUIPMENT];
 
 /** A choice forced by the lab, or `seed` for whatever the seed rolls. */
 export type Overrides = { [K in keyof Choices]: Choices[K] | 'seed' };
-export const ROLLED: Overrides = {
-    behavior: 'seed', bodyType: 'seed', skinTone: 'seed', hairTone: 'seed', scheme: 'seed', equipment: 'seed',
-};
-
 /** The forced choices alone, as `makeRecipe` takes them. */
 export function forced(o: Partial<Overrides>): Partial<Choices> {
     const out: Partial<Record<keyof Choices, string>> = {};
@@ -65,8 +61,7 @@ export class Subject implements Poseable {
     readonly sepR: number;
     readonly accel: number;
     readonly turn: number;
-    readonly fidget: number;
-    x = 0; z = 0; yaw = 0; phase = 0; mv = 0; lean = 0;
+    x = 0; z = 0; yaw = 0; phase = 0; mv = 0;
 
     /**
      * @param o The choices the lab forces. A group follower's shared scheme is one: the spawner
@@ -91,7 +86,6 @@ export class Subject implements Poseable {
         this.accel = A.accel * m.accel;
         this.turn = 8 * m.turn;
         this.phase = cosmetic.range(0, TAU);
-        this.fidget = cosmetic.range(0, TAU);
     }
 
     /**

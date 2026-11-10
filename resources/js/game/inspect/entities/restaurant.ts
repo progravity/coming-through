@@ -6,7 +6,7 @@
  * angle with a crowd in front of it, and the whole of its identity is one emblem on a ridge.
  * Whether a taco reads as a taco rather than as a bowl -- and, the sharp one, whether the noodle
  * bowl and the salad bowl read as two different things at all -- is a question only
- * `?inspect=row&entity=restaurant` answers.
+ * `/lab/buildings?view=row&entity=restaurant` answers.
  *
  * The restaurant on the stage is the restaurant on the promenade: `RESTAURANT_ARCHETYPES` describes
  * it, `rollRestaurant` paints it off the same constant-seeded stream the world uses, and

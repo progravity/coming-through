@@ -5,7 +5,7 @@
  * Checked here and nowhere else: that the universal overlays really are universal, that a
  * hypothetical entity nobody has written yet is inspectable without the shell changing, that every
  * registered entity's declaration is well formed, that no file in the shell reaches an entity, that
- * every URL the character turntable ever wrote still reads and that nothing a cast writes back
+ * a person's address reads back the keys it was written with and that nothing a cast writes back
  * reaches one, that the stage frames what it measures rather than what a person is, and that an
  * object placed by the path's frame lands where the staging says on the stage.
  */
@@ -27,7 +27,7 @@ import { bench } from '../../resources/js/game/world/furniture.ts';
 import { PATH } from '../../resources/js/game/world/path.ts';
 import { LOOK_NAMES, lookNamed } from '../../resources/js/game/render/look.ts';
 
-/** A part is a unit cube under its own matrix, whichever pool or kit drew it. */
+/** A part is a unit cube under its own matrix, whatever drew it. */
 const part = (x: number, y: number, z: number, sx: number, sy: number, sz: number): DrawnPart => ({
     matrix: new THREE.Matrix4().compose(
         new THREE.Vector3(x, y, z),
@@ -37,7 +37,7 @@ const part = (x: number, y: number, z: number, sx: number, sy: number, sz: numbe
     color: 0x808080,
 });
 
-test('measure works off a matrix and a size alone, with no pool behind it', () => {
+test('measure works off a matrix and a size alone', () => {
     // A box 2 wide, 1 tall and 4 long, sitting on the ground: exactly the shape a bench is.
     const parts: DrawnPart[] = [part(0, 0.5, 0, 2, 1, 4), part(3, 2, 0, 1, 1, 1)];
     const b = measure(parts, 0, parts.length, newBounds());
@@ -126,41 +126,20 @@ test('a hypothetical entity is inspectable without the shell changing', () => {
     assert.deepEqual([...back.overlays].sort(), [...s.overlays].sort());
 });
 
-test('every person URL that worked before still works', () => {
-    // Written when a person was an archetype drawn from primitives: a person is the model now, the
-    // default entity. `arch` arrives as the behavior profile that replaced it, `mob` as equipment, and
-    // `build` (the per-person preset, before it was called the Body Type) as `body-type`. An age loads
-    // and is ignored: age comes only from the model now.
+test("a person's address is read and written under the same keys", () => {
+    // The person is the default entity, drawn from their model.
     const person = ENTITIES[0];
-    assert.equal(person.id, 'model');
-    assert.equal(resolve('person').entity, person);
-    const url = '?inspect=1&seed=3&arch=dave&age=older&build=broad&mob=cane&walk=1' +
-        '&paused=1&yaw=45&phase=0.5&gizmos=1&ink=0';
+    assert.equal(person.id, 'person');
+    const url = '?seed=3&behavior=weaver&body-type=broad&equipment=cane&paused=1&yaw=45&phase=0.5&gizmos=1&ink=0';
     const s = stateFor(person, 'single', url);
     assert.equal(s.seed, 3);
     assert.equal(s.controls.behavior, 'weaver');
-    assert.equal(s.controls.age, undefined);
-    assert.equal(stateFor(person, 'single', '?age=old').controls.age, undefined);
     assert.equal(s.controls['body-type'], 'broad');
-    assert.equal(s.controls.build, undefined);
-    // A key already in the new form wins over its old name.
-    assert.equal(stateFor(person, 'single', '?build=broad&body-type=slim').controls['body-type'], 'slim');
-    // `mob=cane` still arrives as equipment, but no model can be drawn with a cane yet, so the option
-    // is greyed and the address loads the seed's roll instead; the same for a Darter, who needs a
-    // child model. Both links still open.
-    const old = new URLSearchParams('?mob=cane&arch=timmy');
-    person.legacy?.(old);
-    assert.equal(old.get('equipment'), 'cane');
-    assert.equal(old.get('behavior'), 'darter');
+    // No model can be drawn with a cane yet, so the option is greyed and the address loads the
+    // seed's roll instead; the same for a Darter, who needs a child model.
     assert.equal(s.controls.equipment, 'seed');
-    assert.equal(stateFor(person, 'single', '?arch=timmy').controls.behavior, 'seed');
-    for (const [arch, behavior] of [['tourist', 'typical'], ['mary', 'slow-walker'], ['kyle', 'distracted'], ['linda', 'sudden-stopper'], ['johnsons', 'group-walker']]) {
-        assert.equal(stateFor(person, 'single', `?arch=${arch}`).controls.behavior, behavior, arch);
-    }
-    assert.equal(stateFor(person, 'single', '?arch=seed').controls.behavior, 'seed');
-    // The primitives' `walk` toggle, part gizmos and ink shell have nothing to switch on a model: the
-    // model walks by default, and the two overlays are not offered.
-    assert.equal(s.controls.walk, undefined);
+    assert.equal(stateFor(person, 'single', '?behavior=darter').controls.behavior, 'seed');
+    // A model has meshes rather than instanced parts, so the part gizmos are not offered.
     assert.ok(!s.overlays.has('gizmos'));
     // A gated scalar in the URL means "hold it there", so `phase` alone freezes the clip there.
     assert.equal(s.controls.phase, 0.5);
@@ -175,7 +154,8 @@ test('every person URL that worked before still works', () => {
     assert.equal(q.get('freeze'), null);
     assert.equal(q.get('phase'), '0.500');
     assert.equal(q.get('gizmos'), null);
-    assert.equal(q.get('walk'), null);
+    assert.equal(q.get('behavior'), 'weaver');
+    assert.equal(q.get('body-type'), 'broad');
     assert.equal(q.get('yaw'), '45.0');
 });
 
@@ -424,8 +404,8 @@ test('only the pieces that move are re-read between draws', () => {
 
 test('a value a cast wrote back does not reach the address bar', () => {
     // What a cast writes into `controls` is a live reading -- the gait phase of a walking figure --
-    // and it reaches the panel's slider and stops there. This is the whole of what keeps a legacy
-    // person URL free of a `phase` nobody asked for.
+    // and it reaches the panel's slider and stops there, which is what keeps a person's address
+    // free of a `phase` nobody asked for.
     const live = stateFor(FAKE, 'single', '?seed=9');
     live.controls.swing = 0.9;
     assert.equal(queryOf(live, FAKE).get('swing'), null, 'a write-back must not reach the URL');

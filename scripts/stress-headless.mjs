@@ -1,7 +1,6 @@
 // Headless stress benchmark: opens ?stress=1 in Chrome over the DevTools protocol (plain
 // --headless --timeout only ever runs one animation frame) and prints window.game.stress.
 // Usage: npm run dev & node scripts/stress-headless.mjs [https://coming-through.test/play] [seconds]
-// People are drawn with models, as the game draws every person.
 // (Herd serves the page; Vite, or a prior `npm run build`, serves its scripts.)
 // Note: headless rAF runs at only a few fps under SwiftShader, so each frame does the maximum
 // catch-up steps; compare avgSimPerStepMs and avgRenderMs, not simMs per frame.

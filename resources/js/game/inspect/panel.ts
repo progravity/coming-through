@@ -138,7 +138,7 @@ export class Panel {
     onSelect: (i: number) => void = () => {};
 
     /**
-     * @param entities What the picker offers: this lab's primitive entities. A single entity gets
+     * @param entities What the picker offers: this lab's entities. A single entity gets
      *   no picker at all, because a row with one button is a label pretending to be a control.
      */
     constructor(h: Handlers, entities: readonly Inspectable[], heading: string) {
@@ -344,7 +344,7 @@ export class Panel {
         if (document.activeElement !== this.seedBox) this.seedBox.value = String(s.seed);
     }
 
-    /** Light the picker for a model source by the entity it stands in for. */
+    /** Light the picker for the entity on stage. */
     pick(id: string): void { this.picker?.set(id); }
 
     describe(r: Readout): void {

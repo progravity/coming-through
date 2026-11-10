@@ -77,9 +77,6 @@ export type ColorSlot = (typeof COLOR_SLOTS)[number];
 const NOT_COLORED_YET: Readonly<Partial<Record<ColorSlot, string>>> = {
     accessory2: 'the game cannot color a second accessory yet (wardrobe.ts has no accessory2 clothing slot)',
 };
-/** The names the first region files (`.regions.json`) gave their color slots, and what each became. */
-const RENAMED_SLOTS: Readonly<Record<string, ColorSlot>> = { top: 'tops', trousers: 'bottoms', shoes: 'footwear' };
-
 /** The Body Type values a model may set its own limits for (`LIMITS` in `modelcrowd/body.ts`): the spec's Body Type limits. */
 export const BODY_LIMIT_KEYS = ['width', 'shoulders', 'limbs', 'fullness', 'face', 'neck'] as const;
 export type BodyLimitKey = (typeof BODY_LIMIT_KEYS)[number];
@@ -216,10 +213,6 @@ export function readPersonModel(raw: unknown, path: string): { model: PersonMode
     };
     const oneOf = <T extends string>(field: string, v: unknown, values: readonly T[]): T | null => {
         if (v === undefined) { bad(field, `is missing; use one of ${list(values)}`); return null; }
-        if (typeof v === 'string' && RENAMED_SLOTS[v] !== undefined && (values as readonly string[]).includes(RENAMED_SLOTS[v])) {
-            bad(field, `is "${v}", which is now "${RENAMED_SLOTS[v]}"`);
-            return null;
-        }
         if (typeof v !== 'string' || !(values as readonly string[]).includes(v)) { bad(field, `is ${JSON.stringify(v)}; use one of ${list(values)}`); return null; }
         return v as T;
     };

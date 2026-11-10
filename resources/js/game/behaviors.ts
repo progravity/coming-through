@@ -12,10 +12,8 @@ import type { Range } from './util.ts';
 // taxonomy's independent-axes rule applied to people: a Weaver can be on any model, any Body Type and any
 // colors, exactly as a shop assistant is the same person stationed or walking.
 //
-// The seven profiles replace the old archetypes one for one (`was` names each), carrying only the
-// half of each archetype that was behavior. What an archetype bundled with it has gone to its own
-// choice: Mary's stroller is equipment (`recipe.ts`), Linda's camera and Kyle's phone are gone,
-// and every look constraint -- color family, height, width, hats -- is the composition's, and age
+// A profile carries only behavior. Anything else about a person is its own choice: a stroller is
+// equipment (`recipe.ts`), every look -- colors, height, width -- is the composition's, and age is
 // the model's.
 //
 // Each profile also declares what kind of thing it is -- see entity.ts. For a person the taxonomy's
@@ -28,15 +26,13 @@ export type BehaviorKey = 'typical' | 'weaver' | 'slow-walker' | 'distracted' | 
  */
 export type ModelClass = AgeClass;
 
-/** How a profile walks, as a multiplier on the recipe's own rolled gait cadence. Age no longer touches it. */
+/** How a profile walks, as a multiplier on the recipe's own rolled gait cadence. */
 export interface BehaviorGait {
     cadence?: number;
 }
 
 export interface Behavior {
     name: string;
-    /** The archetype this profile replaced, so an old link, note or test can be read across. */
-    was: string;
     /** The crowd view's and the debug overlay's color for it; never drawn on a person. */
     color: number;
     desc: string;
@@ -74,36 +70,34 @@ export interface Behavior {
 }
 
 export const BEHAVIORS: Record<BehaviorKey, Behavior> = {
-    typical: { name: 'Typical', was: 'Tourist', color: 0x4a7fb5, desc: 'walks normally',
+    typical: { name: 'Typical', color: 0x4a7fb5, desc: 'walks normally',
         entity: entityMeta('person', 'typical', ['bump-relevant', 'mobile'], 'crowd-spawned'),
         speed: [1.2, 1.5], radius: 0.32, sepR: 1.4, sepW: 2.5, wander: 0.3, wanderEvery: [2, 4], avoidPlayer: 1, accel: 6,
         gait: {} },
-    weaver: { name: 'Weaver', was: 'Dave', color: 0xff8c2b, desc: 'fast, cuts across',
+    weaver: { name: 'Weaver', color: 0xff8c2b, desc: 'fast, cuts across',
         entity: entityMeta('person', 'weaver', ['bump-relevant', 'mobile'], 'crowd-spawned'),
         speed: [2.2, 2.6], radius: 0.3, sepR: 0.9, sepW: 1.2, wander: 1.6, wanderEvery: [0.8, 1.6], avoidPlayer: 0.6, accel: 9,
         gait: { cadence: 1.1 } },
-    // Mary without the stroller. A stroller widens the collider and the separation with it (see
-    // `recipe.ts`), which puts a Slow Walker pushing one back at exactly the room Mary took.
-    'slow-walker': { name: 'Slow Walker', was: 'Mary', color: 0xd94f8c, desc: 'slow and steady; the only one who may push a stroller',
+    // A stroller widens the collider and the separation with it (see `recipe.ts`): the room a
+    // Slow Walker pushing one takes.
+    'slow-walker': { name: 'Slow Walker', color: 0xd94f8c, desc: 'slow and steady; the only one who may push a stroller',
         entity: entityMeta('person', 'slow-walker', ['bump-relevant', 'mobile'], 'crowd-spawned'),
         speed: [0.7, 0.9], radius: 0.32, sepR: 1.7, sepW: 3, wander: 0.1, wanderEvery: [4, 7], avoidPlayer: 1, accel: 3,
         gait: {} },
-    distracted: { name: 'Distracted', was: 'Kyle', color: 0x7fd0ff, desc: 'not looking, avoids no one',
+    distracted: { name: 'Distracted', color: 0x7fd0ff, desc: 'not looking, avoids no one',
         entity: entityMeta('person', 'distracted', ['bump-relevant', 'mobile'], 'crowd-spawned'),
         speed: [0.9, 1.1], radius: 0.32, sepR: 0.5, sepW: 0.3, wander: 0.5, wanderEvery: [2, 4], avoidPlayer: 0.1, accel: 4,
         gait: { cadence: 1.2 } },
-    // Linda without the camera: the stops are the behavior, the camera was only the excuse.
-    'sudden-stopper': { name: 'Sudden Stopper', was: 'Linda', color: 0xffd54f, desc: 'stops dead without warning',
+    'sudden-stopper': { name: 'Sudden Stopper', color: 0xffd54f, desc: 'stops dead without warning',
         entity: entityMeta('person', 'sudden-stopper', ['bump-relevant', 'mobile'], 'crowd-spawned'),
         speed: [1.1, 1.3], radius: 0.32, sepR: 1.4, sepW: 2.5, wander: 0.4, wanderEvery: [2, 4], avoidPlayer: 1, accel: 6, stopEvery: [4, 8], stopFor: [1.5, 3],
         gait: {} },
-    'group-walker': { name: 'Group Walker', was: 'The Johnsons', color: 0x59b25f, desc: 'walk three or four abreast',
+    'group-walker': { name: 'Group Walker', color: 0x59b25f, desc: 'walk three or four abreast',
         entity: entityMeta('person', 'group-walker', ['bump-relevant', 'mobile'], 'crowd-spawned'),
         speed: [0.9, 1.1], radius: 0.34, sepR: 1.2, sepW: 1.5, wander: 0, wanderEvery: [9, 9], avoidPlayer: 0.7, accel: 5, group: [3, 4], spacing: 0.9,
         gait: {} },
-    // Timmy. His gait folds in what the old child age did to its cadence (× 1.5),
-    // because a Darter is a child by definition and age no longer changes how anyone walks.
-    darter: { name: 'Darter', was: 'Timmy', color: 0xab47bc, desc: 'small, fast, unpredictable; a child, beside a Typical parent',
+    // A Darter is a child by definition, so the quick cadence of a child's steps is in the profile.
+    darter: { name: 'Darter', color: 0xab47bc, desc: 'small, fast, unpredictable; a child, beside a Typical parent',
         entity: entityMeta('person', 'darter', ['bump-relevant', 'mobile'], 'crowd-spawned'),
         speed: [2.0, 2.8], radius: 0.22, sepR: 0.8, sepW: 1.0, wander: 3, wanderEvery: [0.5, 1.2], avoidPlayer: 0.2, accel: 12, parentType: 'typical',
         gait: { cadence: 2.7 }, needs: 'child' },

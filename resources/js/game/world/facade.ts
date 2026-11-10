@@ -139,7 +139,3 @@ export const pedestal = (dy: number, along = 2.6): Prim => (
 /** A ball, which is most of what a symbol is made of. Same helper the carts use. */
 export const ball = (colour: Prim['colour'], dy: number, da: number, d: number, dn = PLINTH_N): Prim =>
     ({ shape: 'ball', colour, dn, dy, da, across: d, up: d, along: d });
-
-/** A disc lying flat -- a bun, a patty, a plate -- which is most of what the rest of one is. */
-export const disc = (colour: Prim['colour'], dy: number, d: number, up: number, dn = PLINTH_N): Prim =>
-    ({ shape: 'cyl', colour, dn, dy, da: 0, across: d, up, along: d });

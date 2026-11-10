@@ -57,19 +57,12 @@ const debug = new DebugOverlay(ui.debugCanvas);
  * Every person is drawn with a person model, the player included (`modelcrowd/`, `?model=` choosing
  * which). There is no fallback: a model that fails to load, a data file that fails its check, or a
  * model with no walk to play stops the game here, with the model named and the problem said, rather
- * than drawing anyone any other way. The cost readout shows when asked for -- `?people=model` or a
- * stress run -- and is read by the bench scripts as `game.people` either way. `?people=prim`, which
- * used to draw the primitive people, is read as no parameter at all, and dropped from the address.
+ * than drawing anyone any other way. The cost readout shows when asked for -- `?readout=1` or a
+ * stress run -- and is read by the bench scripts as `game.people` either way.
  */
-const peopleParam = params.get('people');
-if (peopleParam === 'prim') {
-    const url = new URL(location.href);
-    url.searchParams.delete('people');
-    history.replaceState(null, '', url);
-}
 let people: People;
 try {
-    people = await startPeople(world.scene, params, () => input.dispatch('toggleInk'), (peopleParam !== null && peopleParam !== 'prim') || stress);
+    people = await startPeople(world.scene, params, () => input.dispatch('toggleInk'), params.get('readout') === '1' || stress);
 } catch (e) {
     const why = e instanceof Error ? e.message : String(e);
     ui.fatal('The game can\'t start', [`A person model could not be used, so there is nobody to draw:`, ...why.split('\n')]);
@@ -92,9 +85,9 @@ let last = performance.now(), acc = 0, fpsFrames = 0, fpsTime = 0, fps = 0;
 interface StressStats {
     simMs: number; renderMs: number; steps: number;
     avgSimMs: number; avgRenderMs: number; avgSimPerStepMs: number;
-    /** Share of renderMs spent posing people into the instance buffers, before any GL work. */
+    /** Share of renderMs spent placing and animating the people's models, before any GL work. */
     avgPoseMs: number;
-    /** Draw calls in the last frame, people and world together. Halves when the ink shells are off. */
+    /** Draw calls in the last frame, people and world together. */
     drawCalls: number;
     /** Triangles in the last frame, people and world together. */
     triangles: number;
@@ -110,7 +103,7 @@ const stressStats: StressStats = {
     simMs: 0, renderMs: 0, steps: 0, avgSimMs: 0, avgRenderMs: 0, avgSimPerStepMs: 0, avgPoseMs: 0, drawCalls: 0, triangles: 0, frames: 0, people: 0,
     totalFrameMs: 0, totalSimMs: 0, totalPoseMs: 0, totalRenderMs: 0, totalSteps: 0,
 };
-/** `?stress=1&crowd=N` holds a stress run at N people instead of the full crowd, to compare renderers at one size. */
+/** `?stress=1&crowd=N` holds a stress run at N people instead of the full crowd, to measure one size. */
 const stressCrowd = Number(params.get('crowd'));
 
 // ---------- settings and game state ----------
@@ -127,7 +120,7 @@ const game = {
     get sim(): Simulation { return sim; },
     get recorder(): Recorder { return recorder; },
     stress: stress ? stressStats : null,
-    /** Which renderer draws the crowd, and what it costs: the readout's numbers, shown or not. */
+    /** Which models draw the crowd, and what they cost: the readout's numbers, shown or not. */
     people: people.stats,
     restart: (s?: number | string): number => {
         startRun(s === undefined ? seed : typeof s === 'number' ? s >>> 0 : parseSeed(s));

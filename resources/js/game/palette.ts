@@ -40,10 +40,7 @@ export const PALETTE: readonly number[] = [
     0x5b4636, // 23 brown
 ];
 
-/** A colour family: indices into PALETTE. */
-export type Family = readonly number[];
-
-/** Dark neutrals for things that are not dyed: phone bodies, spokes, glasses, tyres. */
+/** The dark neutral for things that are not dyed: spokes, tyres, ironwork. */
 export const INK = 0x2a2a2e;
 
 /**
@@ -280,7 +277,7 @@ export const KIOSK = {
 /**
  * A **livery**: one coordinated combination of colours a built thing is decorated in.
  *
- * The building-scale sibling of `Outfit`, and it exists for the same reason. A person dressed from
+ * The building-scale sibling of a person's clothing scheme (`wardrobe.ts`), and it exists for the same reason. A person dressed from
  * four independent rolls reads as an assembly of parts; so does a shopfront, only worse, because a
  * shop has nine or so painted surfaces rather than four. So a shop rolls one livery and fills its
  * roles from it, and what varies between two shops of a type is which livery they wear rather than

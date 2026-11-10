@@ -71,7 +71,7 @@ export interface Streams {
     recipe: Rng;
     /** Wander targets, stop timers, group sizes. */
     behavior: Rng;
-    /** Purely visual: balloon sway, idle fidget. Must never feed back into the other three. */
+    /** Purely visual: where each person's gait starts. Must never feed back into the other three. */
     cosmetic: Rng;
 }
 

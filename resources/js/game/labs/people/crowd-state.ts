@@ -104,7 +104,6 @@ export function readCrowd(search: string): CrowdState {
         crowd: clampCrowd(Math.round(num(q.get('crowd'), DEFAULT_CROWD))),
         // A mix that restates the composition's own weights is no mix at all.
         mix: mix !== null && mix.some((w, i) => w !== own[i]) ? mix : null,
-        // People are drawn from models here, as in the game; an old `source=prim` opens the model too.
         model: PERSON_MODELS[model] !== undefined ? model : CROWD_MODEL,
         speed: SPEEDS.includes(num(q.get('speed'), 1)) ? num(q.get('speed'), 1) : 1,
         paused: q.get('paused') === '1',

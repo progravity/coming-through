@@ -2,12 +2,11 @@
  * The turntable: a stage, a fixed camera, a slow spin, and whatever the entity says it is.
  *
  * Mounted by a lab (`labs/start.ts`) as its individual view (`single`, one thing) or its row view
- * (`row`, a family side by side), with `&entity=` choosing what among the lab's own entities and
- * `&source=model` the model that stands in for one. It knows the registry and the interface and
- * nothing else: there is no archetype in this file, no cart, no bench. What is on the stage builds
- * itself through the game's own assembler and hands back parts, a readout and a line of status;
- * everything else here -- the spin, the pause, the seed, the bounding boxes, the address bar -- is
- * the same for all of them.
+ * (`row`, a family side by side), with `&entity=` choosing what among the lab's own entities. It
+ * knows the registry and the interface and nothing else: there is no person in this file, no cart,
+ * no bench. What is on the stage builds itself through the game's own code and hands back parts, a
+ * readout and a line of status; everything else here -- the spin, the pause, the seed, the bounding
+ * boxes, the address bar -- is the same for all of them.
  *
  * Determinism: the shell reads no `spawn` or `behavior` draw, never builds a `Simulation`, and is
  * loaded only by a lab page, which a normal run never reaches.
@@ -16,7 +15,6 @@ import * as THREE from 'three';
 import { parseSeed } from '../core/rng.ts';
 import { MAX_CATCHUP_STEPS, SIM_DT } from '../core/time.ts';
 import { LabChrome } from '../labs/chrome.ts';
-import { primaries } from '../labs/labs.ts';
 import type { Lab, LabView } from '../labs/labs.ts';
 import { LOOK_NAMES, lookNamed } from '../render/look.ts';
 import { count as countOf, meshCost } from './describe.ts';
@@ -25,7 +23,7 @@ import { GIZMOS, INK, ORIGINS, RULER, controlOf, findKey, rowCount } from './ins
 import type { Control, ControlValue, Controls, DrawnPart, Inspectable, Readout } from './inspectable.ts';
 import { Panel } from './panel.ts';
 import { HeightRulers } from './ruler.ts';
-import { byId, modelOf } from './registry.ts';
+import { byId } from './registry.ts';
 import { REST, Stage, ZOOM_STEP, clampView, zoomAt } from './stage.ts';
 import type { Extent } from './stage.ts';
 import { queryOf, readState, resolveIn, writeState } from './state.ts';
@@ -55,9 +53,8 @@ function cycleChoosable(c: Extract<Control, { kind: 'enum' }>, current: string, 
 /**
  * What a control means in another entity: the same id, the same kind, and a value it accepts.
  *
- * The source toggle and the picker carry these across, so switching a person to their model keeps
- * the behavior, the Body Type and the seed -- the two are one thing drawn two ways, and losing the
- * person on the way over would make the comparison the toggle exists for impossible.
+ * The picker carries these across, so switching between two entities that declare a control alike
+ * keeps what it was set to.
  */
 function carried(from: Controls, to: Inspectable): Controls {
     const out: Controls = {};
@@ -77,8 +74,6 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
     await resolveIn(location.search, lab).entity.load?.();
     const state: InspectState = readState(mode, location.search, lab);
     const entity = byId(state.entity) as Inspectable;
-    /** The entity the picker lights: the one a model stands in for, or this one. */
-    const primary = entity.modelOf ?? entity.id;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
@@ -195,8 +190,8 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
         if (p.look !== undefined) { state.look = p.look; syncInk(); dressAll(); }
         if (p.minimised !== undefined) state.minimised = p.minimised;
         panel.sync(state);
-        panel.pick(primary);
-        chrome.set(state.mode, entity.modelOf === undefined ? 'primitives' : 'model', blocked());
+        panel.pick(entity.id);
+        chrome.set(state.mode);
         // After `sync`, which is what put the class on the card: `reframe` measures what the cards
         // actually cover, so it has to run once the DOM already reflects the change. Not a rebuild
         // -- the cast is exactly the same, it just has more room to stand in.
@@ -245,7 +240,7 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
      *
      * What carries is whatever means the same thing on the other side: the seed, the view, the
      * zoom (dimensionless, so 4x on a person is 4x on a cart), and every control the two declare
-     * alike, which is what keeps the person on stage when the source toggle swaps in their model.
+     * alike.
      */
     function setEntity(id: string): void {
         if (id === state.entity) return;
@@ -260,13 +255,6 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
         location.search = q.toString();
     }
 
-    /** Why the model source cannot be chosen for what is on stage, or null when it can. */
-    function blocked(): string | null {
-        if (entity.modelOf !== undefined) return null;
-        return modelOf(entity.id) !== undefined ? null
-            : `${entity.title}: no model yet. Primitives only for now (see STRUCTURE_MODELS in render/model-file.ts).`;
-    }
-
     /** A view this page does not draw is another page; the turntable's own two are a change in place. */
     function setView(v: LabView): void {
         if (v === 'single' || v === 'row') { patch({ mode: v }); return; }
@@ -277,12 +265,8 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
     }
 
     const chrome = new LabChrome({
-        lab, view: state.mode, source: entity.modelOf === undefined ? 'primitives' : 'model', modelBlocked: blocked(),
+        lab, view: state.mode,
         onView: setView,
-        onSource: src => {
-            if (src === 'model') { const m = modelOf(primary); if (m !== undefined) setEntity(m.id); }
-            else setEntity(primary);
-        },
         // A lab with path mode walks whoever is on stage along the promenade: a page of its own.
         mode: 'stage',
         onMode: m => {
@@ -305,7 +289,7 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
         zoom: stepZoom,
         resetView: () => patch({ view: REST }),
         togglePanel,
-    }, primaries(lab), `${lab.title} lab`);
+    }, lab.entities, `${lab.title} lab`);
     panel.setEntity(entity);
     panel.onSelect = i => patch({ sel: i });
 
@@ -430,7 +414,7 @@ export async function startTurntable(lab: Lab, mode: 'single' | 'row'): Promise<
     // hand-typed URL, where the button is the reading that survives.
     stage.setView(state.view);
     panel.sync(state);
-    panel.pick(primary);
+    panel.pick(entity.id);
     rebuild();
     reframe();
     writeState(state, entity, lab);

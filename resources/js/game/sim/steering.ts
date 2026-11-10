@@ -50,7 +50,7 @@ export function avoidPlayer(self: Agent, A: Behavior, player: Player, out: Steer
  *
  * The weight is a constant rather than the profile's `sepW`. A bench has no opinion about who is
  * walking into it and does not step aside for anyone, so there is no personality to express here;
- * Kyle still ignores people and still walks round a bin.
+ * a Distracted walker still ignores people and still walks round a bin.
  */
 export const OBSTACLE_ROOM = 0.7;
 const OBSTACLE_W = 2.5;

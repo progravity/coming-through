@@ -94,16 +94,11 @@ export function createPlayer(): Player {
     recipe.gait = { cadence: 9.1 };
     recipe.mobility = 'none';
     const p: Player = { x: 0, z: 0, yaw: 0, camYaw: 0, kx: 0, kz: 0, knock: 0, stamina: STAMINA.max, sprinting: false,
-        r: 0.32, vx: 0, vz: 0, phase: 0, mv: 0, lean: 0, fidget: 0, recipe, prev: newPose(), prevCamYaw: 0 };
+        r: 0.32, vx: 0, vz: 0, phase: 0, mv: 0, recipe, prev: newPose(), prevCamYaw: 0 };
     placeAtStart(p);
     p.prevCamYaw = p.camYaw;
     copyPose(p.prev, p);
     return p;
-}
-
-export function resetPlayer(p: Player): void {
-    placeAtStart(p);
-    snapshotPlayer(p);
 }
 
 export function snapshotPlayer(p: Player): void { copyPose(p.prev, p); p.prevCamYaw = p.camYaw; }
@@ -262,7 +257,7 @@ export function updatePlayer(p: Player, input: MoveInput, mode: CameraMode, grid
     }
     p.x = nx; p.z = nz;
     // Everything below reads the speed the body is actually travelling at, shove included, so a
-    // knocked player's gait and lean belong to the movement you can see rather than to the stick.
+    // knocked player's gait belongs to the movement you can see rather than to the stick.
     const ps = hypot(p.vx + p.kx, p.vz + p.kz);
     // The body faces where the stick is pointing, not where the body is drifting. That is the
     // difference between steering and being steered, and it is worth more than it looks: facing
@@ -272,8 +267,8 @@ export function updatePlayer(p: Player, input: MoveInput, mode: CameraMode, grid
     // on aiming where you were aiming.
     if (want > MOVE.faceAt && !firstPerson) {
         const d = wrapAngle(atan2(mx, mz) - p.yaw);
-        p.yaw += d * Math.min(1, dt * MOVE.turn); p.lean = clamp(-d * MOVE.lean, -MOVE.leanMax, MOVE.leanMax);
-    } else p.lean *= 0.9;
+        p.yaw += d * Math.min(1, dt * MOVE.turn);
+    }
     p.mv += (clamp(ps / MOVE.walk, 0, 1) - p.mv) * Math.min(1, dt * MOVE.gaitBlend);
     p.phase += ps * dt * p.recipe.gait.cadence;
     return scraped;

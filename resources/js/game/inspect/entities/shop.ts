@@ -6,7 +6,7 @@
  * in front of it, and the whole of its identity is one emblem on a roofline. Whether a wrapped
  * sweet reads as a sweet rather than as a ball, and whether the toy blocks read as anything but the
  * sweet, is a question you can only answer by putting the five side by side -- which is what
- * `?inspect=row&entity=shop` is.
+ * `/lab/buildings?view=row` is.
  *
  * The shop on the stage is the shop on the promenade: `SHOP_ARCHETYPES` describes it, `rollShop`
  * paints it off the same constant-seeded stream the world uses, and `placeStructure` puts it at its

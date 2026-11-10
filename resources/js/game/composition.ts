@@ -32,7 +32,6 @@ import type { BodyType, Equipment } from './recipe.ts';
 import type { HairKey, PooledKey, SkinToneKey } from './wardrobe.ts';
 
 export const COMPOSITION = {
-    /** Tourist 6, Dave 2, Mary 2, Kyle 2, Linda 2, the Johnsons 1, Timmy 2: the archetypes' weights. */
     behavior: { typical: 6, weaver: 2, 'slow-walker': 2, distracted: 2, 'sudden-stopper': 2, 'group-walker': 1, darter: 2 } as Readonly<Record<BehaviorKey, number>>,
     /** Even fifths, as the old continuous width roll was cut into the five presets. */
     bodyType: { slim: 1, trim: 1, average: 1, solid: 1, broad: 1 } as Readonly<Record<BodyType, number>>,

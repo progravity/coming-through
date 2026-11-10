@@ -139,14 +139,13 @@ export async function startPath(lab: Lab): Promise<void> {
     /** The Individual view's own address for this person, which path mode adds its own keys to. */
     const personQuery = (): URLSearchParams => queryOf(st, entity, lab);
     const chrome = new LabChrome({
-        lab, view: 'single', source: 'model', modelBlocked: null, mode: 'path',
+        lab, view: 'single', mode: 'path',
         onView: (v: LabView) => {
             const q = personQuery();
             q.delete('view');
             if (v !== 'single') q.set('view', v);
             location.href = `${lab.path}?${q}`;
         },
-        onSource: () => undefined,
         onMode: m => { if (m === 'stage') location.href = `${lab.path}?${personQuery()}`; },
     });
     void chrome;

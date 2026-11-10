@@ -37,9 +37,6 @@ export const MOVE = {
     lookTurn: 3.4,
     /** Stick deflection below which the body keeps its facing rather than chasing a barely-stated one. */
     faceAt: 0.15,
-    /** Body roll into a turn, per radian of heading error, and its cap. Cosmetic. */
-    lean: 0.9,
-    leanMax: 0.28,
     /** How fast the walk/run animation blend follows the actual speed. */
     gaitBlend: 14,
 } as const;

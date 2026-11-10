@@ -30,7 +30,7 @@ const model = opt('model');
 
 const runs = [];
 for (const crowd of sizes) {
-    for (const ink of [false, true]) for (const throttle of [false, true]) runs.push({ people: 'model', crowd, ink, throttle });
+    for (const ink of [false, true]) for (const throttle of [false, true]) runs.push({ crowd, ink, throttle });
 }
 
 const CH = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
@@ -64,7 +64,7 @@ const SETTLE = 3, MIN_FRAMES = 15, MIN_SECS = 8;
 const rows = [];
 for (const run of runs) {
     // The shipped look has no ink anywhere; `current` is the shipped look with it, on the world and the people alike.
-    const url = gamePage(base, `stress=1&tier=high&people=${run.people}&crowd=${run.crowd}`)
+    const url = gamePage(base, `stress=1&tier=high&crowd=${run.crowd}`)
         + (run.ink ? '&look=current' : '') + (run.throttle ? '&throttle=1' : '')
         + (model !== undefined ? `&model=${encodeURIComponent(model)}` : '');
     const { result: { targetId } } = await send('Target.createTarget', { url: 'about:blank' });
@@ -88,7 +88,7 @@ for (const run of runs) {
     }
     await send('Target.closeTarget', { targetId });
     const n = a && b ? b.s.frames - a.s.frames : 0;
-    if (n < 2) { console.error(`  ${run.people} ${run.crowd}: too few frames to measure`); continue; }
+    if (n < 2) { console.error(`  crowd ${run.crowd}: too few frames to measure`); continue; }
     const per = k => (b.s[k] - a.s[k]) / n;
     const row = {
         ...run, frames: n, frameMs: per('totalFrameMs'), simMs: per('totalSimMs'), poseMs: per('totalPoseMs'),
@@ -104,10 +104,10 @@ for (const e of errors) console.error('page error:', e);
 const col = (s, w) => String(s).padStart(w);
 console.log(`\n  ${gpu ? 'real GPU (headed Chrome)' : 'headless SwiftShader: frame column is software rasterisation'}`
     + `${model !== undefined ? ` · model ${model}` : ''}\n`);
-console.log('  ' + ['renderer'.padEnd(9), col('crowd', 5), col('ink', 4), col('thr', 4), col('fps', 6), col('frame', 8),
+console.log('  ' + [col('crowd', 5), col('ink', 4), col('thr', 4), col('fps', 6), col('frame', 8),
     col('sim', 6), col('pose', 6), col('render', 7), col('calls', 6), col('tris', 7), col('anim', 5), col('n', 4)].join(' '));
 for (const r of rows) {
-    console.log('  ' + [r.people.padEnd(9), col(r.crowd, 5), col(r.ink ? 'on' : 'off', 4),
+    console.log('  ' + [col(r.crowd, 5), col(r.ink ? 'on' : 'off', 4),
         col(r.throttle ? 'on' : 'off', 4), col((1000 / r.frameMs).toFixed(1), 6),
         col(r.frameMs.toFixed(0), 8), col(r.simMs.toFixed(2), 6), col(r.poseMs.toFixed(2), 6), col(r.renderMs.toFixed(2), 7),
         col(r.calls, 6), col(`${(r.tris / 1e6).toFixed(2)}M`, 7), col(r.animated ?? '-', 5), col(r.frames, 4)].join(' '));

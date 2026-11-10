@@ -1,13 +1,12 @@
 /**
  * What the inspector is allowed to know about the thing it is showing.
  *
- * The whole point of this file is how little is in it. `?inspect` used to know about people all the
- * way down -- the row was one per archetype, the state named `arch`/`age`/`build`/`mobility`, the
- * panel built four segmented rows out of the character code. Everything else authored in the world
- * could only be looked at from the walkway, at walking pace, with a crowd in front of it, which is
- * exactly where the cotton-candy cart read as a tree and the popcorn box read as a plain carton.
+ * The whole point of this file is how little is in it. An inspector that knows one kind of thing
+ * all the way down leaves everything else to be judged from the walkway, at walking pace, with a
+ * crowd in front of it, which is exactly where the cotton-candy cart read as a tree and the popcorn
+ * box read as a plain carton.
  *
- * So the shell was turned round to face an interface instead: a **declaration**, which is nearly
+ * So the shell faces an interface: a **declaration**, which is nearly
  * all plain data and is read by the panel and the address bar, and a **cast**, which is the live
  * thing standing on the stage. A new kind of entity becomes inspectable by conforming to these two,
  * and `tests/js/inspectable.test.ts` is what stops the shell from ever learning about one of them.
@@ -34,9 +33,9 @@ export type { Family };
  * One control an entity declares. Three kinds render every panel there is, and each one maps to a
  * widget the panel already had: a segmented row, a toggle button, a slider.
  *
- * `rebuilds` is the generic form of the list the character inspector used to keep: an archetype
- * change has to build a new person, a `walk` toggle must not, and dragging a slider certainly must
- * not build seven of them a frame.
+ * `rebuilds` says which changes build the cast again: a change of behavior has to build a new
+ * person, a `freeze` toggle must not, and dragging a slider certainly must not build five of them
+ * a frame.
  */
 /**
  * Every control may be **disabled with a reason**: still listed, never changeable, and its reason
@@ -85,7 +84,7 @@ export type Control = (
     }
     | {
         /**
-         * A whole number in `min..max`: a spawn index, an outfit index. Rendered as a number box
+         * A whole number in `min..max`: a spawn index. Rendered as a number box
          * with a step either side, carried in the address bar as an integer, and bound to no key.
          */
         kind: 'number'; id: string; label: string; value: number; min: number; max: number;
@@ -188,9 +187,9 @@ export interface Readout {
  * One drawn part, as the universal overlays need it.
  *
  * Two fields is enough, and that is not a simplification -- it is a fact about the geometry.
- * **Every pool geometry and every kit geometry is unit-sized and centred on its origin**: spheres
- * and cylinders of radius 0.5, a 1x1x1 box, a cone one unit tall. So a unit cube under a part's
- * matrix *is* that part's bounding box, for a thigh and for a kiosk wheel alike, and the bounding
+ * **Every kit geometry is unit-sized and centred on its origin**: spheres and cylinders of radius
+ * 0.5, a 1x1x1 box, a cone one unit tall; and a model hands back one box per mesh. So a unit cube
+ * under a part's matrix *is* that part's bounding box, for a figure and for a kiosk wheel alike, and the bounding
  * boxes, the origin crosses, the measured height and the ground shadow are entity-agnostic without
  * anyone having to arrange it. That single fact is what keeps this interface small.
  */
@@ -199,8 +198,7 @@ export interface DrawnPart { readonly matrix: THREE.Matrix4; readonly color: num
 /**
  * The overlays the shell owns and every entity gets for nothing.
  *
- * `gizmos` is the bounding boxes, under the id the part gizmos always had, so `?gizmos=1` still
- * opens them; the origin crosses that used to come with them are their own switch now. `ruler` is
+ * `gizmos` is the bounding boxes and `origins` the origin crosses, each its own switch. `ruler` is
  * a height ruler behind each exhibit, its measured height labeled at the top.
  */
 export const GIZMOS = 'gizmos';
@@ -248,7 +246,7 @@ export interface Cast {
      *
      * On the interface rather than in one conformance because **every** entity needs it -- the rule
      * about pushing a single entity's needs into its own file does not apply to something all of
-     * them do, and the alternative is the shell reaching past this interface into a cast's pools.
+     * them do, and the alternative is the shell reaching past this interface into a cast's meshes.
      */
     dress(look: Look | null): void;
 }
@@ -258,12 +256,6 @@ export interface Inspectable {
     /** The address-bar name: `?entity=<id>` within its lab. */
     id: string;
     family: Family;
-    /**
-     * The entity this one draws from a model file rather than from primitives, if it is a model
-     * source. The labs' source toggle is read off this: `person` and `model` are one thing in two
-     * sources, not two things, so the picker shows one and the toggle switches between them.
-     */
-    modelOf?: string;
     /** The entity's name in prose. The seed row's label is where it appears; the picker is by `id`. */
     title: string;
     controls: readonly Control[];
@@ -282,19 +274,10 @@ export interface Inspectable {
     /** How many stand side by side in row mode. */
     row: number;
     /**
-     * How many stand in the row given the controls, when that depends on them: the model source's
-     * row is two, five, four or one per chosen model, by what it is comparing. Omitted, it is `row`.
+     * How many stand in the row given the controls, when that depends on them: the person's row is
+     * the five Body Types or one per chosen model, by what it is comparing. Omitted, it is `row`.
      */
     rowFor?(c: Controls): number;
-    /**
-     * Rewrite the query keys this entity used to write into the ones it writes now, before the
-     * shell reads the address. Omit it if nothing was ever renamed.
-     *
-     * An address is a promise: a link written before a control was renamed still has to open what
-     * it opened. The person's archetype became a behavior profile, so `arch=dave` has to arrive as
-     * `behavior=weaver`, and only the entity knows that -- the shell never learns what either means.
-     */
-    legacy?(q: URLSearchParams): void;
     /**
      * Fetch whatever the declaration depends on, before the shell reads it. Omit it if nothing does.
      *

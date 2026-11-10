@@ -1,5 +1,5 @@
 /**
- * Colour regions for the `?people=model` crowd: found automatically, named by a data file's color
+ * Colour regions for the model crowd: found automatically, named by a data file's color
  * slots, and refused rather than guessed when they cannot be told apart.
  *
  * Textures are built in code -- flat patches of colour on UV quads, with a little deterministic

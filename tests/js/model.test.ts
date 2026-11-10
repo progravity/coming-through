@@ -15,7 +15,7 @@ import { test } from 'node:test';
 import * as THREE from 'three';
 import { DATA_DIR, PERSON_MODELS, readAll } from '../../resources/js/game/data/people.ts';
 import { prepareClips } from '../../resources/js/game/modelcrowd/clips.ts';
-import { MODEL, POSE, adopt, dataProblems } from '../../resources/js/game/inspect/entities/model.ts';
+import { PERSON, POSE, adopt, dataProblems } from '../../resources/js/game/inspect/entities/model.ts';
 import { measure, newBounds } from '../../resources/js/game/inspect/gizmos.ts';
 import { controlOf, defaultControls } from '../../resources/js/game/inspect/inspectable.ts';
 import type { Cast, Controls } from '../../resources/js/game/inspect/inspectable.ts';
@@ -59,12 +59,12 @@ function figure(): { root: THREE.Object3D; mesh: THREE.SkinnedMesh; clip: THREE.
 
 test('with no file loaded, the bench still stands something the stage can frame, and says why', () => {
     // Before anything is adopted, the clip control is the rest pose alone, and defaults inside it.
-    const clip = controlOf(MODEL, 'clip');
+    const clip = controlOf(PERSON, 'clip');
     assert.ok(clip?.kind === 'enum');
     assert.deepEqual(clip.options, [POSE]);
 
-    const cast = MODEL.mount(new THREE.Scene());
-    cast.rebuild(1, 1, defaultControls(MODEL));
+    const cast = PERSON.mount(new THREE.Scene());
+    cast.rebuild(1, 1, defaultControls(PERSON));
     cast.draw(0, [0], 0);
     assert.equal(cast.parts(0).length, 1);
     const h = heightOf(cast);
@@ -78,15 +78,15 @@ test('a skinned figure is measured in its pose, and the rest pose comes back at 
     const { root, clip } = figure();
     adopt(NAME, root, [clip]);
     // The file's clips become the control's options, ahead of the rest pose, and the first plays.
-    const ctl = controlOf(MODEL, 'clip');
+    const ctl = controlOf(PERSON, 'clip');
     assert.ok(ctl?.kind === 'enum');
     assert.deepEqual(ctl.options, ['Hop', POSE]);
     assert.equal(ctl.value, 'Hop');
 
-    const cast = MODEL.mount(new THREE.Scene());
+    const cast = PERSON.mount(new THREE.Scene());
     // Crowd scale is off by default, so the figure is held at the size it was authored at: this is
     // about measuring the pose.
-    const c: Controls = { ...defaultControls(MODEL), model: NAME, clip: 'Hop', freeze: true, phase: 0.5 };
+    const c: Controls = { ...defaultControls(PERSON), model: NAME, clip: 'Hop', freeze: true, phase: 0.5 };
     cast.rebuild(1, 1, c);
     cast.draw(0, [0], 0);
     let h = heightOf(cast);
@@ -109,8 +109,8 @@ test("the file's materials come back by identity, and only what the bench made i
     let shippedDisposed = false;
     shipped.addEventListener('dispose', () => { shippedDisposed = true; });
 
-    const cast = MODEL.mount(new THREE.Scene());
-    const c: Controls = { ...defaultControls(MODEL), model: NAME, clip: 'Hop', own: false };
+    const cast = PERSON.mount(new THREE.Scene());
+    const c: Controls = { ...defaultControls(PERSON), model: NAME, clip: 'Hop', own: false };
     cast.rebuild(1, 1, c);
     cast.dress(null);
     // Under the shipped look, the game's toon ramp -- carrying the file's texture across.
@@ -131,21 +131,20 @@ test("the file's materials come back by identity, and only what the bench made i
     assert.ok(!shippedDisposed, "the file's own material was disposed");
 });
 
-test('the row is models only: the five Body Types, each a figure from the file, and no primitive person', () => {
+test('the row is the five Body Types, each a figure from the file', () => {
     const { root, clip } = figure();
     adopt(NAME, root, [clip]);
-    const cast = MODEL.mount(new THREE.Scene());
-    assert.equal(MODEL.row, 5);
-    cast.rebuild(1, MODEL.row, { ...defaultControls(MODEL), model: NAME, clip: 'Hop' });
+    const cast = PERSON.mount(new THREE.Scene());
+    assert.equal(PERSON.row, 5);
+    cast.rebuild(1, PERSON.row, { ...defaultControls(PERSON), model: NAME, clip: 'Hop' });
     cast.draw(0, [0, 2, 4, 6, 8], 0);
     for (let i = 0; i < 5; i++) {
-        // One part per mesh: a figure from the file, never the primitive person's dozens of parts.
+        // One part per mesh: a figure from the file.
         assert.equal(cast.parts(i).length, 1, `figure ${i} is not the model`);
         const h = heightOf(cast, i);
         assert.ok(Math.abs(h.x - 2 * i) < 0.3, `figure ${i} stands at ${h.x}, not at its anchor`);
     }
     assert.equal(cast.parts(5).length, 0, 'something stands beside the row');
-    assert.doesNotMatch(cast.readout(1, 1.8).sub, /primitives|for scale/);
 });
 
 test('the model card lists every data file that failed its check, by file and field', () => {
@@ -175,8 +174,8 @@ test('the model card lists every clip role, present with its clip or missing, an
     console.error = () => {};
     adopt(NAME, root, [clip], 0, null, { clips: prepareClips(m, root, [clip]) });
     console.error = quiet;
-    const cast = MODEL.mount(new THREE.Scene());
-    cast.rebuild(1, 1, { ...defaultControls(MODEL), model: NAME, clip: 'Hop' });
+    const cast = PERSON.mount(new THREE.Scene());
+    cast.rebuild(1, 1, { ...defaultControls(PERSON), model: NAME, clip: 'Hop' });
     cast.draw(0, [0], 0);
     const r = cast.readout(0, 1.8);
     const roles = r.sections?.find(s => s.title === 'Clip roles');
@@ -199,14 +198,14 @@ test('the model card lists every clip role, present with its clip or missing, an
     // The head of the card says so too.
     assert.match(String(new Map(r.rows).get('clip roles')), /walk · error: run, idle missing/);
     // A stand-in to stand people in, offered in the clip control.
-    assert.ok((controlOf(MODEL, 'clip') as { options: readonly string[] }).options.some(o => /average pose/.test(o)));
+    assert.ok((controlOf(PERSON, 'clip') as { options: readonly string[] }).options.some(o => /average pose/.test(o)));
 });
 
 test('the model card carries the spec checks, the whole checklist in one section, with the verdicts at its head', () => {
     const { root, clip } = figure();
     adopt(NAME, root, [clip]);
-    const cast = MODEL.mount(new THREE.Scene());
-    cast.rebuild(1, 1, { ...defaultControls(MODEL), model: NAME, clip: 'Hop' });
+    const cast = PERSON.mount(new THREE.Scene());
+    cast.rebuild(1, 1, { ...defaultControls(PERSON), model: NAME, clip: 'Hop' });
     cast.draw(0, [0], 0);
     const r = cast.readout(0, 1.8);
     const spec = r.sections?.find(s => s.title === 'Spec checks');

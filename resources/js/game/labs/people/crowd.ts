@@ -78,9 +78,8 @@ export async function startCrowd(lab: Lab): Promise<void> {
 
     // ---------- the page: chrome, renderer, world ----------
     const chrome = new LabChrome({
-        lab, view: 'crowd', source: 'model', modelBlocked: null,
+        lab, view: 'crowd',
         onView: (v: LabView) => go(v === 'crowd' ? null : v),
-        onSource: () => undefined,
     });
     void chrome;
 

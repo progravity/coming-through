@@ -102,9 +102,8 @@ test('the inspector shelves entities by the same family the game files them unde
     // One axis, one vocabulary. The inspector had words of its own for this -- agent,
     // path-furniture, structure -- which is two names for one concept, and the thing this removes.
     const shelves = ENTITIES.map(e => `${e.id}:${e.family}`).sort();
-    // A person is drawn from a model file, and shelved as a person.
     assert.deepEqual(shelves, [
-        'furniture:furniture', 'kiosk:kiosk', 'model:person', 'restaurant:building', 'shop:building',
+        'furniture:furniture', 'kiosk:kiosk', 'person:person', 'restaurant:building', 'shop:building',
     ]);
 });
 
@@ -120,11 +119,10 @@ test('every person declares themselves a crowd-spawned, mobile, bump-relevant pe
     }
 });
 
-test('the behavior profiles stand where the archetypes they replaced stood, in the same order', () => {
+test('the behavior profiles keep their order', () => {
     // Both determinism hashes store `BEHAVIOR_KEYS.indexOf(a.type)`, so the *position* of every key
-    // is load-bearing and its spelling is not. Each profile took its archetype's place.
+    // is load-bearing and its spelling is not.
     assert.deepEqual(BEHAVIOR_KEYS, ['typical', 'weaver', 'slow-walker', 'distracted', 'sudden-stopper', 'group-walker', 'darter']);
-    assert.deepEqual(BEHAVIOR_KEYS.map(k => BEHAVIORS[k].was), ['Tourist', 'Dave', 'Mary', 'Kyle', 'Linda', 'The Johnsons', 'Timmy']);
     assert.equal(BEHAVIORS['group-walker'].name, 'Group Walker');
 });
 

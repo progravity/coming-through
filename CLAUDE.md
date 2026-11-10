@@ -13,13 +13,12 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   Herd may already be running it for this site: Herd's dev tools started `php artisan dev` on their
   own when the site was linked. Without a dev server the page falls back to the last
   `npm run build`.
-- **Every game mode is a query string on that page:** `/play?people=model`,
+- **Every game mode is a query string on that page:** `/play?readout=1`,
   `/play?stress=1`, `/play?look=current`, `/play?debug=1`. See "URL parameters" below. `/` is the
   starter kit's welcome page, with login and registration.
 - **The labs** are behind the login, at `/lab` (an index), `/lab/people`, `/lab/fixtures` and
   `/lab/buildings`; every view of one is a query string on its route
-  (`/lab/people?view=crowd`, `/lab/buildings?view=row&entity=restaurant`). An old
-  `/play?inspect=` address redirects to the lab that shows what it named. Sign in locally as any
+  (`/lab/people?view=crowd`, `/lab/buildings?view=row&entity=restaurant`). Sign in locally as any
   of the dev cast (`owner@dev.test` and the rest, password `password`). See "The labs" below.
 - **On a phone:** stop any other dev server for the site first (including one Herd started), then
   run `composer run dev:lan` and open `http://<this Mac's LAN IP>:8000/play` on the phone, which
@@ -30,7 +29,7 @@ plain TypeScript and three.js, built by Laravel's Vite integration and mounted o
   incoming connections for `php` and `node` the first time. Two dev servers for one checkout fight
   over `public/hot`, which is why the other one has to stop.
 - **Tests:** `npm test` type-checks the engine and its tests, runs the Math.random check, and then
-  runs everything under `tests/js/` with `node --test` (293 tests). `npm run lint` is the first two
+  runs everything under `tests/js/` with `node --test` (292 tests). `npm run lint` is the first two
   on their own. `composer test` is the Laravel side: Pint, PHPStan and Pest (`tests/Feature/`,
   `tests/Unit/`), against SQLite in memory. Both are plain commands and both must pass.
 - **Node is pinned to 26.13.0** in `.nvmrc` (and `^26.13.0` in `package.json` `engines`). Herd's
@@ -167,9 +166,8 @@ The engine:
   the only **mutable** one, a live tuning bench rather than a constant, which is why nothing under
   `resources/js/game/sim/` may read it. See "Player feel", "Stamina" and "Head bob" below.
 - `resources/js/game/render/`, `resources/js/game/camera.ts`, `resources/js/game/ui.ts`, `resources/js/game/debug.ts` — presentation only.
-- `resources/js/game/main.ts` — the entry point and nothing else: it dynamic-imports the game, and
-  sends an old `?inspect=` address to the labs (`labs/redirect.ts`), so a normal run never loads a
-  dev tool. An old `?compare=` address plays the game: the comparator is retired.
+- `resources/js/game/main.ts` — the entry point and nothing else: it imports the game. The labs
+  have entries of their own, so a normal run never loads a dev tool.
 - `resources/js/game/game.ts` — wires the game together: fixed-step accumulator loop, interpolated rendering,
   stress mode.
 - `resources/js/game/inspect/` — the entity inspector, which the labs mount as their individual and row
@@ -182,12 +180,14 @@ The engine:
   `entities/structure.ts` is the cast the carts, the shopfronts and the restaurants share, since
   everything the tool does with one it does with the others and a copy is where "through the game's
   own assembler" quietly stops being true for one of them.
-  `entities/model.ts` is the one exception to "the game's own assembler": a person model's `.glb`
-  beside one of the game's people. See "Models from files" below.
+  `entities/model.ts` is the person entity and the one exception to "the game's own assembler": a
+  person model's `.glb`, drawn as one of the game's people. `entities/person.ts` is the controls
+  and the card's words for a person, which the stage, path mode and the crowd view share. See
+  "Models from files" below.
 - `resources/js/game/labs/` — the labs: `labs.ts` (the three, each a category, with the entities read
   off the registry and the taxonomy), `start.ts` (opens a lab at the view its address names),
-  `chrome.ts` (the view and source controls in the lab bar), `placement.ts` (the placement view),
-  `redirect.ts`, `dom.ts`, and one directory per lab holding its entry; `people/` also holds the crowd
+  `chrome.ts` (the view control in the lab bar), `placement.ts` (the placement view),
+  `dom.ts`, and one directory per lab holding its entry; `people/` also holds the crowd
   view. The files at the top of `labs/` are shell, like the inspector's: they reach the registry and
   the interface and never an entity, which `tests/js/labs.test.ts` checks. See "The labs" below.
 - `resources/js/game/modelcrowd/` — **how every person is drawn**, the player included: clones of a
@@ -198,7 +198,7 @@ The engine:
   (see "Model bodies"), `clips.ts` plays each model's clips by role -- walk and run by the
   ground covered, idle when someone stops (see "Clip roles") -- and `index.ts` loads the models,
   refuses to start without them, and keeps the cost readout, shown
-  under `?people=model` or a stress run. The people lab, which shows only models, uses all of it.
+  under `?readout=1` or a stress run. The people lab uses all of it.
 - `tests/js/determinism.test.ts` — headless run with a fixed seed and scripted input, hashed against
   `tests/js/determinism.expected.json`, which stores two values: `hash` (whole state) and `identity`
   (the crowd a seed produces). See "Two hashes" below.
@@ -231,14 +231,12 @@ The engine:
   guarding `Subject` against `Agent` specifically.
 - `tests/js/inspectable.test.ts` — that the inspector's shell depends only on the interface: its
   imports reach no entity, a hypothetical entity nobody has written is driven through the shell's
-  state, URL and keymap, every person URL that worked before still works and nothing a cast writes
-  back reaches one, every registered entity declares something the panel can render, the stage
+  state, URL and keymap, a person's address reads back the keys it was written with and nothing a
+  cast writes back reaches one, every registered entity declares something the panel can render, the stage
   frames what it measures rather than what a person is, and an object placed by the path's frame
   lands where the staging says on the stage.
 - `tests/js/labs.test.ts` — the labs: that every family has a category and the labs partition the
-  registry, that a model is a source of the thing it draws rather than a second thing in a picker,
-  that every old `/play?inspect=` address lands in the right lab with its query intact, that a lab
-  stands only its own entities, that the lab shell reaches no entity, that a behavior mix
+  registry, that a lab stands only its own entities and never names its default in the address, that the lab shell reaches no entity, that a behavior mix
   restating the composition's own weights spawns the identical crowd, that every site the
   placement view frames is one the world's own layer function built, and that the Individual view
   offers every choice in order with the seed's roll first.
@@ -282,7 +280,7 @@ The engine:
   figure is measured in its pose rather than its bind pose, that the rest pose comes back at its own
   size on an armature scaled by 0.01 (where `Skeleton.pose()` measurably makes a 17 mm figure), that
   the file's materials come back by identity and only what the bench made is disposed, that the
-  row is models only, that the card lists every data file that failed
+  row is the five Body Types on one model, that the card lists every data file that failed
   its check, by file and field, and that it lists every clip role, present with its clip or
   missing, a missing walk, run or idle or a clip the GLB does not have as an error, and that it
   carries the spec checks, every one on the checklist, with their verdicts at its head.
@@ -310,7 +308,7 @@ The engine:
   and nothing else grays anyone.
 - `tests/js/people-data.test.ts` — the person model data files: that every file in `data/people/`
   is found without being listed and is valid, named by its ID, and points at a GLB that is there;
-  that casual-man and casual-man-low state their facts and leave what nobody knows as `unknown`;
+  that every GLB in `public/models/people/` belongs to exactly one data file; that casual-man and casual-man-low state their facts and leave what nobody knows as `unknown`;
   that a missing field, a value outside its list, a field nothing reads yet, an ID that breaks the
   rule or disagrees with the facts, garments or accessories with no color region, and `accessory2`
   each fail with a message naming the file and the field; that the two models map walk and run to
@@ -1408,31 +1406,27 @@ half of everyone's profile (45.9% of rolls select another), not only the Darters
 
 **Age is not a choice: it comes only from a model's age class** (`adult`, `child`, `elder`, in its
 data file). Children and elderly people come from models made for those ages, never from adjusting
-an adult, so there are no age presets: no roll, no lab control or row, no table. They were Young,
-Normal and Old (a little shorter and slimmer, as authored, a little shorter with a stoop and grayer
-hair), and an old lab address that names an `age` still loads, with the age ignored. Graying hair is
-a hair color now, rolled like the rest. A Darter is the one profile that needs a model class other
+an adult, so there are no age presets: no roll, no lab control or row, no table. Graying hair is
+a hair color, rolled like the rest. A Darter is the one profile that needs a model class other
 than adult.
 
 **Behavior profiles carry only behavior** -- speed, steering (weaving, separation, avoiding the
-player, acceleration), stops and grouping, plus the gait multipliers that go with them -- and replace
-the archetypes one for one, in the same order, each naming the archetype it was (`was`):
+player, acceleration), stops and grouping, plus the gait multipliers that go with them. Their
+order is load-bearing (both hashes store a profile's position in `BEHAVIOR_KEYS`):
 
-| profile | was | speed | what it does |
-|---|---|---|---|
-| Typical | Tourist | 1.2-1.5 | walks normally |
-| Weaver | Dave | 2.2-2.6 | fast, cuts across |
-| Slow Walker | Mary, minus the stroller | 0.7-0.9 | slow and steady; the only one who may push a stroller |
-| Distracted | Kyle | 0.9-1.1 | not looking, avoids no one |
-| Sudden Stopper | Linda, minus the camera | 1.1-1.3 | stops dead every 4-8 s for 1.5-3 s |
-| Group Walker | The Johnsons | 0.9-1.1 | three or four abreast |
-| Darter | Timmy | 2.0-2.8 | small, fast, unpredictable; beside a Typical parent; a child |
+| profile | speed | what it does |
+|---|---|---|
+| Typical | 1.2-1.5 | walks normally |
+| Weaver | 2.2-2.6 | fast, cuts across |
+| Slow Walker | 0.7-0.9 | slow and steady; the only one who may push a stroller |
+| Distracted | 0.9-1.1 | not looking, avoids no one |
+| Sudden Stopper | 1.1-1.3 | stops dead every 4-8 s for 1.5-3 s |
+| Group Walker | 0.9-1.1 | three or four abreast |
+| Darter | 2.0-2.8 | small, fast, unpredictable; beside a Typical parent; a child |
 
-**The default weights** (`COMPOSITION`): behavior 6/2/2/2/2/1/2 in that order -- the archetypes' own
-spawn weights. With the Darter's taken out, the crowd measures (forty seeds, 190 people each)
+**The default weights** (`COMPOSITION`): behavior 6/2/2/2/2/1/2 in that order. With the Darter's taken out, the crowd measures (forty seeds, 190 people each)
 Typical 34.2%, Weaver 10.8%, Slow Walker 11.3%, Distracted 10.7%, Sudden Stopper 11.6%, Group Walker
-21.3%; as designed it was the archetypes' mix (Typical 37.3% against Tourist 36.8%, Group Walker
-16.3% against the Johnsons 16.7%). Body Type even fifths; skin tone even sevenths; hair black 3, dark brown 3, brown
+21.3%; as designed it is Typical 37.3% and Group Walker 16.3%. Body Type even fifths; skin tone even sevenths; hair black 3, dark brown 3, brown
 2.5, light brown 1.5, blond 1.2, red 0.5, gray 1 (7.9% of the crowd: the adults whose hair reads gray
 from the walkway, while elders, who will bring their own, have no model yet); equipment none 92.7, cane 3.1,
 wheelchair 2.7, scooter 1.5 (about 6.5% of the crowd on an aid, as designed), and a stroller for 60%
@@ -1518,11 +1512,8 @@ wearable, when there are wearables -- takes the person's headwear color, so a da
 is refused, and the region code (`RegionSlot` in `modelcrowd/regions.ts`) has no headwear either.
 The spec's `accessory2` is refused too, with the reason, until `wardrobe.ts` can color a second
 accessory. "Role" is not the word for any of this: it is the clip role's (see the spec), and the
-code says color slot and clothing slot throughout. The two casual-man models were migrated from the
-first slot names (`top` ->
-`tops`, `trousers` -> `bottoms`, `shoes` -> `footwear`, both shoe colors to `footwear`); a data
-file still using an old name is refused with the new one named. Both models have `tops`, `bottoms`
-and `footwear` and nothing else.
+code says color slot and clothing slot throughout. Both casual-man models have `tops`, `bottoms`
+and `footwear` (both shoe colors) and nothing else.
 
 **A scheme is one of two kinds**, and the format holds both from the start so staff uniforms never
 need it reworked:
@@ -1578,9 +1569,8 @@ today's six: a seventh look is still one function and three flags in the same sh
 its own `MeshToonMaterial` on the shipped three-step ramp whatever the look; the ink switch a look
 sets is the one thing that reaches them (their back-face shells). So `?look=soft` is a soft world
 with toon people in it. The people lab's model figure is the one person that wears a look's body,
-on the stage, so a model can be judged under each. The six looks were chosen between on the
-render-direction comparator, which drew primitive people and was retired with them; the game ships
-`toon-bare`, the art style spec's "toon-bare for everything".
+on the stage, so a model can be judged under each. The game ships `toon-bare`, the art style
+spec's "toon-bare for everything".
 
 **An absent field means as shipped, never "as it currently is."** `current` declares nothing at
 all, and dressing with it has to put every material back exactly as it shipped and every shell back
@@ -1642,8 +1632,8 @@ colour is still drawing through -- the failure a shared cache always risks, and 
 
 A login-protected area for inspecting and understanding every element of the game, one lab per
 category. **View-only**: nothing is edited or saved, and nothing a lab does reaches either
-determinism hash. Every view is deep-linkable: the selection, the seed, the source, the camera and
-the overlays all live in the address bar.
+determinism hash. Every view is deep-linkable: the selection, the seed, the camera and the
+overlays all live in the address bar.
 
 | URL | route | what it is |
 |---|---|---|
@@ -1661,12 +1651,11 @@ in Blade and everything below it built by the lab's entry.
 files every registered entity under its family's category. **Views**: `view=single` (the default)
 and `view=row` are the turntable (`inspect/index.ts`, mounted with the lab as its scope);
 `view=crowd` is the people lab's crowd; `view=placement` is the fixtures' and buildings' placement
-view. **Source**: `source=model` swaps an entity for the one whose `modelOf` names it. The fixtures
-and buildings toggle is in place and stays on primitives, with its reason in the tooltip. **The people
-lab has no source: it shows models only** (`Lab.modelsOnly`, read as `Scope.modelsOnly`), in every
-view. Its only entity is the model: `entity=person`, an old `source=prim` and an old
-`/play?inspect=` person address all open it. There are no primitive people anywhere (see "Models
-only").
+view. **A lab shows each entity the one way the game draws it**: there is no choice of source. The
+people lab's only entity is the person (`entity=person`, the default, so never named), drawn from
+their model; the fixtures and the buildings are drawn from the world's primitives until one has a
+model, which will then replace its primitives as the people's did (see "Models only" and "Models
+for other things").
 
 **The shared information panel** (`inspect/info.ts`) is the left card in every view. It renders a
 `Readout` -- the at-a-glance rows, the swatches, and `sections` under shared headings, in this order:
@@ -1706,8 +1695,7 @@ into two vocabularies.
   costs, provenance.
 
   `compare=` chooses what the row stands side by side: `body-type` (the default: the five Body
-  Types exactly; `compare=build`, from before the rename, still opens it, and an old `compare=age`
-  opens it too) or `models` (every model chosen by its `cmp-<name>` switch, at the same recipe,
+  Types exactly) or `models` (every model chosen by its `cmp-<name>` switch, at the same recipe,
   presets, pose and camera, with what each costs); `crowd scale` fits
   the model as the model crowd does. Part gizmos and part origins are not offered: a model has
   meshes, not instanced parts (`Inspectable.universal`). **Height** reads as its parts, `1.70 m = 1.75 base × 0.97
@@ -1770,24 +1758,17 @@ game never passes one, a mix restating the composition's own weights spawns the 
 2. Fill the card: return `sections` from `readout` -- `identitySection` from `describe.ts` with the
    archetype's `desc`, then recipe, geometry, provenance and cost. Path-placed things can reuse
    `structureSections` (`entities/structure.ts`).
-3. If it stands somewhere on the path, declare `sites` so the placement view can frame it; if it is
-   drawn from a model file, declare `modelOf` on the model entity so the source toggle finds it.
+3. If it stands somewhere on the path, declare `sites` so the placement view can frame it.
 
-Nothing in `labs/`, `index.ts`, `panel.ts` or `state.ts` changes. **A fixture or building model is
-designed but not built**: one model per type, with a `<file>.structure.json` for its spots,
-footprint and color regions, listed in `STRUCTURE_MODELS` (`render/model-file.ts`), which is empty;
-finish the loading when the first kiosk or building model exists.
+Nothing in `labs/`, `index.ts`, `panel.ts` or `state.ts` changes.
 
 ## Entity inspection
 
 The labs' individual view opens a turntable: one thing on a neutral stage, a camera that holds
 still, a slow spin, and controls for whatever varies about it. `view=row` puts a whole family side
-by side. `&entity=` chooses what is on the stage among the lab's own entities — `model` (a person;
-`person` is an alias for it, since a person is drawn only from a model), `kiosk`, `furniture`,
-`shop`, `restaurant`, and `bench`/`lamp`/`bin` and the five cuisine names as aliases with a kind or
-a type pinned. `?entity=building` still means a shop:
-the family has two members now and an alias owes nobody more than that a URL written before it
-existed opens what it opened.
+by side. `&entity=` chooses what is on the stage among the lab's own entities — `person`, `kiosk`,
+`furniture`, `shop`, `restaurant`, and `bench`/`lamp`/`bin` and the five cuisine names as aliases
+with a kind or a type pinned.
 
 Its entire value rests on one rule: **it renders everything through the game's own assembler.**
 `makeRecipe` and `modelcrowd/body.ts` for people (drawn from their model file: see "Models from
@@ -1827,12 +1808,11 @@ Four things about that interface are load-bearing:
   a part's matrix *is* its bounding box — for a figure and for a kiosk wheel alike. That single fact is why the
   bounding boxes, the origin crosses, the measured height and the ground shadow are universal, and
   it is what keeps the interface small enough to be worth having.
-- **A control is carried in the URL under its own id.** The person's controls were named `arch`,
-  `age`, `build`, `mob`, `walk` and `phase` because those were already the query keys, so the
-  generic scheme reproduces every URL the character turntable ever wrote; a key renamed since is
-  read back by the entity's `legacy` (`build` is `body-type`, the Body Type, now). `gate` is why
-  `?phase=` still means a frozen pose -- the model's clip phase now: a gated scalar is written only
-  while its gate is on, and reading one turns the gate on.
+- **A control is carried in the URL under its own id**, and that is the whole scheme: nothing is
+  written per entity. `gate` is why `?phase=` means a frozen pose (the model's clip phase): a gated
+  scalar is written only while its gate is on, and reading one turns the gate on. **There is no
+  reader for a renamed key**: rename a control and old links to it stop naming it, which is the
+  price of not carrying a compatibility layer for a tool only its developer links to.
 - **`rebuilds` on a control is the difference between a choice and a slider.** Changing a person's
   behavior has to build a new person; dragging the gait phase must not build seven of them a frame.
 - **A cast may write back a scalar it drives.** The gait slider tracks a walking figure that way.
@@ -1896,12 +1876,9 @@ Two consequences worth knowing:
   something else to be placed at?
 - The person's controls **force choices**: `makeRecipe` still takes every draw in its fixed order
   and only the selection from rolls already in hand changes, so a person keeps everything else they
-  rolled while one choice moves under them, which is the point. An address written before people
-  were choices still opens what it opened: `Inspectable.legacy` reads `arch=dave` as
-  `behavior=weaver`, `mob=` as `equipment=` and `build=` as `body-type=`, and drops `age=`, which
-  nothing reads since age presets went.
+  rolled while one choice moves under them, which is the point.
 - The part gizmos -- the **bounding boxes** (`gizmos`, `G`) and the **part origins** (`origins`, `X`),
-  two switches since the labs -- read the matrices a cast hands back, so nothing the inspector does
+  two switches -- read the matrices a cast hands back, so nothing the inspector does
   can change what is drawn. A kiosk's and a bench's come from `standingMatrix` and `barMatrix` — the
   same two functions `kit.ts` draws them with. A model has meshes rather than instanced parts, so it
   offers neither.
@@ -2118,8 +2095,8 @@ metallic-roughness map. 5 passed, 1 warning, 3 failed and 7 manual each.
 ### Models only
 
 **Every person in the game is drawn with a person model, the player included**, and the people lab
-shows only models (`docs/specs/person-model.md`, "Models only"). There are no primitive people in
-the game, as a fallback or otherwise:
+shows people the same way and no other (`docs/specs/person-model.md`, "Models only"). There are no
+primitive people in the game or the labs, as a fallback, an option or otherwise:
 
 - **Nobody a model cannot draw is in the crowd.** Equipment is not on the models yet, and a Darter
   needs a child model nobody has made, so composition gives both no weight (see "A person"): the
@@ -2133,21 +2110,40 @@ the game, as a fallback or otherwise:
   broken file would quietly change who the crowd holds), when there is no adult model, when a
   model's GLB is not there or will not parse, when its rig has no head bone to measure the eyes by,
   or when it has no walk to play. `?model=nobody` shows it.
-- **`?people=prim` is gone.** An old link with it plays as if it were not there, and the parameter
-  is dropped from the address bar. `?people=model` still shows the cost readout.
+- **Nothing reads an address from before.** There is no primitive figure, no source switch in the
+  labs, no render-direction comparator, and no reader for the links any of them wrote
+  (`?people=prim`, `?compare=`, `/play?inspect=`, `source=`, the old person keys): such a link opens
+  the default view.
 
-The cost readout is on screen only under `?people=model` or a stress run, and kept either way as
+The cost readout is on screen only under `?readout=1` or a stress run, and kept either way as
 `game.people` for the bench scripts (`stress-headless.mjs`, `bench-looks.mjs`,
-`bench-people.mjs`), which all draw people the one way there is.
+`bench-people.mjs`).
 
-**What went with the primitive people**: their figure (`render/person.ts`, `drawPerson`), their
-instanced part pools (`render/pools.ts`), the render-direction comparator (`compare/`, `?compare=`)
-that drew them under each look, `scripts/bench-pose.mjs`, the inspector's primitive person and the
-`RecordingPools` its part gizmos read, the `--prim` options of the bench scripts, and the "as
-primitives" counts. Measured in a visible tab at 120 Hz before they went (`?stress=1`): at 80 people
+Measured in a visible tab at 120 Hz before the primitive people went (`?stress=1`): at 80 people
 primitives posed in 1.49 ms and rendered in 1.94 against models' 0.75 and 1.52, and at 190 in 3.22
 and 3.66 against 1.57 and 2.93 -- models were the cheaper on the CPU, and drew more triangles (2.85 M
 against 0.59 M at 190) for the GPU to absorb.
+
+### Models for other things
+
+**Models are how things are drawn; primitives are the exception, kept case by case for simple
+things.** People are the only kind drawn from models so far. When another kind gets them -- items
+first (`docs/specs/item-model.md`), then fixtures and buildings -- it keeps the arrangement people
+have, so every model in the game is found and described the same way:
+
+- **One data file per model, named by its ID**: `resources/js/game/data/<kind>/<id>.json`
+  (`data/people/`, `data/items/`), found by folder and validated as it loads, never listed in code.
+- **The GLB under `public/models/<kind>/`**, under the name it was exported with, pointed at by
+  exactly one data file. A GLB with no data file, or two data files on one GLB, fails
+  `tests/js/people-data.test.ts`; a new kind gets the same test.
+- **Every data file carries identity** (`id`, `label`, `description`, `version`, `modelFile`) **and
+  provenance** (`source`, `license`), with `"unknown"` for what nobody recorded, plus the facts its
+  kind needs. A new kind's fields come from its spec; share `data/people.ts`'s reader when the
+  second kind is written, not before.
+- **A model replaces the primitives it draws; it does not sit beside them.** The labs show each
+  entity the one way the game draws it, so there is no source switch to keep in step and no
+  primitive copy to rot. A kind's first model is judged in its lab on a branch, as the people's
+  was, and the primitives are deleted in the change that ships it.
 
 ### The model renderer
 
@@ -2204,8 +2200,8 @@ hash can move, and nothing under `resources/js/game/sim/` imports it. Six things
 - **Throttle** (`L`, `&throttle=1&far=15&every=3`): beyond `far` metres from the player a clone is
   animated every `every`th frame, staggered by slot.
 - **`render ms` is submit time.** `renderer.render` returns before the GPU has drawn anything, so
-  the GPU's share shows only in the frame time and fps. `scripts/bench-people.mjs` sweeps both
-  renderers over crowd sizes and knobs (`--gpu` for a real GPU); `?stress=1&crowd=N` holds a stress
+  the GPU's share shows only in the frame time and fps. `scripts/bench-people.mjs` sweeps the
+  model crowd over crowd sizes and knobs (`--gpu` for a real GPU); `?stress=1&crowd=N` holds a stress
   run at N people. The `--gpu` window is easily throttled by macOS when it is not in front, which
   shows as a frame time of hundreds of milliseconds; for frame times, read `game.stress`'s running
   totals twice in a visible tab and divide.
@@ -2213,7 +2209,7 @@ hash can move, and nothing under `resources/js/game/sim/` imports it. Six things
 ### Model bodies
 
 `modelcrowd/body.ts` turns a recipe's **Body Type** into a body for a rigged model, for the
-`?people=model` crowd and the people lab alike. **Renderer only**: it reads the recipe and writes
+game's crowd and the people lab alike. **Renderer only**: it reads the recipe and writes
 bones, bind matrices and two uniforms. Nothing rolls, nothing reaches the simulation, the collider
 is unchanged, and neither hash can move. Three mechanisms, chosen so nothing costs more per frame:
 
@@ -2288,13 +2284,11 @@ never adjusted into a younger or older person (see "A person").
 the shape a model was generated with -- average or heavy-set -- declared in its data file and read
 as `ModelBody.build`; the lab shows it as "model build". *Body Type* is the preset rolled per person,
 Slim to Broad (`BodyType`, `BODY_TYPES` and `BODY_TYPE_WIDTH` in `recipe.ts`, `Recipe.bodyType`,
-`BODY_TYPE_PRESETS` here), and the lab's control and rows say "body type". The preset was called
-Build until the two were told apart; a lab address written then (`build=broad`, `compare=build`)
-still opens what it opened. The state hash stores the preset's value (`slim` ... `broad`), never the
-field's name, which is why the rename moved neither hash.
+`BODY_TYPE_PRESETS` here), and the lab's control and rows say "body type". The state hash stores
+the preset's value (`slim` ... `broad`), never the field's name.
 
 Measured in a visible tab at a full 120 Hz frame (the frame time sits on the vsync cap either way),
-`?stress=1&people=model`: at 80 people pose 0.82 → 0.71 ms and render 1.65 → 1.52 ms; at 190, pose
+`?stress=1`: at 80 people pose 0.82 → 0.71 ms and render 1.65 → 1.52 ms; at 190, pose
 2.20 → 1.60 ms and render 3.94 → 3.15 ms -- run-to-run noise, which is to say no measurable cost.
 
 ## Two hashes
@@ -2344,7 +2338,7 @@ own toon material under every look.
 `?seed=<uint32 or any string>` (strings are hashed), `?stress=1` (pinned seed, full crowd, no input,
 per-frame sim/render milliseconds; `&crowd=N` holds it at N people), `?debug=1` (top-down overlay),
 `?tier=low|mid|high`, `?look=<name>` (play the whole world under one rendering direction; see
-below), `?people=model` (the cost readout on screen; an old `?people=prim` is ignored and dropped),
+below), `?readout=1` (the people's cost readout on screen),
 `?model=<name>` (which model; see "Models only").
 
 `?bob=` carries the head-bob tuning: one value per axis in `BOB_CONTROLS` order, clamped to each
@@ -2353,9 +2347,6 @@ untouched run keeps a clean address bar. The panel mirrors itself out on every c
 picks it up for free, and a run loaded with a tuning in it opens the panel — you arrived to look at
 those numbers. A bench whose findings cannot be reloaded is one you re-find your answer on every
 time; see "Head bob" above.
-
-`?compare=` used to open a side-by-side of the six rendering directions, drawn on primitive people.
-It was retired with them; an old address plays the game.
 
 `?look=<name>` plays a **normal run** under one rendering direction applied to the world -- the
 benches and lamps, the carts, the shopfronts and the ground -- and to the ink the people share with
@@ -2377,7 +2368,7 @@ the same picture a run with no flag does rather than on a third thing.
 
 The labs' turntable (`/lab/people`, `/lab/fixtures`, `/lab/buildings`, and `view=row` for its
 side-by-side row) takes `&entity=` for what stands on it within the lab (`kiosk`, `furniture`,
-`bench`, `lamp`, `bin`, `shop` -- `building` is an alias for it -- and `restaurant` and the
+`bench`, `lamp`, `bin`, `shop`, `restaurant` and the
 cuisines), and `&sel=` for which exhibit of a row the card
 describes. Both views take
 `&seed=` and mirror the rest of their state back into the address bar — every control under its own
@@ -2405,7 +2396,7 @@ decisions, on any machine and at any frame rate. Everything below exists to keep
 - Simulation logic runs only in fixed steps using `SIM_DT`; never read wall-clock time or frame
   delta in simulation code. Timers count in steps (`stepsFor`) or in seconds accumulated from `SIM_DT`.
 - Visual-only randomness uses the `cosmetic` stream; it must never influence spawn, recipe, or
-  behavior. Gait phase and fidget offsets are cosmetic and are excluded from the determinism hash.
+  behavior. A person's starting gait phase is cosmetic and is excluded from the determinism hash.
 - Positions on the walkway are path coordinates, not world x/z: see "Path coordinates" above. A
   conversion that is exact today is exact because the centreline is one straight run through the
   origin; never add an offset to `s` or move the anchor without regenerating `hash()` on purpose.

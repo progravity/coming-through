@@ -58,7 +58,7 @@ export interface Who {
 export function personIdentity(w: Who): InfoSection {
     const A = BEHAVIORS[w.type];
     return identitySection(A.entity, A.desc, [
-        { k: 'behavior', v: `${A.name} (was ${A.was})` },
+        { k: 'behavior', v: A.name },
         { k: 'key color', color: A.color, v: 'the debug overlay and the crowd view draw it in this' },
     ]);
 }
@@ -186,7 +186,7 @@ export function personBehavior(w: Who): InfoSection {
     return {
         id: 'behavior', title: `Behavior: ${A.name}`,
         tables: [{ caption: 'what the simulation reads', columns: ['', ''], rows }],
-        note: `${A.desc}. BEHAVIORS['${w.type}'] in behaviors.ts, which replaced the archetype ${A.was}.`,
+        note: `${A.desc}. BEHAVIORS['${w.type}'] in behaviors.ts.`,
     };
 }
 
@@ -279,34 +279,6 @@ export class PersonMarks {
             for (const x of Array.isArray(mat) ? mat : mat === undefined ? [] : [mat]) x.dispose();
         });
     }
-}
-
-/**
- * The old archetype names, and the profiles that replaced them. An archetype bundled behavior and
- * appearance; the profile is the half that was behavior, so this is the honest translation.
- */
-const WAS: Readonly<Record<string, BehaviorKey>> = Object.fromEntries(
-    BEHAVIOR_KEYS.map(k => [BEHAVIORS[k].was.toLowerCase().replace(/^the /, ''), k]),
-);
-
-/**
- * Read an old address: `arch` (an archetype) as `behavior`, `mob` (a mobility aid) as `equipment`,
- * and `build` (the per-person preset, before it was called the Body Type) as `body-type`. A key
- * already in the new form wins over its old name. `age` is dropped, whatever it says: age presets
- * are gone, and age comes only from a model's age class, so an old link opens the same person with
- * the age it asked for ignored.
- */
-export function personLegacy(q: URLSearchParams): void {
-    const arch = q.get('arch');
-    if (arch !== null && q.get('behavior') === null) q.set('behavior', arch === 'seed' ? 'seed' : WAS[arch] ?? arch);
-    q.delete('arch');
-    q.delete('age');
-    const mob = q.get('mob');
-    if (mob !== null && q.get('equipment') === null) q.set('equipment', mob);
-    q.delete('mob');
-    const build = q.get('build');
-    if (build !== null && q.get('body-type') === null) q.set('body-type', build);
-    q.delete('build');
 }
 
 /** The choices a set of controls forces, under the control ids the address bar carries. */

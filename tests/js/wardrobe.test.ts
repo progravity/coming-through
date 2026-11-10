@@ -116,7 +116,7 @@ test('a uniform is the same clothing on everyone, whatever their skin and hair, 
         const s = schemeNamed(key);
         assert.equal(s.kind, 'uniform');
         assert.equal(s.name, 'Park Staff');
-        for (const m of [...modelSlots(), ...FUTURE, { file: 'primitives', slots: [...CLOTHING_SLOTS] }]) {
+        for (const m of [...modelSlots(), ...FUTURE, { file: 'every-slot', slots: [...CLOTHING_SLOTS] }]) {
             const first = dress(key, 0, skinColor('lightest', 0), hairColor('blond', 0), m.slots, saltOf(m.file)).colors;
             for (const skinTone of SKIN_TONE_KEYS) for (const hairTone of HAIR_KEYS) for (const roll of [0, 0.4, 0.99]) {
                 const d = dress(key, roll, skinColor(skinTone, roll), hairColor(hairTone, roll), m.slots, saltOf(m.file) + 1);

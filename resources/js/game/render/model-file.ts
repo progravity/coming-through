@@ -2,8 +2,10 @@
  * The `.glb` files under `public/models/`, and the one way they are fetched.
  *
  * Shared by the people lab and the game's model crowd, so both stand up the same file through the
- * same loader. A person model is found through its data file (`data/people.ts`), which names its GLB:
- * nothing here lists them.
+ * same loader. A model is found through its data file (`data/people.ts`), which names its GLB:
+ * nothing here lists them. Every kind of model keeps that arrangement -- its facts in
+ * `data/<kind>/<id>.json`, its GLB under `public/models/<kind>/` -- and people are the only kind
+ * there is so far.
  */
 import type * as THREE from 'three';
 import type { PersonModel } from '../data/people.ts';
@@ -12,45 +14,6 @@ import type { GlbFacts } from './glb-facts.ts';
 
 /** The model the crowd's adults are drawn from unless `?model=` names another: composition's to say. */
 export { CROWD_MODEL } from '../composition.ts';
-
-/**
- * **Designed, not built: a model for a fixture or building type.** One model per type, standing in
- * for that archetype's primitives the way a person model stands in for the person's, with a data file of
- * its own beside it (`<file>.structure.json`) that carries what the primitives derive from their
- * parts today:
- *
- * - **spots** -- service, staff and seating, in the structure's own cross-section (`dn` across the
- *   path from its center, `da` along it), exactly the shape `StructureArchetype.vendor` and
- *   `.seating` already use, so `placeStructure` turns them through the frame unchanged;
- * - **footprint** -- the solid box `footprintOf` would read off the solid parts, across and along,
- *   so a model's collider is still derived from one stated fact rather than authored twice;
- * - **regions** -- what a person data file's `colorSlots` are (`SlotFile` in
- *   `modelcrowd/regions.ts`), mapping the model's color groups to the archetype's paint slots
- *   (`base`, `trim`, `topper`, `accent`) so a livery can still roll.
- *
- * Nothing loads these yet: the labs' source toggle reads this list and stays on primitives with a
- * reason while a type has no entry. Finish it when the first kiosk or building model exists.
- */
-export interface StructureModel {
-    /** Under `public/models/`. */
-    readonly file: string;
-    /** `<file>.structure.json`, beside it. */
-    readonly data: string;
-}
-export interface StructureModelData {
-    readonly spots: { readonly service?: { dn: number; da: number }; readonly staff?: { dn: number; da: number }; readonly seating?: { dn: number; da: number } };
-    readonly footprint: { readonly across: number; readonly along: number };
-    readonly regions?: Readonly<Record<string, string>>;
-}
-/** By archetype id (`cotton-candy`, `toy`, `taco`, `bench`). Empty until the first model exists. */
-export const STRUCTURE_MODELS: Readonly<Record<string, StructureModel>> = {};
-
-/**
- * Root-relative, because Laravel serves `public/` as the web root: the game page is a route (`/play`)
- * rather than a file beside the models, so a page-relative path would move with the route. A person
- * data file's `modelFile` is written the same way, under `/models/people/`.
- */
-export const MODEL_DIR = '/models/';
 
 /** A parsed file: its scene, its clips, how big it was on the wire, and what its bytes say it holds. */
 export interface ModelFile {

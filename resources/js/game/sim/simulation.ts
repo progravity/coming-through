@@ -107,12 +107,12 @@ export class Simulation {
 
     /**
      * Hash of the gameplay-relevant state: positions, velocities, timers, identities and recipes of
-     * every agent in spawn order, plus the player and score. Deliberately leaves out gait phase,
-     * fidget and anything else fed only by the cosmetic stream.
+     * every agent in spawn order, plus the player and score. Deliberately leaves out gait phase
+     * and anything else fed only by the cosmetic stream.
      *
      * Every recipe axis is covered, so changing how people are rolled moves this value on purpose;
      * `identityHash` below is the one that must not move. Note that `slot` is not hashed: it is a
-     * render-pool index whose absolute value carries no gameplay meaning.
+     * render-slot index whose absolute value carries no gameplay meaning.
      */
     hash(): string {
         const h = new Hasher();

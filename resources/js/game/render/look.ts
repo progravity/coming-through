@@ -3,9 +3,7 @@
  *
  * A look is four values, and **every world surface knows how to take them**: see `dress` on
  * `EdgeLayer`, `Props` and `Ground`. Six looks meet three surfaces without a table of cases,
- * adding a surface never touches a look, and adding a look never touches a surface. They used to be
- * functions in the render-direction comparator, doing surgery on the primitive people's instanced
- * pools; the comparator went with the primitive people, and the six looks stayed, as data.
+ * adding a surface never touches a look, and adding a look never touches a surface.
  *
  * **The people do not wear a look.** Every person is a model, drawn by `modelcrowd/crowd.ts` in its
  * own toon material on the shipped ramp, whatever the look; the ink switch a look sets is the one

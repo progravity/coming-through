@@ -75,7 +75,6 @@ function furnitureSections(kind: Kind, plan: EdgePlan, opts: { top?: number; cos
                 { k: 'built by', v: `resources/js/game/world/furniture.ts · ${kind}()`, mono: true },
                 { k: 'placed by', v: kind === 'lamp' ? 'furniturePlan: on an interval, skipping BUILDING_SPANS and PAD_SPANS' : 'furniturePlan: on an interval, skipping BUILDING_SPANS, PAD_SPANS and KIOSK_SPANS', mono: true },
                 { k: 'entity', v: `FURNITURE_ENTITIES.${kind} · FURNITURE_ABOUT.${kind}`, mono: true },
-                { k: 'model', v: 'none yet: primitives only (see STRUCTURE_MODELS in render/model-file.ts)' },
             ],
         },
         {

@@ -4,7 +4,7 @@
  * (`crowdModels` in `composition.ts`: `casual-man` for adults, unless `?model=` names another model
  * of a class), loaded before the game starts. There is nothing to fall back to: a model that does
  * not load, a data file that is not valid, or a model with no walk to play stops the game, and
- * `startPeople` throws saying which model and why. The readout shows under `?people=model` or a
+ * `startPeople` throws saying which model and why. The readout shows under `?readout=1` or a
  * stress run.
  *
  * Knobs, all live: `O` (or the Ink button) is the game's own ink switch and the model follows it;
@@ -31,7 +31,7 @@ import type { Regions } from './regions.ts';
 export interface FrameReport {
     frameDt: number;
     simMs: number;
-    /** Placing and posing people, before any GL work: the instance buffers, or the clones' skeletons. */
+    /** Placing and posing people, before any GL work: the clones' skeletons. */
     poseMs: number;
     /** Everything from the first pose to the end of `renderer.render`, pose included. */
     renderMs: number;
@@ -42,7 +42,6 @@ export interface FrameReport {
 
 /** What the readout shows, readable from the console and by `scripts/bench-people.mjs` as `game.people`. */
 export interface PeopleStats {
-    renderer: 'model';
     /** The models drawn, one per age class, by ID. */
     model: string;
     ink: boolean;
@@ -72,8 +71,6 @@ export interface PeopleStats {
 }
 
 export interface People {
-    /** One model crowd per age class the crowd draws, each drawing the people of its own class. */
-    readonly crowds: readonly ModelCrowd[];
     readonly stats: PeopleStats;
     /** Draw everyone this frame, and the player when given (the game leaves them out in first person). */
     draw(agents: readonly Agent[], alpha: number, from: { readonly x: number; readonly z: number }, inkOn: boolean, player: PlayerFigure | null): void;
@@ -152,10 +149,11 @@ export async function startPeople(scene: THREE.Scene, params: URLSearchParams, t
         const m = byClass[c];
         if (m !== undefined) loaded.push(await loadModel(m, scene, knobs));
     }
+    // One model crowd per age class the crowd draws, each drawing the people of its own class.
     const crowds = loaded.map(l => l.crowd);
     const adults = loaded.find(l => l.model.ageClass === 'adult') as LoadedModel;
     const stats: PeopleStats = {
-        renderer: 'model', model: loaded.map(l => l.model.id).join(', '), ink: false, throttle: knobs.throttle, far: knobs.far, every: knobs.every,
+        model: loaded.map(l => l.model.id).join(', '), ink: false, throttle: knobs.throttle, far: knobs.far, every: knobs.every,
         trisPerModel: adults.crowd.trisPerModel, bones: adults.crowd.bones, clips: loaded.map(l => l.crowd.clips).join(' | '),
         colours: loaded.map(l => l.regions.summary).join(' | '),
         body: loaded.map(l => `${l.body.build} ${l.body.ageClass} model`).join(', ') + '; Body Type from each recipe',
@@ -175,7 +173,6 @@ export async function startPeople(scene: THREE.Scene, params: URLSearchParams, t
     let frames = 0, time = 0, sim = 0, pose = 0, render = 0;
     const sum = (f: (m: ModelCrowd) => number): number => crowds.reduce((n, m) => n + f(m), 0);
     return {
-        crowds,
         stats,
         draw(agents, alpha, from, inkOn, player): void {
             for (const m of crowds) m.draw(agents, alpha, from, inkOn, m === adults.crowd ? player : null);
